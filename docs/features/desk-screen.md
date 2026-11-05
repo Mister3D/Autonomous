@@ -9,7 +9,7 @@
 - `autonomous/wsproxy.py` (WS → websockify)
 - `docker/desktop/*`
 
-**Last updated**: 2026-11-05 (noVNC WS requires session/Bearer)
+**Last updated**: 2026-11-05 (desk_request card centered like vault/approval)
 
 ## User behaviour
 
@@ -26,7 +26,7 @@
 - noVNC connection: `Connexion…` / error / disconnected states + Retry button (postMessage `autonomous-novnc` from the `vnc_lite` injection; the native noVNC status bar stays hidden).
 - The Screen panel stays mounted with `v-show` so the desk/noVNC session survives tab changes. In two-pane mode it stays visible as long as one side is Screen (`active` true → wake + noVNC). The visual order comes from the `pane-left` / `pane-right` classes (a single instance of each panel). A window `resize` is emitted on drag and on side change so that `scaleViewport` and the terminal follow.
 - If capability is missing **and** the user opens Terminal or Screen → same `CreateDeskModal` modal (internet on/off, no type).
-- If **the agent** needs a desk (capability `none` / desk stopped) → `desk_request` **chat card** (title + short hint + Allow / Decline, without terminal/screen type). The `vm_request_desk` tool **blocks** (like the vault) until Allow+desk `running` or Decline — the agent must **not** chain other tools meanwhile. An already `running` desk is enough for the shell and captures. Allow creates the VM **without a modal**; bot status = `waiting` during the wait / `desk.state=creating`. When the desk goes `running`: if the tool poll is still active → `busy` without a second prompt; otherwise `resume_run`. Decline → `idle`. `CreateDeskModal` remains for a manual click on the Terminal/Screen tabs.
+- If **the agent** needs a desk (capability `none` / desk stopped) → `desk_request` **chat card** (title + short hint + Allow / Decline, without terminal/screen type), **centred** in the thread like vault / approval / clarify (not left-aligned as an assistant bubble). The `vm_request_desk` tool **blocks** (like the vault) until Allow+desk `running` or Decline — the agent must **not** chain other tools meanwhile. An already `running` desk is enough for the shell and captures. Allow creates the VM **without a modal**; bot status = `waiting` during the wait / `desk.state=creating`. When the desk goes `running`: if the tool poll is still active → `busy` without a second prompt; otherwise `resume_run`. Decline → `idle`. `CreateDeskModal` remains for a manual click on the Terminal/Screen tabs.
 - Manage → **Remove the VM** (`capability=none`) destroys the container. There is no longer a "Remove the screen".
 
 ## Implementation

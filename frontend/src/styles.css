@@ -2712,10 +2712,13 @@ label.muted {
 .msg.tool,
 .msg.guard,
 .msg.secret-leak,
+.msg.agent-error,
 .msg.vault,
 .msg.memory,
 .msg.approval,
 .msg.clarify,
+.msg.desk-req,
+.msg.agent-resume,
 .msg.screenshot,
 .msg.grounding {
   align-self: center;
@@ -2792,7 +2795,7 @@ label.muted {
 }
 
 .desk-req-card {
-  width: min(420px, 100%);
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fafafb;
@@ -2868,7 +2871,7 @@ label.muted {
 }
 
 .agent-resume-card {
-  width: min(420px, 100%);
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fafafb;
@@ -3888,6 +3891,44 @@ label.muted {
   min-width: 0;
   font-size: 0.88rem;
   font-weight: 600;
+}
+
+/* Agent hard errors (⚠️ …) — centered red card, not an assistant bubble. */
+.agent-error-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #e8a0a0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff5f5 0%, #ffecec 100%);
+  color: #8b1e1e;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  text-align: center;
+}
+
+.agent-error-ico {
+  flex: none;
+  opacity: 0.9;
+}
+
+.agent-error-title {
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-error-time {
+  flex: none;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, #8b1e1e 55%, #8a8a90);
+  white-space: nowrap;
 }
 
 .secret-leak-time {
