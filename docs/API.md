@@ -11,8 +11,9 @@ Base URL: `http://127.0.0.1:<port>/api/v1`
 Auth:
 
 - Session cookie after `POST /api/v1/auth/login` (web login page; rate-limited)
-- or `Authorization: Bearer <token>` from `autonomous init`
-- WebSockets `/novnc/…` and `/ws/terminal/…` need the same session cookie or Bearer
+- or `Authorization: Bearer <token>` from `autonomous init` (admin)
+- Pi tool calls use a separate bot-scoped Bearer `abt_…` (rotated per RPC start; not the admin token)
+- WebSockets `/novnc/…` and `/ws/terminal/…` need the same session cookie or **admin** Bearer (bot tokens rejected)
 
 Public: `GET /health`, `GET /auth/status`, `POST /auth/login`, `POST /devices/pair` (+ poll), `GET|POST /hooks/:token` (token secret + rate-limited).
 

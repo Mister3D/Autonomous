@@ -73,13 +73,18 @@ def migrate(home: Path | None = None) -> list[int]:
                 (version,),
             )
             applied.append(version)
-        # Older incremental installs may lack fields_json; keep it present.
+        # Older incremental installs may lack columns; keep them present.
+        # (Numbered *.sql migrations can collide with pre-squash version ints.)
         _ensure_column(
             conn,
             "vault_requests",
             "fields_json",
             "TEXT NOT NULL DEFAULT '[]'",
         )
+        _ensure_column(conn, "bots", "api_token_hash", "TEXT")
+        # Host shell feature removed — drop leftover column on upgraded DBs.
+        _drop_column_if_exists(conn, "bots", "allow_host_shell")
+        _drop_column_if_exists(conn, "bots", "allow_vm_shell")
     return applied
 
 
@@ -89,6 +94,14 @@ def _ensure_column(
     cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
+def _drop_column_if_exists(
+    conn: sqlite3.Connection, table: str, column: str
+) -> None:
+    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if column in cols:
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:

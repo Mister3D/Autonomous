@@ -1,5 +1,5 @@
 /**
- * Bot ~/shared (workspace) file tools — no host bash required.
+ * Bot ~/shared (workspace) file tools — no desk required.
  * Same volume as the Files inspector and VM ~/workspace.
  */
 
@@ -77,8 +77,7 @@ export default function (pi: ExtensionAPI) {
     label: "List bot files",
     description:
       "List files/folders in this bot's shared workspace (~/shared = ~/workspace). " +
-      "No host shell and no running desk required. Prefer this over host_request_shell " +
-      "or bash when you only need to browse the bot files.",
+      "No running desk required. Prefer this over vm_terminal_exec when you only need to browse bot files.",
     parameters: Type.Object({
       path: Type.Optional(
         Type.String({
@@ -115,7 +114,7 @@ export default function (pi: ExtensionAPI) {
     label: "Read bot file",
     description:
       "Read a UTF-8 text file from this bot's ~/shared workspace. " +
-      "No host shell needed. Binary files are rejected — use Files panel download instead.",
+      "Binary files are rejected — use Files panel download instead.",
     parameters: Type.Object({
       path: Type.String({ description: "Relative path, e.g. 'notes.txt' or 'upload/.../x.md'" }),
     }),
@@ -145,7 +144,7 @@ export default function (pi: ExtensionAPI) {
     label: "Write bot file",
     description:
       "Create or overwrite a UTF-8 text file in this bot's ~/shared workspace. " +
-      "Parents are created as needed. No host shell needed. Visible in the Files inspector " +
+      "Parents are created as needed. Visible in the Files inspector " +
       "and inside the VM at ~/workspace.",
     parameters: Type.Object({
       path: Type.String({ description: "Relative file path under ~/shared" }),
@@ -179,7 +178,7 @@ export default function (pi: ExtensionAPI) {
     name: "files_mkdir",
     label: "Mkdir bot folder",
     description:
-      "Create a directory under this bot's ~/shared workspace. No host shell needed.",
+      "Create a directory under this bot's ~/shared workspace. ",
     parameters: Type.Object({
       path: Type.Optional(
         Type.String({ description: "Parent directory (default '.')" }),
@@ -210,7 +209,7 @@ export default function (pi: ExtensionAPI) {
     name: "files_delete",
     label: "Delete bot file",
     description:
-      "Delete a file or directory under this bot's ~/shared workspace. No host shell needed.",
+      "Delete a file or directory under this bot's ~/shared workspace. ",
     parameters: Type.Object({
       path: Type.String({ description: "Relative path to delete (not the shared root)" }),
     }),
@@ -242,7 +241,7 @@ export default function (pi: ExtensionAPI) {
       "Returns a markdown image line — you MUST paste that exact markdown into your " +
       "assistant text (rendered inline). png/jpg/webp/gif/svg/bmp. " +
       "For PDF/zip/other non-preview files use files_attach instead. " +
-      "No host shell, no desk, no vm_screenshot.",
+      "No desk required, no vm_screenshot.",
     parameters: Type.Object({
       path: Type.String({
         description: "Relative image path under ~/shared, e.g. 'crabe.png'",
@@ -283,7 +282,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Attach a non-image workspace file (PDF, zip, doc, …) to your assistant reply " +
       "as a download card. Do NOT use for images — use files_share_image + markdown instead. " +
-      "No host shell needed.",
+      "",
     parameters: Type.Object({
       path: Type.String({
         description: "Relative path under ~/shared, e.g. 'report.pdf'",

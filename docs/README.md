@@ -39,7 +39,6 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/approval.md](./features/approval.md) | Accept / Decline card (`ask_approval`, blocking) |
 | [features/clarify.md](./features/clarify.md) | Structured question card (`ask_clarify`, blocking) |
 | [features/agent-vm-terminal.md](./features/agent-vm-terminal.md) | Pi agent → VM `docker exec` (no UI) |
-| [features/host-shell.md](./features/host-shell.md) | Pi bash permission on the host (`allow_host_shell`) |
 | [features/agent-vm-screenshot.md](./features/agent-vm-screenshot.md) | Pi agent → VM screenshot (chat + tools) |
 | [features/grounding.md](./features/grounding.md) | UI-TARS + judge: locate an element (pixels, no click) |
 | [features/browser-nav.md](./features/browser-nav.md) | Generic web nav: CDP + iframes (`frames_snapshot`) + VNC drag + Pi tools |

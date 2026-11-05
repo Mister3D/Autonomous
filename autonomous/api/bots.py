@@ -67,9 +67,6 @@ from autonomous.models.schemas import (
     OkSchema,
     ScreenshotCreateSchema,
     ScreenshotSchema,
-    ShellRequestResultSchema,
-    ShellRequestSchema,
-    ShellStatusSchema,
     TerminalExecSchema,
     TerminalLogSchema,
     VaultInjectResultSchema,
@@ -737,59 +734,6 @@ class TerminalExec(MethodView):
                 timeout=data.get("timeout") or 30,
                 home=g.home,
             )
-        except AutonomousError as exc:
-            _handle(exc)
-
-
-@blp.route("/<string:name>/shell")
-class BotShellStatus(MethodView):
-    @blp.response(200, ShellStatusSchema)
-    def get(self, name):
-        """Whether the agent may run host bash + pending request."""
-        try:
-            return term_svc.shell_status(name, home=g.home)
-        except AutonomousError as exc:
-            _handle(exc)
-
-
-@blp.route("/<string:name>/shell/request")
-class BotShellRequest(MethodView):
-    @blp.arguments(ShellRequestSchema)
-    @blp.response(200, ShellRequestResultSchema)
-    def post(self, data, name):
-        """Ask the user to authorize Pi host bash (chat card)."""
-        try:
-            return term_svc.request_shell_authorization(
-                name,
-                reason=data.get("reason") or "",
-                home=g.home,
-            )
-        except AutonomousError as exc:
-            _handle(exc)
-
-
-@blp.route("/<string:name>/shell/request/resolve")
-class BotShellRequestResolve(MethodView):
-    @blp.response(200, ShellStatusSchema)
-    def post(self, name):
-        """Approve or deny pending host_shell_request cards. Body: {action: approve|deny|revoke}."""
-        body = request.get_json(silent=True) or {}
-        action = (body.get("action") or "deny").strip().lower()
-        try:
-            if action in ("approve", "approved", "allow"):
-                return term_svc.set_allow_host_shell(name, True, home=g.home)
-            if action in ("deny", "denied", "revoke"):
-                if action == "revoke":
-                    return term_svc.set_allow_host_shell(name, False, home=g.home)
-                term_svc.resolve_shell_requests(name, state="denied", home=g.home)
-                try:
-                    from autonomous.services import chat as chat_svc
-
-                    chat_svc.mark_interrupted_after_wait(name, home=g.home)
-                except Exception:
-                    bots_svc.patch_bot(name, {"status": "idle"}, home=g.home)
-                return term_svc.shell_status(name, home=g.home)
-            abort(400, message="action must be approve|deny|revoke")
         except AutonomousError as exc:
             _handle(exc)
 

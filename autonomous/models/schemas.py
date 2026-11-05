@@ -61,7 +61,6 @@ class BotSchema(Schema):
     capability = fields.Str(validate=validate.OneOf(CAPABILITIES))
     internet = fields.Bool()
     auto_sleep = fields.Bool()
-    allow_host_shell = fields.Bool()
     memory_access = fields.Bool()
     is_manager = fields.Bool()
     desk_last_active_at = fields.Str(allow_none=True)
@@ -131,11 +130,6 @@ class BotPatchSchema(Schema):
     auto_sleep = fields.Bool(
         metadata={
             "description": "Stop desk after 5 min idle (default true). Disable for long-running scripts."
-        }
-    )
-    allow_host_shell = fields.Bool(
-        metadata={
-            "description": "Allow the Pi agent to run host bash (default false). VM terminal is separate."
         }
     )
     memory_access = fields.Bool(
@@ -295,25 +289,6 @@ class DeskRequestResultSchema(Schema):
     deduped = fields.Bool()
     message_id = fields.Str()
     state = fields.Str()
-
-
-class ShellRequestSchema(Schema):
-    reason = fields.Str(load_default="", validate=validate.Length(max=500))
-
-
-class ShellRequestResultSchema(Schema):
-    ok = fields.Bool(required=True)
-    deduped = fields.Bool()
-    already_allowed = fields.Bool()
-    allow_host_shell = fields.Bool()
-    message_id = fields.Str(allow_none=True)
-    state = fields.Str()
-
-
-class ShellStatusSchema(Schema):
-    allow_host_shell = fields.Bool(required=True)
-    pending_request_id = fields.Str(allow_none=True)
-    pending_state = fields.Str(allow_none=True)
 
 
 class FilesQuerySchema(Schema):

@@ -113,6 +113,17 @@
             >{{ item.time }}</time>
           </div>
         </article>
+        <article v-else-if="item.kind === 'agent_error'" class="msg agent-error" :data-msg-id="item.id">
+          <div class="agent-error-card">
+            <span class="agent-error-ico" aria-hidden="true">⚠️</span>
+            <span class="agent-error-title">{{ item.text }}</span>
+            <time
+              v-if="item.time"
+              class="agent-error-time"
+              :datetime="item.iso"
+            >{{ item.time }}</time>
+          </div>
+        </article>
         <article v-else-if="item.kind === 'vault'" class="msg vault" :data-msg-id="item.message.id">
           <VaultRequestCard :message="item.message" />
         </article>
@@ -127,9 +138,6 @@
         </article>
         <article v-else-if="item.kind === 'desk'" class="msg desk-req" :data-msg-id="item.message.id">
           <DeskRequestCard :message="item.message" />
-        </article>
-        <article v-else-if="item.kind === 'shell'" class="msg desk-req" :data-msg-id="item.message.id">
-          <ShellRequestCard :message="item.message" />
         </article>
         <article v-else-if="item.kind === 'resume'" class="msg agent-resume" :data-msg-id="item.message.id">
           <AgentResumeCard :message="item.message" />
@@ -573,7 +581,6 @@ import MemoryProposalCard from "./MemoryProposalCard.vue";
 import ApprovalCard from "./ApprovalCard.vue";
 import ClarifyCard from "./ClarifyCard.vue";
 import DeskRequestCard from "./DeskRequestCard.vue";
-import ShellRequestCard from "./ShellRequestCard.vue";
 import AgentResumeCard from "./AgentResumeCard.vue";
 import WorkingOrb from "./WorkingOrb.vue";
 
@@ -1384,14 +1391,6 @@ function isDeskReq(m) {
   return m?.role === "event" && m?.meta?.kind === "desk_request";
 }
 
-function isShellReq(m) {
-  const kind = m?.meta?.kind;
-  return (
-    m?.role === "event" &&
-    (kind === "host_shell_request" || kind === "shell_request")
-  );
-}
-
 const GUARD_TOKEN_RE = /^\s*GUARD\s*:\s*(CONTINUE|STOP)\b[\s.:!,;-]*/i;
 function isGuardPrefix(text) {
   const norm = String(text || "").toUpperCase().replace(/\s+/g, "");
@@ -1412,6 +1411,29 @@ function isSecretLeak(m) {
   return /divulguer un secret|disclose a secret|fournisseur LLM|LLM provider/i.test(
     String(m?.content || ""),
   );
+}
+
+/** Hard agent failures posted as `⚠️ …` assistant bubbles — show as centered red cards. */
+function isAgentError(m) {
+  if (m?.role !== "assistant") return false;
+  if (m?.meta?.streaming) return false;
+  const raw = String(m?.content || "").trim();
+  if (!raw) return false;
+  if (m?.meta?.error) return /^\s*⚠️/.test(raw) || raw === String(m.meta.error).trim();
+  return /^\s*⚠️\s+\S/.test(raw);
+}
+
+function agentErrorItem(m) {
+  const stamp = msgStamp(m);
+  let text = String(m?.content || "").trim();
+  text = text.replace(/^\s*⚠️\s*/, "").trim() || text;
+  return {
+    kind: "agent_error",
+    id: `agent-error-${m.id}`,
+    text,
+    time: stamp.time,
+    iso: m.created_at || "",
+  };
 }
 
 /** Réponse de l'agent à la revue : « GUARD:CONTINUE » / « GUARD:STOP » (+ suite éventuelle). */
@@ -1615,16 +1637,16 @@ const thread = computed(() => {
       items.push({ kind: "desk", id: m.id, message: m });
       continue;
     }
-    if (isShellReq(m)) {
-      items.push({ kind: "shell", id: m.id, message: m });
-      continue;
-    }
     if (isResume(m)) {
       items.push({ kind: "resume", id: m.id, message: m });
       continue;
     }
     if (isSecretLeak(m)) {
       items.push(secretLeakItem(m));
+      continue;
+    }
+    if (isAgentError(m)) {
+      items.push(agentErrorItem(m));
       continue;
     }
     if (isGuardSystem(m)) {

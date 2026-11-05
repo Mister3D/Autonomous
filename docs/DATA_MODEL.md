@@ -27,12 +27,12 @@ $AUTONOMOUS_HOME/
   "capability": "none",
   "internet": true,
   "auto_sleep": true,
-  "allow_host_shell": false,
   "tokens_in": 0,
   "tokens_out": 0,
   "status": "idle",
   "model": "ollama/llama3.2",
   "pi_session_id": "autonomous-a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "api_token_hash": null,
   "guard": { "review_every": null, "max_actions": null },
   "desk": null,
   "last_message_at": "2026-10-27T00:00:00+00:00",
@@ -44,6 +44,7 @@ $AUTONOMOUS_HOME/
 - `id`: **stable UUID** (real identity). Used by `bot_inbox` / `bot_asks` / schedules / webhooks / vault grants & requests. Recreating the same slug → new `id` → no reattachment of zombie mail/grants.
 - `name`: **technical slug** (`^[a-z0-9][a-z0-9_-]{0,31}$`) — legacy SQLite PK, URL `/b/<name>/…`, Docker, chat messages. Reusable after deletion.
 - `label`: **display name** (capitals / spaces OK). On creation, derived from the entered name; the slug is automatic (or explicit `slug`). See [features/bots-create.md](./features/bots-create.md).
+- `api_token_hash`: SHA-256 of the current Pi Bearer `abt_…` (plaintext only in the Pi process env; rotated on each RPC start). Never returned by the HTTP API.
 
 `last_message_at` is computed when listing (`MAX(messages.created_at)`), not a SQLite column. No messages → `null`; the UI then sorts on `created_at`.
 

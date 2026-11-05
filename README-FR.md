@@ -4,7 +4,9 @@
 
 🇬🇧 [Read in English](README.md)
 
-**Hub de bots** mono-utilisateur : interface Vue 3 + API Flask + SQLite + VM de bureau Docker, avec un agent [Pi](https://github.com/badlogic/pi-mono) côté hôte (navigateur, bureau, coffre, botmail, cron/webhooks).
+**Créé par [Mister3D](https://github.com/Mister3D)** · [github.com/Mister3D/Autonomous](https://github.com/Mister3D/Autonomous)
+
+**Hub de bots** mono-utilisateur : interface Vue 3 + API Flask + SQLite + VM de bureau Docker. L’agent de chat s’appuie sur **[Pi](https://pi.dev)** ([`badlogic/pi-mono`](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`) côté hôte (navigateur, bureau, coffre, botmail, cron/webhooks).
 
 Interface en anglais par défaut ; traductions françaises incluses.
 

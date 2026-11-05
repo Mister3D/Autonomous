@@ -24,7 +24,6 @@ _EXTENSIONS_DIR = Path(__file__).resolve().parent.parent / "pi_extensions"
 _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "vault.ts",
     _EXTENSIONS_DIR / "vm.ts",
-    _EXTENSIONS_DIR / "host.ts",
     _EXTENSIONS_DIR / "files.ts",
     _EXTENSIONS_DIR / "browser.ts",
     _EXTENSIONS_DIR / "botmail.ts",
@@ -80,9 +79,8 @@ _FILES_SYSTEM_HINT = (
     "PDF/zip/other non-preview files: files_attach(path) → download card on the reply. "
     "Do NOT use attachments for images. Do NOT request a screen desk or vm_screenshot "
     "just to show a workspace image. "
-    "Do NOT call host_request_shell just to list or edit bot workspace files. "
     "Do NOT overwrite images with files_write. "
-    "Host bash is only for host-machine commands outside this workspace."
+    "There is no host bash: shell commands run in the bot VM via vm_terminal_exec."
 )
 
 _BOTMAIL_SYSTEM_HINT = (
@@ -174,7 +172,7 @@ DESKTOP & BROWSER (server-side; works without the web UI open)
 
 == 1. Desk and shell ==
 - Two desk modes: terminal (shell only) and screen (GUI). vm_request_desk(mode) WAITS for the user; call nothing else meanwhile. Ask for screen only for GUI work (browser, clicks, drags). Check state with vm_desk_status. If the desk is down, ask the user once.
-- Shell work: vm_terminal_exec (cwd /home/autonomous/workspace). Bot files (~/shared): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for a terminal VM and waits. Never invent command output. Host bash is OFF: host_request_shell only when the command must run on the host machine itself, never for the VM, the workspace, or ordinary utilities.
+- Shell work: vm_terminal_exec (cwd /home/autonomous/workspace). Bot files (~/shared): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for a terminal VM and waits. Never invent command output. There is no host bash on the Autonomous server: the agent cannot run commands on the host machine.
 - Chrome is already started by the screen desk: check with browser_tabs, then browser_navigate. Only if no Chrome exists: `setsid bot-chrome 'https://…' >/dev/null 2>&1 &` (it never exits: never run it in the foreground, never start a second Chrome).
 
 == 2. Tools: what each one is for ==
@@ -238,11 +236,11 @@ def _pi_session_env(bot: str, home: Path | None = None) -> dict[str, str]:
     env = pi_env()
     root = home or default_home()
     base = _serve_api_base(root)
-    token = auth_mod.read_token(root)
+    # Scoped bot token (abt_…) — not the admin data/token Bearer.
+    token = auth_mod.issue_bot_api_token(bot, home=root)
     if base:
         env["AUTONOMOUS_API_BASE"] = base
-    if token:
-        env["AUTONOMOUS_TOKEN"] = token
+    env["AUTONOMOUS_TOKEN"] = token
     env["AUTONOMOUS_BOT"] = bot
     env["AUTONOMOUS_HOME"] = str(root)
     return env
@@ -292,16 +290,13 @@ class PiRpcSession:
             cwd = bot_pi_dir(self.bot, self.home)
             session_dir = cwd / "sessions"
             session_dir.mkdir(parents=True, exist_ok=True)
-            allow_host_shell = False
             is_manager = False
             try:
                 from autonomous.services import bots as bots_svc
 
                 row = bots_svc.get_bot(self.bot, home=self.home)
-                allow_host_shell = bool(row.get("allow_host_shell"))
                 is_manager = bool(row.get("is_manager"))
             except Exception:
-                allow_host_shell = False
                 is_manager = False
             cmd = [
                 binary,
@@ -315,10 +310,10 @@ class PiRpcSession:
                 f"autonomous-{self.bot}",
                 "--no-context-files",
                 "--offline",
+                # Never expose Pi bash on the host — shell work is VM-only.
+                "--exclude-tools",
+                "bash",
             ]
-            # Host bash gated by allow_host_shell (VM exec is a separate extension tool).
-            if not allow_host_shell:
-                cmd.extend(["--exclude-tools", "bash"])
             for ext in _PI_EXTENSIONS:
                 if ext.is_file():
                     cmd.extend(["--extension", str(ext)])

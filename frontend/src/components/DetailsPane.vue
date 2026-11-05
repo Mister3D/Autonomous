@@ -68,19 +68,6 @@
         @change="toggleSleep"
       />
     </label>
-    <label class="toggle-row">
-      <span>
-        <strong>{{ t("details.allowHostShell") }}</strong>
-        <small>{{ t("details.allowHostShellHint") }}</small>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="!!bot.allow_host_shell"
-        :aria-label="t('details.allowHostShell')"
-        @change="toggleShell"
-      />
-    </label>
     <BotMcpGrants :bot="bot" />
     <div class="info-row">
       <span>
@@ -190,17 +177,4 @@ async function toggleSleep(ev) {
   }
 }
 
-async function toggleShell(ev) {
-  const next = ev.target.checked;
-  const i = state.bots.findIndex((b) => b.name === props.bot.name);
-  const prev = i >= 0 ? !!state.bots[i].allow_host_shell : !!props.bot.allow_host_shell;
-  if (i >= 0) state.bots[i] = { ...state.bots[i], allow_host_shell: next };
-  try {
-    await api.patchBot(props.bot.name, { allow_host_shell: next });
-  } catch (e) {
-    if (i >= 0) state.bots[i] = { ...state.bots[i], allow_host_shell: prev };
-    ev.target.checked = prev;
-    alert(e.message);
-  }
-}
 </script>

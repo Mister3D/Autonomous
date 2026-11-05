@@ -30,14 +30,15 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 
 | Surface | Default | Notes |
 |---------|---------|--------|
-| HTTP API | Session cookie or Bearer (`data/token`) | Login rate-limited (10 / 5 min / IP) |
-| WebSockets VNC / terminal | Same session cookie or Bearer | Unauthenticated upgrades are rejected |
+| HTTP API | Session cookie or admin Bearer (`data/token`) | Login rate-limited (10 / 5 min / IP) |
+| Pi agent HTTP | Bot Bearer `abt_…` | Rotated per Pi RPC start; hash in `bots.api_token_hash`; scoped to that bot + agent allowlist (not admin) |
+| WebSockets VNC / terminal | Session cookie or **admin** Bearer | Bot tokens are rejected; unauthenticated upgrades are rejected |
 | Companion WebSocket | Device token `adc_…` | Scoped; cannot call admin API |
 | Public webhooks | Token in URL | Rate-limited (30 / min / token, 60 / min / IP); treat URL as a secret |
 | Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only desk container IPs + loopback accepted |
 | Desk VMs | Untrusted | Prefer Internet off; `seccomp=unconfined` for Chrome — assume escape possible |
-| Host shell (`allow_host_shell`) | **Off** | When enabled, Pi `bash` runs as the `serve` user (full host RCE) |
-| OpenAPI `/api/docs` | Auth required | Same session / Bearer as the API |
+| Host bash (Pi `bash` tool) | **Removed** | Always `--exclude-tools bash`; shell only inside desk VMs. Host access = credentials via vault if needed |
+| OpenAPI `/api/docs` | Auth required | Session / admin Bearer only |
 | Vault at rest | HMAC + SHA-256 keystream (stdlib) | Mono-user local; not a HSM / multi-tenant KMS |
 
 ## Operational tips
@@ -45,9 +46,9 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 - Bind `serve` to **`127.0.0.1`** (default). Non-loopback binds require `AUTONOMOUS_BIND_PUBLIC=1` and should sit behind TLS.
 - Set `AUTONOMOUS_COOKIE_SECURE=1` (or `AUTONOMOUS_PUBLIC_URL=https://…`) when the UI is served over HTTPS.
 - Run `autonomous init` before `serve`. Without a token / `AUTONOMOUS_SECRET`, serve refuses to start (`AUTONOMOUS_ALLOW_INSECURE=1` only for throwaway local experiments).
-- Treat desk VMs as untrusted: prefer Internet off when not needed; host shell stays off by default.
+- Treat desk VMs as untrusted: prefer Internet off when not needed. Pi has no host bash — only VM shells.
 - Webhook URLs are capabilities: do not paste them into public chats; rotate by deleting and recreating the webhook.
-- Rotate `data/token` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots).
+- Rotate `data/token` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots). Restarting a bot's Pi session rotates its `abt_…` token automatically.
 - `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
 - Companion pairing is public but rate-limited; only approve codes you initiated on your own PC.
 

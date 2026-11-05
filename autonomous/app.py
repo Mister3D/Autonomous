@@ -88,7 +88,9 @@ def create_app(home: Path | None = None) -> Flask:
             "info": {
                 "description": (
                     "Mono-user bot hub. Authenticate with the web login page "
-                    "(session cookie) or `Authorization: Bearer <token>`."
+                    "(session cookie) or `Authorization: Bearer <admin-token>` "
+                    "(from `autonomous init`). Pi agent sessions use a separate "
+                    "bot-scoped `abt_…` Bearer."
                 ),
             },
             "components": {
@@ -170,6 +172,18 @@ def create_app(home: Path | None = None) -> Flask:
                 g.device = device
                 return None
             return jsonify({"error": "Authentication required", "code": "auth_required"}), 401
+
+        # Bot-scoped Bearer (Pi) — not full admin access.
+        bot_name = auth_mod.bot_from_bearer(g.home)
+        if bot_name:
+            g.auth_bot = bot_name
+            denied = auth_mod.bot_token_access_error(bot_name, g.home)
+            if denied:
+                body, status = denied
+                return jsonify(body), status
+            return None
+        g.auth_bot = None
+
         if not auth_mod.is_authenticated(g.home):
             return jsonify({"error": "Authentication required", "code": "auth_required"}), 401
         return None

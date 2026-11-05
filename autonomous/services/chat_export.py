@@ -48,7 +48,6 @@ _CARD_LABELS = {
     "approval_request": "Approbation",
     "clarify_request": "Question",
     "desk_request": "Bureau",
-    "host_shell_request": "Shell hôte",
     "agent_interrupted": "Interrompu",
     "screenshot": "Capture d’écran",
     "grounding": "Repérage écran",

@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-03 (dedupe optimistic tmp bubbles)
+**Last updated**: 2026-11-05 (host shell removed; per-bot API token `abt_…`)
 
 ## User behaviour
 
@@ -59,7 +59,8 @@ Pi ref.: https://pi.dev/docs/latest/models
 - Scroll: `stickToBottom` + ~100 px threshold; the messages watch calls `scrollMessagesToBottom(false)`.
 - Message queue: `chat.send_message` sets `meta.queued` if `bot_run_blocked`; UI shows queued bubbles with a badge; `drain_queued_user_messages` clears + `bump_created_at` then `start_run` (Pi finally / stop / desk ready).
 - Agent backend: `agent_backend=pi` (default). pytest tests force `null`. An opt-in case (`AUTONOMOUS_LLM_TESTS=1`, `llm` mark) launches a real Pi: see [`events.md`](./events.md).
-- Long-lived RPC: `pi --mode rpc … --offline`; without `allow_host_shell` → `--exclude-tools bash` (**host** shell). Bot files: `files_*` (see [`agent-files.md`](./agent-files.md)). **VM** terminal: `vm_terminal_exec` (see [`agent-vm-terminal.md`](./agent-vm-terminal.md), [`host-shell.md`](./host-shell.md)).
+- Long-lived RPC: `pi --mode rpc … --offline` with **always** `--exclude-tools bash` (no host shell). Bot files: `files_*` (see [`agent-files.md`](./agent-files.md)). **VM** terminal: `vm_terminal_exec` (see [`agent-vm-terminal.md`](./agent-vm-terminal.md)).
+- **API auth for tools**: each Pi RPC start calls `issue_bot_api_token` → env `AUTONOMOUS_TOKEN=abt_…` (SHA-256 in `bots.api_token_hash`). Extensions keep calling `Authorization: Bearer …`; the gate allows `/api/v1/bots/<this-bot>/…` plus vault/memory/approvals/clarifies/search/companion agent routes for that bot only — **not** the admin `data/token`. VNC/terminal WS still require session or admin Bearer.
 - Web search extension: `npm:pi-web-access` (`pi install npm:pi-web-access`) → tools `web_search` / `fetch_content`.
 - Vault extension: `autonomous/pi_extensions/vault.ts` via `--extension` (see `docs/features/vault.md`).
 - VM extension: `autonomous/pi_extensions/vm.ts` → `vm_desk_status` / `vm_terminal_exec` / `vm_screenshot` (see `agent-vm-terminal.md`, `agent-vm-screenshot.md`).
@@ -82,7 +83,7 @@ Pi ref.: https://pi.dev/docs/latest/models
 - Old DB with `agent_backend=null`: switch to `"pi"` via `PUT /settings` or Settings / CLI.
 - `GET /settings` must return the dotted keys (`guard.review_every`, etc.). Otherwise the Settings screen shows the defaults and the next automatic save overwrites them.
 - `PiRpcSession.start()` must **not** call `request()` under the same `threading.Lock` (non-reentrant → deadlock).
-- Local endpoint down (e.g. Ollama) → assistant message `⚠️ Connection error.` after Pi retries.
+- Local endpoint down (e.g. Ollama) or other hard failures → assistant content `⚠️ …` rendered as a **centred red card** (not a left bubble), same family as secret-leak / guard.
 - Never paste >`max_images_per_prompt` vision images into a single Pi prompt (otherwise 400 with many providers).
 - Stop kills the RPC process (stdin abort alone may stay stuck if the HTTP provider hangs).
 - **Stop**: `stop_run` closes in-progress cards, then does a delayed sweep (+1.5 s and +6 s) because a `tool_execution_start` already read by Pi just after the stop created an orphan "In progress" card (real case: `vault_type` stuck). The sweep goes back 400 messages (long series of grounding notes were hiding old cards). Tests: `tests/test_close_running_tools.py`.
@@ -100,4 +101,5 @@ pi --version
 pi --list-models
 curl -s -b cookies http://127.0.0.1:8787/api/v1/pi/status
 # Send a web message → streaming assistant bubbles; Stop cuts the run.
+python3 -m pytest tests/test_bot_api_token.py tests/test_chat.py::test_openapi_generated -q
 ```

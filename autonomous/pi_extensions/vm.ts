@@ -74,7 +74,7 @@ function errMessage(data: any, status: number): string {
 
 /**
  * Post a desk_request card (if needed) and BLOCK until the VM is running,
- * the user denies, abort, or timeout — same pattern as vault / host_request_shell.
+ * the user denies, abort, or timeout — same pattern as vault requests.
  * Do not return early: the LLM would keep calling other tools for nothing.
  */
 async function requestAndWaitDesk(
@@ -177,7 +177,6 @@ export default function (pi: ExtensionAPI) {
       const lines = [
         `bot: ${cfg.bot}`,
         `capability: ${bot.capability || "none"}`,
-        `allow_host_shell: ${bot.allow_host_shell ? "yes" : "no"}`,
         `desk.state: ${desk?.state || "none"}`,
         desk?.container_id ? `container: ${desk.container_id}` : "container: —",
         desk?.last_error ? `last_error: ${desk.last_error}` : null,
@@ -671,12 +670,11 @@ export default function (pi: ExtensionAPI) {
     description:
       "Run a non-interactive shell command inside this bot's desktop VM (server-side docker exec). " +
       "This is the shell for date, curl, ping, and any other command. " +
-      "If there is no desk, this call asks the user for the VM and waits — do not invent the output and do not use host bash. " +
-      "Does NOT require host bash permission. Works even when no user has the web UI open. " +
+      "If there is no desk, this call asks the user for the VM and waits — do not invent the output. " +
+      "There is no host bash on the Autonomous server. Works even when no user has the web UI open. " +
       "cwd is /home/autonomous/workspace. For reading/writing bot files prefer files_list/read/write (no desk needed). " +
       "Prefer short commands; raise timeout for long ones. " +
-      "Do NOT use for interactive TUIs (nano/vim/top) — those need the Terminal tab PTY. " +
-      "host_request_shell is only for a command that must run on the host machine itself.",
+      "Do NOT use for interactive TUIs (nano/vim/top) — those need the Terminal tab PTY.",
     parameters: Type.Object({
       command: Type.String({
         description: "Shell command, e.g. 'uname -a' or 'ls -la'",

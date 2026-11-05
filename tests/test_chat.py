@@ -105,8 +105,8 @@ def test_message_queued_while_busy(auth_client, home):
     assert "queued" not in (sent[-1].get("meta") or {})
 
 
-def test_openapi_generated(client):
-    r = client.get("/api/openapi.json")
+def test_openapi_generated(auth_client):
+    r = auth_client.get("/api/openapi.json")
     assert r.status_code == 200
     paths = r.json["paths"]
     assert "/api/v1/bots" in paths

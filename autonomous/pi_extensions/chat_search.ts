@@ -97,7 +97,9 @@ export default function (pi: ExtensionAPI) {
       }
       const mode = String(params.mode || "auto").trim() || "auto";
       const limit = Math.max(1, Math.min(50, Number(params.limit) || 12));
-      const bot = String(params.bot || "").trim();
+      // Always scope to this bot (bot API token forbids cross-bot / unscoped search).
+      const cfg = apiConfig();
+      const bot = String(params.bot || cfg?.bot || "").trim();
 
       if (mode === "nl") {
         const res = await api("POST", "/search/messages/nl", {

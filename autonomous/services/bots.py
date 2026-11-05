@@ -33,10 +33,6 @@ def _now() -> str:
 
 def _decode(row: dict[str, Any]) -> dict[str, Any]:
     auto_raw = row.get("auto_sleep", 1)
-    # Prefer allow_host_shell; fall back to legacy allow_vm_shell column if present.
-    shell_raw = row.get("allow_host_shell")
-    if shell_raw is None:
-        shell_raw = row.get("allow_vm_shell", 0)
     bot = {
         "id": row.get("id") or "",
         "name": row["name"],
@@ -44,7 +40,6 @@ def _decode(row: dict[str, Any]) -> dict[str, Any]:
         "capability": row["capability"],
         "internet": bool(row["internet"]),
         "auto_sleep": True if auto_raw is None else bool(auto_raw),
-        "allow_host_shell": bool(shell_raw) if shell_raw is not None else False,
         "memory_access": bool(row.get("memory_access", 1)),
         "is_manager": bool(row.get("is_manager", 0)),
         "desk_last_active_at": row.get("desk_last_active_at") or None,
@@ -438,7 +433,6 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         "label",
         "internet",
         "auto_sleep",
-        "allow_host_shell",
         "memory_access",
         "is_manager",
         "desk_last_active_at",
@@ -479,9 +473,6 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
     if "auto_sleep" in updates:
         sets.append("auto_sleep = ?")
         vals.append(1 if updates["auto_sleep"] else 0)
-    if "allow_host_shell" in updates:
-        sets.append("allow_host_shell = ?")
-        vals.append(1 if updates["allow_host_shell"] else 0)
     if "memory_access" in updates:
         sets.append("memory_access = ?")
         vals.append(1 if updates["memory_access"] else 0)
@@ -574,23 +565,7 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         from autonomous.services import companion_egress as egress_svc
 
         egress_svc.refresh(home)
-    if "allow_host_shell" in updates:
-        from autonomous.services import terminal as term_svc
-        from autonomous.services.pi_rpc import MANAGER
-
-        granted = bool(updates["allow_host_shell"])
-        if granted:
-            term_svc.resolve_shell_requests(name, state="approved", home=home)
-        else:
-            term_svc.resolve_shell_requests(name, state="denied", home=home)
-        # Restart Pi so --exclude-tools bash is applied / removed.
-        # Stop before resume: the poll that waited for approval dies with the process.
-        try:
-            MANAGER.stop(name)
-        except Exception:
-            pass
-        term_svc.continue_after_host_shell(name, granted=granted, home=home)
-    elif "is_manager" in updates:
+    if "is_manager" in updates:
         # Restart Pi so manager system prompt / tools guidance refreshes.
         from autonomous.services.pi_rpc import MANAGER
 

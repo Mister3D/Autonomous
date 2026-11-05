@@ -129,11 +129,6 @@ export const api = {
     request(`/bots/${name}/desk/request`, { method: "POST", body }),
   deskRequestResolve: (name, action = "deny") =>
     request(`/bots/${name}/desk/request/resolve`, { method: "POST", body: { action } }),
-  shellStatus: (name) => request(`/bots/${name}/shell`),
-  shellRequest: (name, body = { reason: "" }) =>
-    request(`/bots/${name}/shell/request`, { method: "POST", body }),
-  shellRequestResolve: (name, action = "deny") =>
-    request(`/bots/${name}/shell/request/resolve`, { method: "POST", body: { action } }),
   deskCreate: (name, body = { mode: "screen", internet: true }) =>
     request(`/bots/${name}/desk/create`, { method: "POST", body }),
   deskWake: (name) => request(`/bots/${name}/desk/wake`, { method: "POST", body: {} }),

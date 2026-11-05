@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-only" }
 authors = [{ name = "Mister3D" }]
+urls = { Homepage = "https://github.com/Mister3D/Autonomous", Repository = "https://github.com/Mister3D/Autonomous", Issues = "https://github.com/Mister3D/Autonomous/issues" }
 keywords = ["bots", "agents", "docker", "flask", "vue"]
 classifiers = [
   "License :: OSI Approved :: GNU Affero General Public License v3",
