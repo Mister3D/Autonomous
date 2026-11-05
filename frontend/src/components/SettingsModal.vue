@@ -128,18 +128,41 @@
       <section v-if="section === 'agent'" class="settings-block">
         <h3>{{ t("update.channelTitle") }}</h3>
         <p class="hint">{{ t("update.channelHint") }}</p>
-        <label class="settings-field">
+        <div class="settings-field">
           <span>{{ t("update.channel") }}</span>
-          <select
-            v-model="updateChannel"
-            :disabled="updateChannelBusy || !updateGit"
-            @change="onUpdateChannelChange"
+          <div
+            class="update-channel-seg"
+            role="radiogroup"
+            :aria-label="t('update.channel')"
+            :aria-disabled="updateChannelBusy || !updateGit ? 'true' : undefined"
           >
-            <option value="main">main</option>
-            <option value="dev">dev</option>
-          </select>
+            <button
+              type="button"
+              role="radio"
+              class="update-channel-opt"
+              :class="{ active: updateChannel === 'main' }"
+              :aria-checked="updateChannel === 'main'"
+              :disabled="updateChannelBusy || !updateGit"
+              @click="pickUpdateChannel('main')"
+            >
+              <strong>{{ t("update.channelMain") }}</strong>
+              <small>{{ t("update.channelMainHint") }}</small>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              class="update-channel-opt"
+              :class="{ active: updateChannel === 'dev' }"
+              :aria-checked="updateChannel === 'dev'"
+              :disabled="updateChannelBusy || !updateGit"
+              @click="pickUpdateChannel('dev')"
+            >
+              <strong>{{ t("update.channelDev") }}</strong>
+              <small>{{ t("update.channelDevHint") }}</small>
+            </button>
+          </div>
           <small>{{ t("update.channelHelp") }}</small>
-        </label>
+        </div>
         <p v-if="!updateGit" class="hint">{{ t("update.noGit") }}</p>
         <p v-if="updateChannelError" class="vault-error">{{ updateChannelError }}</p>
       </section>
@@ -774,23 +797,21 @@ async function loadUpdateChannel() {
   }
 }
 
-async function onUpdateChannelChange() {
-  const next = updateChannel.value === "dev" ? "dev" : "main";
-  if (next === updateChannelSaved) return;
+async function pickUpdateChannel(next) {
+  const want = next === "dev" ? "dev" : "main";
+  if (want === updateChannelSaved || updateChannelBusy.value || !updateGit.value) return;
   updateChannelError.value = "";
-  if (next === "dev") {
-    if (!confirm(t("update.confirmDev"))) {
-      updateChannel.value = updateChannelSaved;
-      return;
-    }
+  if (want === "dev") {
+    if (!confirm(t("update.confirmDev"))) return;
   }
+  updateChannel.value = want;
   updateChannelBusy.value = true;
   try {
     await api.setUpdateChannel({
-      channel: next,
-      confirm_dev: next === "dev",
+      channel: want,
+      confirm_dev: want === "dev",
     });
-    updateChannelSaved = next;
+    updateChannelSaved = want;
   } catch (e) {
     updateChannelError.value = e.message || String(e);
     updateChannel.value = updateChannelSaved;

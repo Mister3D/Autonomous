@@ -958,6 +958,60 @@ a:focus-visible {
   background: #fff;
 }
 
+.update-channel-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  max-width: 28rem;
+}
+
+.update-channel-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fafafa;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.update-channel-opt strong {
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.update-channel-opt small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.update-channel-opt:hover:not(:disabled) {
+  background: #fff;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.update-channel-opt.active {
+  background: color-mix(in srgb, var(--accent) 10%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.update-channel-opt:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.update-channel-opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .settings-field input[type="number"] {
   max-width: 8rem;
   padding: 0.5rem 0.65rem;
