@@ -53,6 +53,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/manager.md](./features/manager.md) | Manager bot: peer list + async delegation (Tell follow-up) |
 | [features/companion.md](./features/companion.md) | PC companion: pairing, VM Internet, local MCPs |
 | [features/setup.md](./features/setup.md) | First-run checklist + first conversation CTA |
+| [features/updates.md](./features/updates.md) | Self-update: channel main/dev, 24h check, apply + systemd restart |
 
 Local index: [features/README.md](./features/README.md).
 

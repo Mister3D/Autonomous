@@ -351,6 +351,11 @@ class SettingsSchema(Schema):
     first_chat_done = fields.Bool()
     first_chat_prefs_pending = fields.Str(allow_none=True)
     first_chat_onboarding = fields.Bool()
+    update_channel = fields.Str(
+        data_key="update.channel",
+        allow_none=True,
+        metadata={"description": "Self-update git channel: main | dev"},
+    )
 
 
 class NovncInfoSchema(Schema):

@@ -8,6 +8,7 @@ from flask_smorest import Blueprint, abort
 
 from autonomous.services import setup as setup_svc
 from autonomous.services import setup_config as cfg_svc
+from autonomous.services import updates as updates_svc
 from autonomous.services.errors import AutonomousError
 
 blp = Blueprint("setup", __name__, url_prefix="/setup", description="First-run setup")
@@ -103,3 +104,46 @@ class SetupGroundingModels(MethodView):
         """{kind: grounder, url?, token?} → {models: [ids]}."""
         status, out = cfg_svc.grounding_models(_body(), g.home)
         return out, status
+
+
+@blp.route("/update")
+class SetupUpdate(MethodView):
+    def get(self):
+        """Self-update status (24 h cache unless ?force=1)."""
+        force = request.args.get("force") in ("1", "true", "yes")
+        try:
+            return updates_svc.status(home=g.home, force=force)
+        except AutonomousError as exc:
+            _handle(exc)
+
+    def put(self):
+        """Set update channel: {channel: main|dev, confirm_dev?: true}."""
+        body = _body()
+        try:
+            return updates_svc.set_channel(
+                str(body.get("channel") or ""),
+                home=g.home,
+                confirm_dev=bool(body.get("confirm_dev")),
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/update/check")
+class SetupUpdateCheck(MethodView):
+    def post(self):
+        """Force a remote check (invalidates the 24 h cache)."""
+        try:
+            return updates_svc.status(home=g.home, force=True)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/update/apply")
+class SetupUpdateApply(MethodView):
+    def post(self):
+        """Pull channel tip, rebuild UI + package, restart systemd when possible."""
+        try:
+            return updates_svc.start_apply(home=g.home), 202
+        except AutonomousError as exc:
+            _handle(exc)

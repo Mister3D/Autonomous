@@ -5616,6 +5616,63 @@ a.bot-mention:hover,
 .setup-actions .btn { white-space: nowrap; text-align: center; text-decoration: none; }
 .setup-log { max-height: 180px; overflow: auto; font-size: 0.75rem; background: #111; color: #ddd; padding: 8px; border-radius: 6px; margin: 6px 0 0; white-space: pre-wrap; }
 .setup-banner { margin: 16px auto; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--bg-soft)); text-align: center; }
+.setup-home-foot {
+  margin-top: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+}
+.setup-home-foot .setup-link { margin-top: 0; }
+.setup-update {
+  width: min(22rem, 100%);
+  text-align: center;
+}
+.setup-update.is-action {
+  margin-top: 0.25rem;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-soft));
+}
+.setup-update-msg {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+.setup-update-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0;
+}
+.setup-update .setup-log { text-align: left; margin-top: 10px; }
+.setup-update-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+.setup-update-check {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--accent-2);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.setup-update-check:hover:not(:disabled) { color: var(--accent); }
+.setup-update-check:disabled { opacity: 0.55; cursor: default; }
 .setup-first-chat {
   margin-top: 1.6rem;
   padding-top: 1.2rem;

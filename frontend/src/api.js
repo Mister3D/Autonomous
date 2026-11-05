@@ -255,4 +255,9 @@ export const api = {
   setupGrounding: () => request("/setup/grounding"),
   saveSetupGrounding: (body) => request("/setup/grounding", { method: "PUT", body }),
   testSetupGrounding: (body) => request("/setup/grounding/test", { method: "POST", body }),
+  updateStatus: (force = false) =>
+    request(`/setup/update${force ? "?force=1" : ""}`),
+  setUpdateChannel: (body) => request("/setup/update", { method: "PUT", body }),
+  checkUpdate: () => request("/setup/update/check", { method: "POST", body: {} }),
+  applyUpdate: () => request("/setup/update/apply", { method: "POST", body: {} }),
 };

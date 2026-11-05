@@ -56,7 +56,57 @@
         <p class="hint">{{ t("setup.firstChatHintReady") }}</p>
       </div>
       <p v-if="error" class="vault-error">{{ error }}</p>
-      <router-link class="setup-link" to="/setup">{{ t("setup.link") }}</router-link>
+      <div class="setup-home-foot">
+        <router-link class="setup-link" to="/setup">{{ t("setup.link") }}</router-link>
+        <div
+          v-if="showUpdateUi"
+          class="setup-update"
+          :class="{
+            'is-action': updateNeedsAction,
+            'is-busy': updateApplying,
+          }"
+          role="status"
+        >
+          <template v-if="updateNeedsAction">
+            <p class="setup-update-msg">{{ updateSummary }}</p>
+            <div class="setup-update-actions">
+              <button
+                v-if="canApplyUpdate || updateApplying"
+                class="btn primary"
+                type="button"
+                :disabled="!canApplyUpdate || updateBusy"
+                @click="runApplyUpdate"
+              >
+                {{ updateApplying ? t("update.applying") : t("update.apply") }}
+              </button>
+              <button
+                class="btn ghost"
+                type="button"
+                :disabled="updateBusy"
+                @click="forceCheckUpdate"
+              >
+                {{ updateBusy && !updateApplying ? t("update.checking") : t("update.check") }}
+              </button>
+            </div>
+            <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
+            <p v-if="updateError" class="vault-error">{{ updateError }}</p>
+          </template>
+          <template v-else>
+            <span class="setup-update-quiet">
+              <span>{{ updateSummary }}</span>
+              <button
+                type="button"
+                class="setup-update-check"
+                :disabled="updateBusy"
+                @click="forceCheckUpdate"
+              >
+                {{ updateBusy ? t("update.checking") : t("update.checkShort") }}
+              </button>
+            </span>
+            <p v-if="updateError" class="vault-error">{{ updateError }}</p>
+          </template>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -88,6 +138,12 @@ const error = ref("");
 const forceList = ref(false);
 const firstChatDone = ref(false);
 const hasMemoryPrefs = ref(false);
+const updateInfo = ref(null);
+const updateBusy = ref(false);
+const updateApplying = ref(false);
+const updateError = ref("");
+const updateLog = ref([]);
+let updateJobId = "";
 /** job kind → { id, state, log[] } */
 const logs = reactive({});
 let timer = 0;
@@ -103,6 +159,95 @@ const brokenOptional = computed(() => optional.value.filter((c) => c.status === 
 const canStartFirstChat = computed(() => setupReady());
 /** Only rule: 0 shared-memory entries → show the setup conversation CTA. */
 const showFirstChatCta = computed(() => !hasMemoryPrefs.value);
+const canApplyUpdate = computed(() => {
+  const u = updateInfo.value;
+  return !!(u?.available && !u?.dirty && !u?.applying && u?.git !== false);
+});
+const showUpdateUi = computed(() => {
+  const u = updateInfo.value;
+  if (!u) return false;
+  if (u.git === false || u.code === "no_git") return false;
+  return true;
+});
+const updateNeedsAction = computed(() => {
+  const u = updateInfo.value;
+  if (!u) return false;
+  if (updateApplying.value || updateLog.value.length) return true;
+  if (u.code === "fetch_failed") return true;
+  if (u.available) return true;
+  return false;
+});
+const updateSummary = computed(() => {
+  const u = updateInfo.value;
+  if (!u) return "";
+  if (u.code === "fetch_failed") return t("update.fetchFailed", { detail: u.message || "" });
+  if (u.dirty && u.available) return t("update.dirty", { channel: u.channel, n: u.behind || 0 });
+  if (u.available) {
+    return t("update.available", {
+      channel: u.channel,
+      n: u.behind || 0,
+    });
+  }
+  return t("update.upToDate", { channel: u.channel });
+});
+
+async function loadUpdate(force = false) {
+  try {
+    updateInfo.value = force ? await api.checkUpdate() : await api.updateStatus(false);
+    updateError.value = "";
+  } catch (e) {
+    updateError.value = e.message || String(e);
+  }
+}
+
+async function forceCheckUpdate() {
+  if (updateBusy.value) return;
+  updateBusy.value = true;
+  updateError.value = "";
+  try {
+    await loadUpdate(true);
+  } finally {
+    updateBusy.value = false;
+  }
+}
+
+async function runApplyUpdate() {
+  if (!canApplyUpdate.value || updateBusy.value) return;
+  updateBusy.value = true;
+  updateApplying.value = true;
+  updateError.value = "";
+  updateLog.value = [];
+  try {
+    const job = await api.applyUpdate();
+    updateJobId = job.id;
+    updateLog.value = job.log || [];
+    pollUpdateJob();
+  } catch (e) {
+    updateError.value = e.message || String(e);
+    updateBusy.value = false;
+    updateApplying.value = false;
+  }
+}
+
+async function pollUpdateJob() {
+  if (!updateJobId) return;
+  try {
+    const job = await api.getJob(updateJobId);
+    updateLog.value = job.log || [];
+    if (job.state === "pending" || job.state === "running") {
+      setTimeout(pollUpdateJob, 1200);
+      return;
+    }
+    updateApplying.value = false;
+    updateBusy.value = false;
+    if (job.state === "failed") {
+      updateError.value = job.error || t("update.failed");
+    }
+    await loadUpdate(true);
+  } catch {
+    setTimeout(pollUpdateJob, 2000);
+  }
+}
 
 async function refreshFirstChatGate() {
   try {
@@ -348,7 +493,11 @@ watch(
 );
 
 onMounted(async () => {
-  await Promise.all([refreshSetup(route.name === "setup"), refreshFirstChatGate()]);
+  await Promise.all([
+    refreshSetup(route.name === "setup"),
+    refreshFirstChatGate(),
+    loadUpdate(false),
+  ]);
   poll();
 });
 onUnmounted(() => clearTimeout(timer));

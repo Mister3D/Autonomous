@@ -125,6 +125,24 @@
         <p v-if="tzError" class="vault-error">{{ tzError }}</p>
       </section>
 
+      <section v-if="section === 'agent'" class="settings-block">
+        <h3>{{ t("update.channelTitle") }}</h3>
+        <p class="hint">{{ t("update.channelHint") }}</p>
+        <label class="settings-field">
+          <span>{{ t("update.channel") }}</span>
+          <select
+            v-model="updateChannel"
+            :disabled="updateChannelBusy || !updateGit"
+            @change="onUpdateChannelChange"
+          >
+            <option value="main">main</option>
+            <option value="dev">dev</option>
+          </select>
+          <small>{{ t("update.channelHelp") }}</small>
+        </label>
+        <p v-if="!updateGit" class="hint">{{ t("update.noGit") }}</p>
+        <p v-if="updateChannelError" class="vault-error">{{ updateChannelError }}</p>
+      </section>
 
       <section v-if="section === 'agent'" class="settings-block">
         <h3>{{ t("guard.title") }}</h3>
@@ -413,6 +431,11 @@ const tzOpen = ref(false);
 const tzActive = ref(0);
 const tzDirty = ref(false);
 const tzError = ref("");
+const updateChannel = ref("main");
+const updateChannelBusy = ref(false);
+const updateChannelError = ref("");
+const updateGit = ref(true);
+let updateChannelSaved = "main";
 
 function tzScore(zone, q) {
   const full = zone.toLowerCase();
@@ -704,6 +727,45 @@ async function revokeDevice(row) {
   }
 }
 
+async function loadUpdateChannel() {
+  updateChannelError.value = "";
+  try {
+    const st = await api.updateStatus(false);
+    const ch = st.channel === "dev" ? "dev" : "main";
+    updateChannel.value = ch;
+    updateChannelSaved = ch;
+    updateGit.value = st.git !== false && st.code !== "no_git";
+  } catch (e) {
+    updateChannelError.value = e.message || String(e);
+    updateGit.value = false;
+  }
+}
+
+async function onUpdateChannelChange() {
+  const next = updateChannel.value === "dev" ? "dev" : "main";
+  if (next === updateChannelSaved) return;
+  updateChannelError.value = "";
+  if (next === "dev") {
+    if (!confirm(t("update.confirmDev"))) {
+      updateChannel.value = updateChannelSaved;
+      return;
+    }
+  }
+  updateChannelBusy.value = true;
+  try {
+    await api.setUpdateChannel({
+      channel: next,
+      confirm_dev: next === "dev",
+    });
+    updateChannelSaved = next;
+  } catch (e) {
+    updateChannelError.value = e.message || String(e);
+    updateChannel.value = updateChannelSaved;
+  } finally {
+    updateChannelBusy.value = false;
+  }
+}
+
 onUnmounted(() => {
   window.clearTimeout(guardTimer);
   window.clearInterval(deviceTimer);
@@ -712,6 +774,9 @@ onUnmounted(() => {
 onMounted(async () => {
   loadTimezone().catch((e) => {
     tzError.value = e.message;
+  });
+  loadUpdateChannel().catch((e) => {
+    updateChannelError.value = e.message;
   });
   try {
     status.value = await api.piStatus();

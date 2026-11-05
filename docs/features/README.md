@@ -32,3 +32,4 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [manager.md](./manager.md) | Orchestrator Manager (peers + bot_delegate) |
 | [companion.md](./companion.md) | PC companion: pairing, Internet, MCP |
 | [setup.md](./setup.md) | First-run checklist + first conversation CTA |
+| [updates.md](./updates.md) | Self-update channel + home Check/Update + restart |

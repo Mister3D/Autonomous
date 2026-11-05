@@ -26,6 +26,8 @@ DEFAULTS: dict[str, Any] = {
     "first_chat_prefs_pending": None,
     # While true, memory_propose auto-saves (no Confirm card) for a fluid setup.
     "first_chat_onboarding": False,
+    # Self-update git channel (main = stable, dev = pre-release).
+    "update.channel": "main",
 }
 
 # Removed product setting (was a Cursor test harness, not a feature).
@@ -68,11 +70,39 @@ def get(key: str, home: Path | None = None, default: Any = None) -> Any:
     return json.loads(row["value_json"])
 
 
+def set_value(key: str, value: Any, home: Path | None = None) -> None:
+    """Write one setting key (no cross-field guards)."""
+    with get_db(home) as conn:
+        conn.execute(
+            "INSERT INTO settings(key, value_json) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+            (key, json.dumps(value)),
+        )
+
+
 def set_many(values: dict[str, Any], home: Path | None = None) -> dict[str, Any]:
+    from autonomous.services.errors import ValidationError
+
     with get_db(home) as conn:
         for key, value in values.items():
             if key in _OBSOLETE_KEYS:
                 conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+                continue
+            if key == "update.channel":
+                row = conn.execute(
+                    "SELECT value_json FROM settings WHERE key = ?", (key,)
+                ).fetchone()
+                current = (
+                    json.loads(row["value_json"])
+                    if row is not None
+                    else DEFAULTS.get(key, "main")
+                )
+                want = str(value or "").strip().lower()
+                if want != str(current or "").strip().lower():
+                    raise ValidationError(
+                        "Use PUT /setup/update to change update.channel (guards apply)",
+                        code="use_setup_update",
+                    )
                 continue
             if key == "timezone":
                 from autonomous.services.cronutil import normalize_tz_setting

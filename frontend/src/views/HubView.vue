@@ -834,9 +834,9 @@ function applyRoute() {
     if (name) {
       state.currentBot = name;
       markBotRead(name);
-    } else if (!state.currentBot && state.bots[0]) {
-      state.currentBot = state.bots[0].name;
-      markBotRead(state.currentBot);
+    } else {
+      // `/` and `/setup`: brand / checklist home — never auto-open a bot.
+      state.currentBot = null;
     }
 
     const splitOn = !!(name && splitLayouts.value[name]?.on);
