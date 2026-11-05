@@ -256,9 +256,9 @@ export default function (pi: ExtensionAPI) {
     name: "webhook_create",
     label: "Create webhook",
     description:
-      "Create an inbound webhook. Prefer POST `/api/v1/hooks` with "
+      "Create an inbound webhook. Fire with POST `/api/v1/hooks` and "
       + "`Authorization: Bearer <token>` (token not in the URL). "
-      + "Legacy `/api/v1/hooks/<token>` still works. Fires inject a chat message for this bot.",
+      + "Injects a chat message for this bot.",
     parameters: Type.Object({
       name: Type.String({ description: "Short label" }),
       instruction: Type.Optional(
@@ -288,8 +288,7 @@ export default function (pi: ExtensionAPI) {
       const ep = w.url || w.url_path || "/api/v1/hooks";
       return textResult(
         `Webhook created: ${w.id} «${w.name}»\n`
-          + `POST ${ep}\nAuthorization: Bearer ${w.token || "<token>"}\n`
-          + `(legacy URL still works: ${w.url_legacy || w.url_path_legacy || ""})`,
+          + `POST ${ep}\nAuthorization: Bearer ${w.token || "<token>"}`,
         { webhook: w },
       );
     },

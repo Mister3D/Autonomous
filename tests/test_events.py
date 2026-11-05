@@ -166,11 +166,10 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     wh = r.json
     assert wh["token"]
     assert wh["url_path"] == "/api/v1/hooks"
-    assert wh["url_path_legacy"].startswith("/api/v1/hooks/")
     assert wh.get("url", "").endswith("/api/v1/hooks")
-    assert "/hooks/" in (wh.get("url_legacy") or "")
+    assert "url_path_legacy" not in wh
 
-    # Preferred: Bearer header (token not in the URL)
+    # Bearer header (token not in the URL)
     fire = auth_client.post(
         "/api/v1/hooks",
         json={"hello": "world"},
@@ -192,9 +191,9 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     assert hit[-1]["meta"].get("payload") == {"hello": "world"}
     assert "Traite" in hit[-1]["content"]
 
-    # Legacy path still works
-    legacy = auth_client.post(wh["url_path_legacy"], json={"legacy": True})
-    assert legacy.status_code == 200, legacy.data
+    # Token-in-path is gone
+    legacy = auth_client.post(f"/api/v1/hooks/{wh['token']}", json={"legacy": True})
+    assert legacy.status_code in (404, 401, 405)
 
 
 def test_webhook_bearer_required(auth_client, home):
@@ -220,8 +219,6 @@ def test_webhook_bearer_required(auth_client, home):
         headers={"Authorization": f"Bearer {wh['token']}"},
     )
     assert get_r.status_code in (404, 405)
-    get_legacy = auth_client.get(f"/api/v1/hooks/{wh['token']}")
-    assert get_legacy.status_code in (404, 405)
 
 
 def test_webhook_queues_when_busy(auth_client, home):
@@ -234,7 +231,11 @@ def test_webhook_queues_when_busy(auth_client, home):
 
 
 def test_webhook_unknown_404(auth_client):
-    r = auth_client.post("/api/v1/hooks/not-a-real-token", json={})
+    r = auth_client.post(
+        "/api/v1/hooks",
+        json={},
+        headers={"Authorization": "Bearer not-a-real-token"},
+    )
     assert r.status_code == 404
 
 

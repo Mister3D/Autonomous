@@ -1,7 +1,6 @@
 """Public inbound webhooks (POST only).
 
-Preferred: ``Authorization: Bearer <token>`` on ``/api/v1/hooks``.
-Legacy: token in the path ``/api/v1/hooks/<token>`` (still accepted).
+``POST /api/v1/hooks`` with ``Authorization: Bearer <token>``.
 """
 
 from __future__ import annotations
@@ -41,53 +40,38 @@ def _bearer_token() -> str | None:
     return tok or None
 
 
-def _fire(token: str):
-    from autonomous.services.client_ip import client_ip
-    from autonomous.services.ratelimit import HOOKS
-
-    # Public secret: throttle per token and per client IP.
-    ip = client_ip(request)
-    tok = (token or "")[:64]
-    if not HOOKS.hit(f"hook:tok:{tok}", limit=30, window_s=60):
-        abort(429, message="Webhook rate limit exceeded")
-    if not HOOKS.hit(f"hook:ip:{ip}", limit=60, window_s=60):
-        abort(429, message="Webhook rate limit exceeded")
-    try:
-        msg = events_svc.fire_webhook(
-            token,
-            payload=_payload_from_request(),
-            home=g.home,
-        )
-        meta = msg.get("meta") or {}
-        return {
-            "ok": True,
-            "message_id": msg["id"],
-            "bot": msg["bot"],
-            "queued": bool(meta.get("queued")),
-        }
-    except AutonomousError as exc:
-        _handle(exc)
-
-
 @blp.route("")
-class PublicHookBearer(MethodView):
+class PublicHook(MethodView):
     """Fire with ``Authorization: Bearer <webhook-token>`` (token not in the URL)."""
 
     @blp.response(200, HookFireResultSchema)
     @blp.doc(security=[])
     def post(self):
+        from autonomous.services.client_ip import client_ip
+        from autonomous.services.ratelimit import HOOKS
+
         token = _bearer_token()
         if not token:
             abort(401, message="Authorization: Bearer <webhook-token> required")
-        return _fire(token)
 
-
-@blp.route("/<string:token>")
-class PublicHook(MethodView):
-    """Legacy: token in the path (prefer Bearer on ``/hooks``). POST only."""
-
-    @blp.response(200, HookFireResultSchema)
-    @blp.doc(security=[])
-    def post(self, token):
-        """Trigger webhook via POST (JSON/form/body → payload)."""
-        return _fire(token)
+        ip = client_ip(request)
+        tok = token[:64]
+        if not HOOKS.hit(f"hook:tok:{tok}", limit=30, window_s=60):
+            abort(429, message="Webhook rate limit exceeded")
+        if not HOOKS.hit(f"hook:ip:{ip}", limit=60, window_s=60):
+            abort(429, message="Webhook rate limit exceeded")
+        try:
+            msg = events_svc.fire_webhook(
+                token,
+                payload=_payload_from_request(),
+                home=g.home,
+            )
+            meta = msg.get("meta") or {}
+            return {
+                "ok": True,
+                "message_id": msg["id"],
+                "bot": msg["bot"],
+                "queued": bool(meta.get("queued")),
+            }
+        except AutonomousError as exc:
+            _handle(exc)

@@ -76,7 +76,11 @@ def test_webhook_rate_limit(auth_client, home):
     HOOKS.clear()
     # Per-token limit is 30/min — fire 31.
     codes = [
-        auth_client.post(f"/api/v1/hooks/{token}", json={"n": i}).status_code
+        auth_client.post(
+            "/api/v1/hooks",
+            json={"n": i},
+            headers={"Authorization": f"Bearer {token}"},
+        ).status_code
         for i in range(31)
     ]
     assert 429 in codes

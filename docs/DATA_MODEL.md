@@ -114,7 +114,7 @@ Queue to a bot (`tell` | `ask` | `reply`) and request correlation. See [features
 ### bot_schedules / bot_webhooks (Events)
 
 - `bot_schedules`: `cron` column = **UTC** expression (API input is converted from the `settings.timezone` time zone, otherwise the host local time). `next_run_at` / `last_run_at` in UTC. `recurring`, `instruction`, `anchor_message_id`, `enabled`. The display converts back to the current time zone.
-- `bot_webhooks`: unique `token` (prefer `Authorization: Bearer` on `/api/v1/hooks`; legacy URL `/api/v1/hooks/<token>`), `instruction`, `enabled`.
+- `bot_webhooks`: unique `token` (`Authorization: Bearer` on `POST /api/v1/hooks`), `instruction`, `enabled`.
 
 See [features/events.md](./features/events.md).
 

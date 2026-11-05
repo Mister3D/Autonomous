@@ -153,10 +153,8 @@ def _decode_webhook(row, *, include_token: bool = True, home: Path | None = None
         "enabled": bool(row["enabled"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
-        # Preferred invoke path (pair with Authorization: Bearer <token>).
+        # Fire via POST + Authorization: Bearer <token>.
         "url_path": "/api/v1/hooks",
-        # Legacy path with secret in the URL (still accepted).
-        "url_path_legacy": f"/api/v1/hooks/{row['token']}",
     }
     if include_token:
         out["token"] = row["token"]

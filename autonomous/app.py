@@ -31,8 +31,6 @@ _OPEN_EXACT = {
 # OpenAPI /docs require a session (or Bearer) — not listed here.
 _OPEN_PREFIXES = (
     "/static/",
-    # Legacy webhook URLs: /api/v1/hooks/<token>
-    "/api/v1/hooks/",
 )
 
 

@@ -97,9 +97,6 @@ def _with_webhook_url(row: dict) -> dict:
     out = dict(row)
     path = out.get("url_path") or "/api/v1/hooks"
     out["url"] = _abs_webhook_url(path)
-    legacy = out.get("url_path_legacy") or ""
-    if legacy:
-        out["url_legacy"] = _abs_webhook_url(legacy)
     return out
 
 blp = Blueprint("bots", __name__, url_prefix="/bots", description="Bots")

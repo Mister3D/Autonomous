@@ -767,14 +767,8 @@ class WebhookSchema(Schema):
     enabled = fields.Bool()
     created_at = fields.Str()
     updated_at = fields.Str()
-    url_path = fields.Str(metadata={"description": "Preferred fire path (/api/v1/hooks)"})
-    url = fields.Str(metadata={"description": "Absolute preferred fire URL"})
-    url_path_legacy = fields.Str(
-        metadata={"description": "Legacy path with token in URL"}
-    )
-    url_legacy = fields.Str(
-        metadata={"description": "Absolute legacy URL with token in path"}
-    )
+    url_path = fields.Str(metadata={"description": "Fire path (/api/v1/hooks)"})
+    url = fields.Str(metadata={"description": "Absolute fire URL (use with Bearer token)"})
 
 
 class HookFireResultSchema(Schema):
