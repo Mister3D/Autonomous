@@ -189,6 +189,185 @@ def resolve_api_key(raw: str | None) -> tuple[str, str]:
     return v, "literal"
 
 
+def _int_or_none(raw: Any, *, lo: int | None = None, hi: int | None = None) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if lo is not None:
+        n = max(lo, n)
+    if hi is not None:
+        n = min(hi, n)
+    return n
+
+
+def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
+    """UI-safe view of one Pi models.json model entry."""
+    inp = entry.get("input") or ["text"]
+    if not isinstance(inp, list):
+        inp = ["text"]
+    limits = entry.get("inputLimits") if isinstance(entry.get("inputLimits"), dict) else {}
+    images_lim = limits.get("images") if isinstance(limits.get("images"), dict) else {}
+    max_images = _int_or_none(images_lim.get("maxPerRequest"), lo=1, hi=32)
+    if max_images is None:
+        max_images = _int_or_none(images_lim.get("maxPerMessage"), lo=1, hi=32)
+    return {
+        "id": str(entry.get("id") or ""),
+        "name": str(entry.get("name") or ""),
+        "images": "image" in inp,
+        "max_images": max_images,
+        "context_window": _int_or_none(entry.get("contextWindow"), lo=1024, hi=2_000_000),
+        "max_tokens": _int_or_none(entry.get("maxTokens"), lo=256, hi=512_000),
+    }
+
+
+def _patch_model_entry(entry: dict[str, Any], patch: dict[str, Any]) -> None:
+    """Merge-safe patch of Pi model fields; never drops unknown keys (cost, compat…)."""
+    if "name" in patch or "model_name" in patch:
+        name = str(patch.get("name") if "name" in patch else patch.get("model_name") or "").strip()
+        if name:
+            entry["name"] = name
+        else:
+            entry.pop("name", None)
+
+    if "images" in patch:
+        images = bool(patch.get("images"))
+        raw_inp = entry.get("input")
+        inp = [x for x in (raw_inp if isinstance(raw_inp, list) else ["text"]) if x in ("text", "image")]
+        if "text" not in inp:
+            inp.insert(0, "text")
+        if images and "image" not in inp:
+            inp.append("image")
+        if not images:
+            inp = [x for x in inp if x != "image"]
+        entry["input"] = inp or ["text"]
+
+    if "max_images" in patch:
+        max_images = _int_or_none(patch.get("max_images"), lo=1, hi=32)
+        limits = entry.get("inputLimits")
+        limits = dict(limits) if isinstance(limits, dict) else {}
+        images_lim = limits.get("images")
+        images_lim = dict(images_lim) if isinstance(images_lim, dict) else {}
+        if max_images is None:
+            images_lim.pop("maxPerRequest", None)
+            images_lim.pop("maxPerMessage", None)
+        else:
+            images_lim["maxPerRequest"] = max_images
+            msg_cap = _int_or_none(images_lim.get("maxPerMessage"), lo=1, hi=32)
+            if msg_cap is None or msg_cap > max_images:
+                images_lim["maxPerMessage"] = max_images
+        if images_lim:
+            limits["images"] = images_lim
+        else:
+            limits.pop("images", None)
+        if limits:
+            entry["inputLimits"] = limits
+        else:
+            entry.pop("inputLimits", None)
+
+    if "context_window" in patch:
+        cw = _int_or_none(patch.get("context_window"), lo=1024, hi=2_000_000)
+        if cw is None:
+            entry.pop("contextWindow", None)
+        else:
+            entry["contextWindow"] = cw
+
+    if "max_tokens" in patch:
+        mt = _int_or_none(patch.get("max_tokens"), lo=256, hi=512_000)
+        if mt is None:
+            entry.pop("maxTokens", None)
+        else:
+            entry["maxTokens"] = mt
+
+
+def split_model_ref(ref: str | None) -> tuple[str, str]:
+    raw = str(ref or "").strip()
+    if not raw:
+        return "", ""
+    if "/" in raw:
+        provider, _, model_id = raw.partition("/")
+        return provider.strip(), model_id.strip()
+    return "", raw
+
+
+def find_model_entry(
+    data: dict[str, Any],
+    provider: str,
+    model_id: str,
+) -> dict[str, Any] | None:
+    providers = data.get("providers") if isinstance(data.get("providers"), dict) else {}
+    conf = providers.get(provider) if provider else None
+    if isinstance(conf, dict):
+        for m in conf.get("models") or []:
+            if isinstance(m, dict) and str(m.get("id") or "") == model_id:
+                return m
+    # Fallback: scan all providers when ref had no provider prefix.
+    if not provider and model_id:
+        for conf in providers.values():
+            if not isinstance(conf, dict):
+                continue
+            for m in conf.get("models") or []:
+                if isinstance(m, dict) and str(m.get("id") or "") == model_id:
+                    return m
+    overrides = data.get("modelOverrides") if isinstance(data.get("modelOverrides"), dict) else {}
+    ov = overrides.get(model_id)
+    return ov if isinstance(ov, dict) else None
+
+
+def resolve_model_limits(ref: str | None) -> dict[str, Any]:
+    """Limits from Pi models.json for ``provider/id`` (empty fields = unset)."""
+    provider, model_id = split_model_ref(ref)
+    if not model_id:
+        return {"max_images": None, "context_window": None, "max_tokens": None, "name": ""}
+    try:
+        data = _read_models_json()
+    except ValidationError:
+        return {"max_images": None, "context_window": None, "max_tokens": None, "name": ""}
+    entry = find_model_entry(data, provider, model_id)
+    if not entry:
+        # modelOverrides-only (built-in catalog)
+        overrides = data.get("modelOverrides") if isinstance(data.get("modelOverrides"), dict) else {}
+        entry = overrides.get(model_id) if isinstance(overrides.get(model_id), dict) else None
+    if not entry:
+        return {"max_images": None, "context_window": None, "max_tokens": None, "name": ""}
+    pub = _model_public({**entry, "id": model_id})
+    return {
+        "max_images": pub["max_images"],
+        "context_window": pub["context_window"],
+        "max_tokens": pub["max_tokens"],
+        "name": pub["name"],
+    }
+
+
+def remember_model_image_limit(ref: str | None, limit: int) -> None:
+    """Persist a learned provider vision cap into Pi models.json (merge-safe)."""
+    provider, model_id = split_model_ref(ref)
+    if not model_id:
+        return
+    n = _int_or_none(limit, lo=1, hi=32)
+    if n is None:
+        return
+    data = _read_models_json()
+    entry = find_model_entry(data, provider, model_id)
+    if entry is None:
+        # Create override for built-in ids so we don't invent a fake provider.
+        if not provider:
+            overrides = data.get("modelOverrides")
+            if not isinstance(overrides, dict):
+                overrides = {}
+            ov = dict(overrides.get(model_id) or {}) if isinstance(overrides.get(model_id), dict) else {}
+            _patch_model_entry(ov, {"max_images": n})
+            overrides[model_id] = ov
+            data["modelOverrides"] = overrides
+            atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            return
+        return
+    _patch_model_entry(entry, {"max_images": n})
+    atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
 def llm_providers() -> list[dict[str, Any]]:
     """Providers from models.json with masked keys (no secret values)."""
     data = _read_models_json()
@@ -201,14 +380,7 @@ def llm_providers() -> list[dict[str, Any]]:
         models = []
         for m in conf.get("models") or []:
             if isinstance(m, dict) and m.get("id"):
-                inp = m.get("input") or ["text"]
-                models.append(
-                    {
-                        "id": str(m["id"]),
-                        "name": str(m.get("name") or ""),
-                        "images": "image" in inp,
-                    }
-                )
+                models.append(_model_public(m))
         out.append(
             {
                 "provider": name,
@@ -228,11 +400,19 @@ def llm_view() -> dict[str, Any]:
         "path": "~/.pi/agent/models.json",
         "providers": provs,
         "primary": primary,
+        "docs": {
+            "models": "https://pi.dev/docs/latest/models",
+            "configuration": "https://pi.dev/docs/latest/models-configuration",
+        },
     }
 
 
 def save_llm(body: dict[str, Any]) -> dict[str, Any]:
-    """Create/update one provider in models.json, keeping everything else."""
+    """Create/update one OpenAI-compatible provider in models.json (merge-safe).
+
+    Accepts either a ``models`` list (full list replace for that provider) or a
+    legacy single ``model`` / ``model_name`` / ``images`` payload.
+    """
     provider = str(body.get("provider") or DEFAULT_PROVIDER).strip()
     if not _PROVIDER_RE.match(provider):
         raise ValidationError("invalid provider id", code="invalid_provider")
@@ -242,11 +422,6 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
     # Same SSRF gate as runtime calls (blocks cloud metadata / link-local;
     # localhost + RFC1918 stay allowed for self-hosted LAN LLMs).
     assert_safe_outbound_url(base)
-    model_id = str(body.get("model") or "").strip()
-    if not model_id:
-        raise ValidationError("model is required", code="model_required")
-    images = bool(body.get("images", True))
-    name = str(body.get("model_name") or "").strip()
     new_key = body.get("api_key")
     new_key = str(new_key).strip() if new_key is not None else ""
 
@@ -263,25 +438,63 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
         conf["apiKey"] = new_key  # empty field = keep current value
     elif "apiKey" not in conf:
         conf["apiKey"] = "none"  # pi requires a key; local servers ignore it
-    models = [m for m in (conf.get("models") or []) if isinstance(m, dict)]
-    entry = next((m for m in models if m.get("id") == model_id), None)
-    if entry is None:
-        entry = {"id": model_id}
-        models.insert(0, entry)
+
+    existing_models = [m for m in (conf.get("models") or []) if isinstance(m, dict) and m.get("id")]
+    by_id = {str(m["id"]): dict(m) for m in existing_models}
+
+    raw_models = body.get("models")
+    if isinstance(raw_models, list):
+        ordered: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for row in raw_models:
+            if not isinstance(row, dict):
+                continue
+            mid = str(row.get("id") or "").strip()
+            if not mid or mid in seen:
+                continue
+            seen.add(mid)
+            entry = by_id.get(mid) or {"id": mid}
+            entry["id"] = mid
+            patch: dict[str, Any] = {}
+            if "name" in row or "model_name" in row:
+                patch["name"] = row.get("name", row.get("model_name"))
+            if "images" in row:
+                patch["images"] = row.get("images")
+            elif mid not in by_id:
+                patch["images"] = True
+            if "max_images" in row:
+                patch["max_images"] = row.get("max_images")
+            if "context_window" in row:
+                patch["context_window"] = row.get("context_window")
+            if "max_tokens" in row:
+                patch["max_tokens"] = row.get("max_tokens")
+            if patch:
+                _patch_model_entry(entry, patch)
+            ordered.append(entry)
+        if not ordered:
+            raise ValidationError("at least one model is required", code="model_required")
+        conf["models"] = ordered
     else:
-        # Selected model first → it becomes the default for new bots.
-        models.remove(entry)
-        models.insert(0, entry)
-    if name:
-        entry["name"] = name
-    inp = [x for x in (entry.get("input") or ["text"]) if x != "image"]
-    if "text" not in inp:
-        inp.insert(0, "text")
-    if images:
-        inp.append("image")
-    entry["input"] = inp
-    conf["models"] = models
-    # Saved provider first: setup checks (and new bots) use it by default.
+        model_id = str(body.get("model") or "").strip()
+        if not model_id:
+            raise ValidationError("model is required", code="model_required")
+        entry = by_id.get(model_id) or {"id": model_id}
+        entry["id"] = model_id
+        patch = {
+            "images": body.get("images", True),
+        }
+        if "model_name" in body or "name" in body:
+            patch["name"] = body.get("model_name", body.get("name"))
+        if "max_images" in body:
+            patch["max_images"] = body.get("max_images")
+        if "context_window" in body:
+            patch["context_window"] = body.get("context_window")
+        if "max_tokens" in body:
+            patch["max_tokens"] = body.get("max_tokens")
+        _patch_model_entry(entry, patch)
+        rest = [m for m in existing_models if str(m.get("id")) != model_id]
+        conf["models"] = [entry, *rest]
+
     rest = {k: v for k, v in providers.items() if k != provider}
     data["providers"] = {provider: conf, **rest}
     atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")

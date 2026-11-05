@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-05 (host shell removed; per-bot API token `abt_…`)
+**Last updated**: 2026-11-06 (LLM limits from Pi models.json + Autonomous overlay)
 
 ## User behaviour
 
@@ -34,7 +34,7 @@
 - After a `stop`, a user message left "queued" is relaunched (immediate drain + delayed retry at 1.5 s / 6 s if the old worker was still holding the slot).
 - `stop_run` also clears the in-memory `_ACTIVE_RUNS` slot (`clear_active_run`). Without that, DB went `idle` while the next `start_run` kept logging « run already in progress » and the chat looked frozen (user bubble only). `start_run` also reclaim a stale slot once when DB status is already `idle`/`waiting`.
 - **No** run duration limit in the product (any timeout stays on the Cursor / manual test side).
-- Vision: `guard.max_images_per_prompt` (**2** by default, Settings) — only this budget goes into `images[]`; the rest is listed as paths for later turns. If the provider returns "At most N image(s)", automatic retry with N + the setting is remembered.
+- Vision: budget from the bot’s Pi model (`inputLimits.images.maxPerRequest` in `models.json`); fallback `guard.max_images_per_prompt` (**2**). Only this budget goes into `images[]`; the rest is listed as paths for later turns. If the provider returns "At most N image(s)", retry + persist N on that model (and the guard fallback). See [`llm-settings.md`](./llm-settings.md).
 - Clear history = SQLite purge + **wipe** `pi/sessions/*.jsonl` + new `pi_session_id` (`autonomous-<uuid>`).
 - Delete a bot = stop Pi + destroy desk + **rm** `data/bots/<name>/` (otherwise orphan files).
 - Chat ↔ Pi link: **only** `bots.pi_session_id` (Autonomous chooses the id, Pi doesn't know the slug).
@@ -46,12 +46,11 @@ Pi is **not** in the VMs. It's on the host.
 
 ### OpenAI-compatible provider
 
-1. Declare the provider in `~/.pi/agent/models.json` (key via `${VAR}`, never in the repo).
-2. **API key** → `~/.pi/agent/env` (mode `600`). Autonomous loads it via `pi_env()`. See `.env.example`.
-3. Register a model with `"input": ["text", "image"]` if you want vision (`vm_screenshot` / `vm_look` / grounding).
-4. `pi --list-models` → **images** column = `yes` for vision; then model per bot (creation / Details).
-
-Pi ref.: https://pi.dev/docs/latest/models
+1. Prefer **Settings → LLM** (writes `~/.pi/agent/models.json`, merge-safe) or edit the file by hand.
+2. **API key** → field in the UI, or `~/.pi/agent/env` / `$VAR` (mode `600`). Autonomous loads it via `pi_env()`.
+3. Per model: display `name`, vision `input`, `inputLimits.images.maxPerRequest`, `contextWindow`, `maxTokens`.
+4. Auth to built-in providers (`/login`) and advanced cases: [Pi models](https://pi.dev/docs/latest/models) + [models configuration](https://pi.dev/docs/latest/models-configuration).
+5. `pi --list-models` → then model per bot (creation / Details).
 
 ## Implementation
 

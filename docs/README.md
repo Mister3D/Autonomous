@@ -55,6 +55,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/setup.md](./features/setup.md) | First-run checklist + first conversation CTA |
 | [features/updates.md](./features/updates.md) | Self-update: channel main/dev, 24h check, apply + systemd restart |
 | [features/auth-secrets.md](./features/auth-secrets.md) | Session secret ≠ API Bearer, XFF trust, companion 101, grounder keys |
+| [features/llm-settings.md](./features/llm-settings.md) | Settings → LLM: Pi models.json, per-model limits, Autonomous overlay |
 
 Local index: [features/README.md](./features/README.md).
 

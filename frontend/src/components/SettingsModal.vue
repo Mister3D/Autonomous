@@ -46,22 +46,6 @@
       </nav>
       <div class="settings-main">
       <LlmSettings v-if="section === 'llm'" />
-      <section v-if="section === 'llm'" class="settings-block">
-        <h3>{{ t("guard.limitsTitle") }}</h3>
-        <label class="settings-field">
-          <span>{{ t("guard.maxImages") }}</span>
-          <input
-            v-model.number="guard.maxImages"
-            type="number"
-            min="1"
-            max="8"
-            step="1"
-            @change="flushGuard"
-          />
-          <small>{{ t("guard.maxImagesHint") }}</small>
-        </label>
-        <p v-if="guardError" class="vault-error">{{ guardError }}</p>
-      </section>
       <GroundingSettings v-if="section === 'grounding'" />
       <section v-if="section === 'grounding'" class="settings-block">
         <h3>{{ t("guard.limitsTitle") }}</h3>
@@ -606,10 +590,9 @@ const guard = reactive({
   reviewEvery: 100,
   maxActions: 1000,
   groundingLoops: 2,
-  maxImages: 2,
 });
 watch(
-  () => [guard.reviewEvery, guard.maxActions, guard.groundingLoops, guard.maxImages],
+  () => [guard.reviewEvery, guard.maxActions, guard.groundingLoops],
   () => {
     if (!guardReady.value) return;
     window.clearTimeout(guardTimer);
@@ -687,13 +670,12 @@ async function pickTimezone(zone) {
 }
 
 function guardBody() {
-  const values = [guard.reviewEvery, guard.maxActions, guard.groundingLoops, guard.maxImages];
+  const values = [guard.reviewEvery, guard.maxActions, guard.groundingLoops];
   if (values.some((n) => typeof n !== "number" || !Number.isFinite(n))) return null;
   return {
     "guard.review_every": Math.max(0, Math.min(100000, Math.round(guard.reviewEvery))),
     "guard.max_actions": Math.max(1, Math.min(100000, Math.round(guard.maxActions))),
     "grounding.max_loops": Math.max(1, Math.min(8, Math.round(guard.groundingLoops))),
-    "guard.max_images_per_prompt": Math.max(1, Math.min(8, Math.round(guard.maxImages))),
   };
 }
 
@@ -701,7 +683,6 @@ function applyGuardBody(body) {
   guard.reviewEvery = body["guard.review_every"];
   guard.maxActions = body["guard.max_actions"];
   guard.groundingLoops = body["grounding.max_loops"];
-  guard.maxImages = body["guard.max_images_per_prompt"];
 }
 
 async function loadGuard() {
@@ -710,11 +691,9 @@ async function loadGuard() {
   const rev = s["guard.review_every"];
   const maxA = s["guard.max_actions"];
   const loops = s["grounding.max_loops"];
-  const maxImg = s["guard.max_images_per_prompt"];
   if (rev != null) guard.reviewEvery = Number(rev);
   if (maxA != null) guard.maxActions = Number(maxA);
   if (loops != null) guard.groundingLoops = Number(loops);
-  if (maxImg != null) guard.maxImages = Number(maxImg);
   guardLast = JSON.stringify(guardBody());
   guardReady.value = true;
 }

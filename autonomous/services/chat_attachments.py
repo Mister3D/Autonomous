@@ -37,9 +37,32 @@ MAX_BYTES = 8 * 1024 * 1024
 _IMAGE_FILE_EXTS = frozenset(_MIME_BY_EXT.keys())
 
 
-def max_images_per_prompt(*, home: Path | None = None) -> int:
-    """LLM vision budget for one prompt (provider-dependent; default 2)."""
+def max_images_per_prompt(
+    *,
+    home: Path | None = None,
+    bot: str | None = None,
+    model_ref: str | None = None,
+) -> int:
+    """LLM vision budget for one prompt.
+
+    Prefers Pi ``models.json`` ``inputLimits.images.maxPerRequest`` for the
+    bot's model (solid Autonomous enforcement until Pi applies it itself).
+    Falls back to ``guard.max_images_per_prompt`` (default 2).
+    """
+    from autonomous.services import bots as bots_svc
     from autonomous.services import settings as settings_svc
+    from autonomous.services import setup_config as cfg_svc
+
+    ref = (model_ref or "").strip()
+    if not ref and bot:
+        try:
+            ref = str((bots_svc.get_bot(bot, home=home) or {}).get("model") or "")
+        except Exception:
+            ref = ""
+    if ref:
+        lim = cfg_svc.resolve_model_limits(ref).get("max_images")
+        if lim is not None:
+            return max(1, min(32, int(lim)))
 
     raw = settings_svc.get("guard.max_images_per_prompt", home=home, default=2)
     try:
@@ -308,7 +331,11 @@ def images_for_pi(
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Pi ImageContent list capped to the LLM vision budget."""
-    cap = max_images_per_prompt(home=home) if limit is None else max(1, int(limit))
+    cap = (
+        max_images_per_prompt(home=home, bot=bot)
+        if limit is None
+        else max(1, int(limit))
+    )
     return [img for _, img in collect_vision_candidates(bot, attachments, home=home)[:cap]]
 
 
@@ -320,12 +347,16 @@ def apply_vision_budget(
     home: Path | None = None,
     limit: int | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
-    """Return (prompt, images) respecting ``guard.max_images_per_prompt``.
+    """Return (prompt, images) respecting the Pi model vision budget.
 
     Extra images stay available as file paths in the prompt; the agent must
     continue in later turns instead of stuffing them all into one vision call.
     """
-    cap = max_images_per_prompt(home=home) if limit is None else max(1, int(limit))
+    cap = (
+        max_images_per_prompt(home=home, bot=bot)
+        if limit is None
+        else max(1, int(limit))
+    )
     candidates = collect_vision_candidates(bot, attachments, home=home)
     chosen = candidates[:cap]
     deferred = candidates[cap:]

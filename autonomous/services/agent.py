@@ -589,8 +589,10 @@ class PiAgent:
 
                 prompt_text = message
                 prompt_images = list(images or [])
-                # Adapt to provider vision limits (some endpoints accept max 2 images).
-                cap = attach_svc.max_images_per_prompt(home=home)
+                # Adapt to provider vision limits (Pi models.json, then guard fallback).
+                cap = attach_svc.max_images_per_prompt(
+                    home=home, bot=bot, model_ref=model
+                )
                 if len(prompt_images) > cap:
                     prompt_images = prompt_images[:cap]
                 resp = session.prompt(
@@ -606,6 +608,12 @@ class PiAgent:
                             bot,
                             limit,
                         )
+                        try:
+                            from autonomous.services import setup_config as cfg_svc
+
+                            cfg_svc.remember_model_image_limit(model, limit)
+                        except Exception:
+                            pass
                         try:
                             settings_svc.set_many(
                                 {"guard.max_images_per_prompt": limit},
