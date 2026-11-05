@@ -46,6 +46,7 @@ def cmd_init(args) -> int:
     migrate(home)
     settings_svc.ensure_defaults(home)
     token = auth_mod.write_token(home)
+    auth_mod.ensure_session_secret(home)
     password = args.password
     if not password:
         password = getpass("Login password: ")
@@ -336,11 +337,11 @@ def cmd_serve(args) -> int:
 
     from autonomous import auth as auth_mod
 
-    if not auth_mod.read_token(home) and not os.environ.get("AUTONOMOUS_SECRET"):
+    if not auth_mod.read_token(home):
         if os.environ.get("AUTONOMOUS_ALLOW_INSECURE", "").strip() not in ("1", "true", "yes"):
             print(
                 "No API token — run `autonomous init` first "
-                "(or set AUTONOMOUS_SECRET / AUTONOMOUS_ALLOW_INSECURE=1).",
+                "(or set AUTONOMOUS_ALLOW_INSECURE=1 for a throwaway local session).",
                 file=sys.stderr,
             )
             return 1

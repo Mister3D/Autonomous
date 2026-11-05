@@ -42,10 +42,11 @@ def _bearer_token() -> str | None:
 
 
 def _fire(token: str):
+    from autonomous.services.client_ip import client_ip
     from autonomous.services.ratelimit import HOOKS
 
     # Public secret: throttle per token and per client IP.
-    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
+    ip = client_ip(request)
     tok = (token or "")[:64]
     if not HOOKS.hit(f"hook:tok:{tok}", limit=30, window_s=60):
         abort(429, message="Webhook rate limit exceeded")

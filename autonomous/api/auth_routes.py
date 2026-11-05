@@ -35,10 +35,11 @@ class Login(MethodView):
         """Log in with the instance password (web UI)."""
         from flask import request
 
+        from autonomous.services.client_ip import client_ip
         from autonomous.services.ratelimit import LOGIN
 
         # 10 tries / 5 min per client IP (mono-user; slows offline hash brute-force).
-        ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
+        ip = client_ip(request)
         if not LOGIN.hit(f"login:{ip}", limit=10, window_s=300):
             abort(429, message=t("auth.rate_limited"))
         if not auth_mod.verify_password(g.home, data["password"]):

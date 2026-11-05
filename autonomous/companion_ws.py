@@ -38,13 +38,13 @@ class _SockBuf:
 
 
 def attach_companion(conn: socket.socket, home: Path, token: str, leftover: bytes = b"") -> None:
+    # Token already validated before the HTTP 101 in wsproxy; re-check defensively.
     device = device_from_token(token, home=home)
     if device is None:
         try:
-            conn.sendall(b"HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n")
+            conn.close()
         except OSError:
             pass
-        conn.close()
         return
 
     sock = _SockBuf(conn, leftover)

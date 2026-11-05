@@ -20,7 +20,7 @@ from flask import g, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from autonomous.i18n import t
-from autonomous.paths import password_path, token_path
+from autonomous.paths import password_path, secret_path, token_path
 
 BOT_TOKEN_PREFIX = "abt_"
 
@@ -80,6 +80,30 @@ def read_token(home: Path) -> str | None:
     if not path.exists():
         return None
     return path.read_text(encoding="utf-8").strip() or None
+
+
+def write_session_secret(home: Path, secret: str | None = None) -> str:
+    """Write Flask SECRET_KEY material (never reuse the API Bearer)."""
+    secret = secret or generate_token()
+    path = secret_path(home)
+    path.write_text(secret + "\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+    return secret
+
+
+def read_session_secret(home: Path) -> str | None:
+    path = secret_path(home)
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8").strip() or None
+
+
+def ensure_session_secret(home: Path) -> str:
+    """Return the session signing secret, creating ``data/secret`` if missing."""
+    existing = read_session_secret(home)
+    if existing:
+        return existing
+    return write_session_secret(home)
 
 
 def set_password(home: Path, password: str) -> None:

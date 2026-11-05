@@ -52,17 +52,27 @@ def create_app(home: Path | None = None) -> Flask:
         static_folder=str(Path(__file__).resolve().parent / "static"),
         static_url_path="/static",
     )
-    secret = os.environ.get("AUTONOMOUS_SECRET") or auth_mod.read_token(home)
     testing = bool(os.environ.get("AUTONOMOUS_TESTING")) or os.environ.get("PYTEST_CURRENT_TEST")
     allow_insecure = os.environ.get("AUTONOMOUS_ALLOW_INSECURE", "").strip() in ("1", "true", "yes")
+    api_token = auth_mod.read_token(home)
+    if not api_token and not (testing or allow_insecure):
+        raise RuntimeError(
+            "No API token — run `autonomous init` before serve "
+            "(or set AUTONOMOUS_ALLOW_INSECURE=1 for a throwaway local session)."
+        )
+    # Session cookie signing key — must NOT equal the admin Bearer (`data/token`).
+    secret = (os.environ.get("AUTONOMOUS_SECRET") or "").strip() or None
     if not secret:
         if testing or allow_insecure:
-            secret = "dev-insecure"
+            secret = auth_mod.read_session_secret(home) or "dev-insecure"
         else:
-            raise RuntimeError(
-                "No API token / AUTONOMOUS_SECRET — run `autonomous init` before serve "
-                "(or set AUTONOMOUS_ALLOW_INSECURE=1 for a throwaway local session)."
-            )
+            secret = auth_mod.ensure_session_secret(home)
+    # Guard: refuse to run if an operator pointed AUTONOMOUS_SECRET at the API token.
+    if api_token and secret == api_token:
+        raise RuntimeError(
+            "AUTONOMOUS_SECRET must not equal the API Bearer (data/token). "
+            "Unset AUTONOMOUS_SECRET or use a distinct value; session key lives in data/secret."
+        )
     cookie_secure = os.environ.get("AUTONOMOUS_COOKIE_SECURE", "").strip().lower() in (
         "1",
         "true",

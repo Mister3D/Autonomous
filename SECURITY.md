@@ -8,7 +8,8 @@ These live under `$AUTONOMOUS_HOME` (default `./data/`) and must stay **out of g
 
 | Path | What |
 |------|------|
-| `data/token` | API Bearer token (`autonomous init`) |
+| `data/token` | Admin API Bearer (`autonomous init`) — not used to sign cookies |
+| `data/secret` | Flask session signing key (distinct from `token`) |
 | `data/password.hash` | Web login password hash |
 | `data/vault.key` | Vault encryption key |
 | `data/db.sqlite` | Bots, chat, grants, schedules |
@@ -30,10 +31,10 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 
 | Surface | Default | Notes |
 |---------|---------|--------|
-| HTTP API | Session cookie or admin Bearer (`data/token`) | Login rate-limited (10 / 5 min / IP) |
+| HTTP API | Session cookie (signed with `data/secret`) or admin Bearer (`data/token`) | Login rate-limited (10 / 5 min / IP); Bearer ≠ session key |
 | Pi agent HTTP | Bot Bearer `abt_…` | Rotated per Pi RPC start; hash in `bots.api_token_hash`; scoped to that bot + agent allowlist (not admin) |
 | WebSockets VNC / terminal | Session cookie or **admin** Bearer | Bot tokens are rejected; unauthenticated upgrades are rejected |
-| Companion WebSocket | Device token `adc_…` | Scoped; cannot call admin API |
+| Companion WebSocket | Device token `adc_…` | Validated before HTTP 101; scoped; cannot call admin API |
 | Public webhooks | Prefer `POST` + `Authorization: Bearer` on `/api/v1/hooks` | Legacy `POST /hooks/<token>` still accepted; GET rejected; rate-limited (30 / min / token, 60 / min / IP); treat the token as a secret |
 | Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only desk container IPs + loopback accepted |
 | Desk VMs | Untrusted | Prefer Internet off; `seccomp=unconfined` for Chrome — assume escape possible |
@@ -45,10 +46,11 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 
 - Bind `serve` to **`127.0.0.1`** (default). Non-loopback binds require `AUTONOMOUS_BIND_PUBLIC=1` and should sit behind TLS.
 - Set `AUTONOMOUS_COOKIE_SECURE=1` (or `AUTONOMOUS_PUBLIC_URL=https://…`) when the UI is served over HTTPS.
-- Run `autonomous init` before `serve`. Without a token / `AUTONOMOUS_SECRET`, serve refuses to start (`AUTONOMOUS_ALLOW_INSECURE=1` only for throwaway local experiments).
+- Run `autonomous init` before `serve`. Without `data/token`, serve refuses to start (`AUTONOMOUS_ALLOW_INSECURE=1` only for throwaway local experiments). Session key is `data/secret` (or `AUTONOMOUS_SECRET`), never the API Bearer.
+- Grounding keys come from Settings / `grounder.env` / `AUTONOMOUS_GROUNDER_TOKEN` — never a bare `TOKEN` file (that often held the admin Bearer).
 - Treat desk VMs as untrusted: prefer Internet off when not needed. Pi has no host bash — only VM shells.
 - Webhook tokens are capabilities: prefer Bearer header invokes (avoids token-in-URL proxy logs); do not paste tokens into public chats; rotate by deleting and recreating the webhook.
-- Rotate `data/token` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots). Restarting a bot's Pi session rotates its `abt_…` token automatically.
+- Rotate `data/token` / `data/secret` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots). Restarting a bot's Pi session rotates its `abt_…` token automatically.
 - `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
 - Companion pairing is public but rate-limited; only approve codes you initiated on your own PC.
 
@@ -57,4 +59,4 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 1. Terminate TLS at the proxy; set `AUTONOMOUS_PUBLIC_URL=https://…` and `AUTONOMOUS_COOKIE_SECURE=1`.
 2. Proxy WebSocket upgrades for `/novnc/`, `/ws/terminal/`, `/ws/companion`.
 3. Keep `serve` on localhost; do not publish Docker VNC ports.
-4. Forward `X-Forwarded-For` only from the proxy (rate limits use it).
+4. Set `AUTONOMOUS_TRUST_PROXY=1` only when the proxy **overwrites** `X-Forwarded-For` (rate limits use it then). Without this flag, XFF is ignored.

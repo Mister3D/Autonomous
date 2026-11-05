@@ -33,6 +33,7 @@ def home(tmp_path):
     # Tests stay offline from Pi RPC.
     settings_svc.set_many({"agent_backend": "null"}, home=h)
     auth_mod.write_token(h, "test-token")
+    auth_mod.write_session_secret(h, "test-session-secret")
     auth_mod.set_password(h, "secret")
     return h
 

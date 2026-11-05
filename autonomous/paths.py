@@ -32,6 +32,11 @@ def token_path(home: Path | None = None) -> Path:
     return ensure_home(home) / "token"
 
 
+def secret_path(home: Path | None = None) -> Path:
+    """Flask session signing key (distinct from the admin API Bearer in ``token``)."""
+    return ensure_home(home) / "secret"
+
+
 def serve_pid_path(home: Path | None = None) -> Path:
     return ensure_home(home) / "serve.pid"
 

@@ -57,15 +57,6 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _read_token_file(path: Path) -> str:
-    if not path.is_file():
-        return ""
-    try:
-        return path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
-
-
 def grounder_config(home: Path | None = None, *, ignore_enabled: bool = False) -> dict[str, str]:
     """Resolve grounder URL / model / API key (never log the key).
 
@@ -112,10 +103,8 @@ def grounder_config(home: Path | None = None, *, ignore_enabled: bool = False) -
         "GROUNDER_API_KEY",
         "GROUNDER_TOKEN",
     )
-    if not key:
-        key = _read_token_file(_repo_root() / "TOKEN")
-    if not key:
-        key = _read_token_file(home / "TOKEN")
+    # Never fall back to a bare ``TOKEN`` file — operators often copy the admin
+    # Bearer there, which would then be sent to the external UI-TARS endpoint.
     # No explicit flag: enabled iff a URL is set (a fresh install stays off).
     enabled = pick("AUTONOMOUS_GROUNDING_ENABLED", default="1" if base else "0").lower()
     if not ignore_enabled and enabled in ("0", "false", "off", "no"):
@@ -188,7 +177,7 @@ def _chat_completions(
     if not api_key:
         raise AutonomousError(
             "Grounder or LLM API key missing "
-            "(TOKEN file, grounder.env, or AUTONOMOUS_GROUNDER_TOKEN).",
+            "(Settings → Grounding / grounder.env / AUTONOMOUS_GROUNDER_TOKEN).",
             code="grounder_unconfigured",
         )
     url = f"{base_url}/chat/completions"

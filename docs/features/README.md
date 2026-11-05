@@ -33,3 +33,4 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [companion.md](./companion.md) | PC companion: pairing, Internet, MCP |
 | [setup.md](./setup.md) | First-run checklist + first conversation CTA |
 | [updates.md](./updates.md) | Self-update channel + home Check/Update + restart |
+| [auth-secrets.md](./auth-secrets.md) | Session secret ≠ Bearer, TRUST_PROXY, companion pre-101 |

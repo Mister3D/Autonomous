@@ -119,16 +119,26 @@ class MuxServer:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
 
-    def _require_user_auth(self, headers: dict[str, str], request: socket.socket) -> bool:
-        """Reject unauthenticated UI WebSockets (VNC / terminal)."""
+    def _home_path(self) -> "Path":
         from pathlib import Path
-
-        from autonomous.ws_auth import ws_authenticated
 
         home = self.home
         if home is None:
             home = Path(getattr(self.wsgi_app, "config", {}).get("AUTONOMOUS_HOME", "data"))
-        if ws_authenticated(headers, app=self.wsgi_app, home=Path(home)):
+        return Path(home)
+
+    def _companion_token_ok(self, token: str) -> bool:
+        from autonomous.services.devices import device_from_token
+
+        if not token:
+            return False
+        return device_from_token(token, home=self._home_path()) is not None
+
+    def _require_user_auth(self, headers: dict[str, str], request: socket.socket) -> bool:
+        """Reject unauthenticated UI WebSockets (VNC / terminal)."""
+        from autonomous.ws_auth import ws_authenticated
+
+        if ws_authenticated(headers, app=self.wsgi_app, home=self._home_path()):
             return True
         try:
             request.sendall(
@@ -247,6 +257,24 @@ class MuxServer:
                     return
                 auth = headers.get("authorization", "")
                 token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+                # Validate device token BEFORE 101 (same pattern as terminal/VNC).
+                if not self._companion_token_ok(token):
+                    try:
+                        request.sendall(
+                            b"HTTP/1.1 401 Unauthorized\r\n"
+                            b"Connection: close\r\n"
+                            b"Content-Type: text/plain\r\n"
+                            b"Content-Length: 12\r\n"
+                            b"\r\n"
+                            b"Unauthorized"
+                        )
+                    except OSError:
+                        pass
+                    try:
+                        request.close()
+                    except OSError:
+                        pass
+                    return
                 response = (
                     "HTTP/1.1 101 Switching Protocols\r\n"
                     "Upgrade: websocket\r\n"

@@ -83,9 +83,10 @@ class PairStart(MethodView):
     @blp.doc(security=[])
     def post(self, data):
         """Start a device-code pairing. The user approves the code in Settings."""
+        from autonomous.services.client_ip import client_ip
         from autonomous.services.ratelimit import PAIRING
 
-        ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
+        ip = client_ip(request)
         if not PAIRING.hit(f"pair:{ip}", limit=5, window_s=60):
             abort(429, message="Too many pairing requests — try again shortly.")
         try:
