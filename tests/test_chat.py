@@ -105,6 +105,33 @@ def test_message_queued_while_busy(auth_client, home):
     assert "queued" not in (sent[-1].get("meta") or {})
 
 
+def test_message_queued_while_run_slot_held(auth_client, home):
+    """A send that arrives while a run owns the slot is queued, even if status is still idle."""
+    import threading
+
+    from autonomous.services import agent as agent_svc
+    from autonomous.services import chat as chat_svc
+
+    auth_client.post("/api/v1/bots", json={"name": "qslot"})
+    settled = threading.Event()
+    assert agent_svc._register_run("qslot", settled)
+    try:
+        first = auth_client.post(
+            "/api/v1/bots/qslot/messages", json={"content": "premier"}
+        )
+        second = auth_client.post(
+            "/api/v1/bots/qslot/messages", json={"content": "deuxième"}
+        )
+        assert first.status_code == 201, first.data
+        assert second.status_code == 201, second.data
+        assert first.json["meta"].get("queued") is True
+        assert second.json["meta"].get("queued") is True
+        queued = chat_svc.list_queued_user_messages("qslot", home=home)
+        assert [m["content"] for m in queued] == ["premier", "deuxième"]
+    finally:
+        agent_svc._release_run("qslot", settled)
+
+
 def test_openapi_generated(auth_client):
     r = auth_client.get("/api/openapi.json")
     assert r.status_code == 200

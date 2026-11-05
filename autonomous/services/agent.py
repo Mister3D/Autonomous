@@ -220,7 +220,7 @@ class PiAgent:
                 clear_active_run(bot)
             if not _register_run(bot, settled):
                 log.warning("start_run skipped for %s — run already in progress", bot)
-                return ""
+                return "busy"
 
         bots_svc.patch_bot(bot, {"status": "busy"}, home=home)
         # Keep desk awake while the agent runs (auto-sleep skips busy).

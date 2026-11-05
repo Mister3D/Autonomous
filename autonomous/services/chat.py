@@ -245,17 +245,34 @@ def send_message(
                         cancelled = []
                 if cancelled:
                     return message
-            queued_meta = dict(meta)
-            queued_meta["queued"] = True
-            message = update_message(
-                bot, msg_id, content, home=home, meta=queued_meta
-            )
-            return message
+            return _mark_queued(bot, msg_id, content, meta, home=home)
 
-        _start_agent_for_user_message(
+        from autonomous.services.agent import run_in_progress
+
+        # Status can still say idle for a moment after a run has claimed the slot.
+        # Parking here avoids a second start_run that would drop the message.
+        if run_in_progress(bot):
+            return _mark_queued(bot, msg_id, content, meta, home=home)
+
+        started = _start_agent_for_user_message(
             bot, agent_prompt, stored, home=home, message_id=msg_id
         )
+        if started == "busy":
+            return _mark_queued(bot, msg_id, content, meta, home=home)
     return message
+
+
+def _mark_queued(
+    bot: str,
+    msg_id: str,
+    content: str,
+    meta: dict[str, Any],
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    queued_meta = dict(meta)
+    queued_meta["queued"] = True
+    return update_message(bot, msg_id, content, home=home, meta=queued_meta)
 
 
 def _start_agent_for_user_message(
@@ -265,7 +282,7 @@ def _start_agent_for_user_message(
     *,
     home: Path | None = None,
     message_id: str | None = None,
-) -> None:
+) -> str:
     from autonomous.services import chat_attachments as attach_svc
     from autonomous.services import reactions as reactions_svc
 
@@ -282,9 +299,9 @@ def _start_agent_for_user_message(
             home=home,
             trigger_agent=False,
         )
-        return
+        return ""
     if backend == "null":
-        return
+        return ""
     from autonomous.services.agent import get_agent
 
     prompt = attach_svc.prompt_with_files(
@@ -293,8 +310,11 @@ def _start_agent_for_user_message(
     prompt, images = attach_svc.apply_vision_budget(
         bot, prompt, stored, home=home
     )
-    get_agent(backend, home=home).start_run(
-        bot, prompt, home=home, images=images
+    return str(
+        get_agent(backend, home=home).start_run(
+            bot, prompt, home=home, images=images
+        )
+        or ""
     )
 
 

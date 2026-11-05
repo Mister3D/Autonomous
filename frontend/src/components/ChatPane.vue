@@ -48,13 +48,36 @@
         {{ tokenStats.tip }}
       </span>
     </div>
-    <div class="messages" ref="scroller" @scroll.passive="onMessagesScroll">
+    <div
+      class="messages"
+      :class="{ 'messages-placing': !threadPlaced }"
+      ref="scroller"
+      @scroll.passive="onMessagesScroll"
+    >
       <p v-if="!thread.length" class="empty">{{ t("chat.empty") }}</p>
       <template v-for="item in thread" :key="item.id">
         <div v-if="item.kind === 'day'" class="day-sep">{{ item.label }}</div>
         <div v-else-if="item.kind === 'new'" class="new-sep">
           <span>{{ t("chat.new") }}</span>
         </div>
+        <template v-else-if="item.kind === 'live'">
+          <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
+            <div class="thinking-row waiting">
+              <span class="thinking-label">{{ t("desk.creating") }}</span>
+            </div>
+          </article>
+          <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
+            <div class="thinking-row waiting">
+              <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
+            </div>
+          </article>
+          <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
+            <div class="thinking-row">
+              <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
+              <span class="thinking-label">{{ t("chat.working") }}</span>
+            </div>
+          </article>
+        </template>
         <article v-else-if="item.kind === 'tools'" class="msg tool" :data-msg-id="item.id">
           <ToolGroup :entries="item.entries" :sealed="item.sealed" />
         </article>
@@ -166,6 +189,7 @@
             },
           ]"
           :data-msg-id="item.message.id"
+          :data-queued="item.message.meta?.queued ? '1' : undefined"
         >
           <p v-if="sourceOf(item.message)" class="msg-source">
             {{ t("chat.from") }}
@@ -367,27 +391,25 @@
           </div>
         </article>
       </template>
-      <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
-        <div class="thinking-row waiting">
-          <span class="thinking-label">{{ t("desk.creating") }}</span>
-        </div>
-      </article>
-      <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
-        <div class="thinking-row waiting">
-          <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
-        </div>
-      </article>
-      <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
-        <div class="thinking-row">
-          <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
-          <span class="thinking-label">{{ t("chat.working") }}</span>
-        </div>
-      </article>
-      <div
-        class="messages-tail"
-        :class="{ reserved: reserveToolTail }"
-        aria-hidden="true"
-      />
+      <template v-if="!hasQueued">
+        <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
+          <div class="thinking-row waiting">
+            <span class="thinking-label">{{ t("desk.creating") }}</span>
+          </div>
+        </article>
+        <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
+          <div class="thinking-row waiting">
+            <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
+          </div>
+        </article>
+        <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
+          <div class="thinking-row">
+            <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
+            <span class="thinking-label">{{ t("chat.working") }}</span>
+          </div>
+        </article>
+      </template>
+      <div class="messages-tail" aria-hidden="true" />
     </div>
     <button
       v-if="!stickToBottom && thread.length"
@@ -408,9 +430,6 @@
         />
       </svg>
     </button>
-    <p v-if="queuedCount" class="composer-queue-hint" aria-live="polite">
-      {{ t("chat.queuedHint", { n: queuedCount }) }}
-    </p>
     <p v-if="secretRefuseHint" class="composer-secret-refuse" role="alert">
       {{ secretRefuseHint }}
     </p>
@@ -557,7 +576,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { marked } from "marked";
@@ -606,6 +625,8 @@ const flashMsgId = ref("");
 const tokenTipOpen = ref(false);
 /** Auto-follow new messages only while the user stays near the bottom. */
 const stickToBottom = ref(true);
+/** Hidden until the first jump, so opening a thread does not fly through history. */
+const threadPlaced = ref(false);
 const NEAR_BOTTOM_PX = 100;
 let flashTimer = null;
 
@@ -1182,7 +1203,8 @@ function scrollToMessage(msgId) {
       if (attempt < 12) setTimeout(() => tryScroll(attempt + 1), 80);
       return;
     }
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.scrollIntoView({ behavior: "auto", block: "center" });
+    threadPlaced.value = true;
     flashMsgId.value = msgId;
     if (flashTimer) clearTimeout(flashTimer);
     flashTimer = setTimeout(() => {
@@ -1552,17 +1574,15 @@ function sourceOf(m) {
   return "";
 }
 
-const queuedCount = computed(
-  () =>
-    (state.messages[props.bot.name] || []).filter((m) => m?.meta?.queued).length
-);
-
 const thread = computed(() => {
-  // Queued user messages stay visible (badge « En file ») so a send never
-  // looks stuck in the composer while the agent is already working.
-  const msgs = (state.messages[props.bot.name] || []).filter(
+  const all = (state.messages[props.bot.name] || []).filter(
     (m) => !m?.meta?.hidden_prompt
   );
+  const queued = all
+    .filter((m) => m?.meta?.queued)
+    .slice()
+    .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+  const msgs = all.filter((m) => !m?.meta?.queued);
   const items = [];
   let lastKey = "";
   const todayKey = dayKey(new Date());
@@ -1670,6 +1690,8 @@ const thread = computed(() => {
   }
   flushActivity();
   // Tool groups stay "live" (open + last result) until a later chat item appears.
+  // The live indicator sits just above queued sends, which stay at the bottom
+  // without folding the live tool group.
   let laterContent = false;
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
@@ -1680,27 +1702,41 @@ const thread = computed(() => {
       laterContent = true;
     }
   }
+  if (queued.length) {
+    items.push({ kind: "live", id: "live-slot" });
+    for (const m of queued) {
+      items.push({ kind: "msg", id: m.id, message: m });
+    }
+  }
   return items;
 });
 
-/** Live tool run or waiting orb — reserve tail space so the viewport doesn't jump. */
-const reserveToolTail = computed(() => {
-  if (waitingForReply.value || waitingHuman.value || deskCreating.value) return true;
-  for (let i = thread.value.length - 1; i >= 0; i--) {
-    const it = thread.value[i];
-    if (it.kind === "day" || it.kind === "new") continue;
-    return it.kind === "tools" && !it.sealed;
-  }
-  return false;
-});
+const hasQueued = computed(() =>
+  (state.messages[props.bot.name] || []).some(
+    (m) => m?.meta?.queued && !m?.meta?.hidden_prompt
+  )
+);
 
 function isNearBottom(el) {
   if (!el) return true;
-  return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+  return Math.abs(followScrollTop(el) - el.scrollTop) <= NEAR_BOTTOM_PX;
 }
 
 function onMessagesScroll() {
   stickToBottom.value = isNearBottom(scroller.value);
+}
+
+function followScrollTop(el) {
+  const max = Math.max(0, el.scrollHeight - el.clientHeight);
+  const firstQueued = el.querySelector('[data-queued="1"]');
+  if (!firstQueued) return max;
+  const liveBottom =
+    el.scrollTop +
+    (firstQueued.getBoundingClientRect().top - el.getBoundingClientRect().top);
+  const queueHeight = Math.max(0, el.scrollHeight - liveBottom);
+  // Keep the bot's latest update on screen, with the queue peeking under it.
+  const reserved = Math.min(queueHeight, Math.round(el.clientHeight * 0.34));
+  return Math.max(0, Math.min(max, liveBottom - (el.clientHeight - reserved)));
 }
 
 function scrollMessagesToBottom(force = false) {
@@ -1708,7 +1744,9 @@ function scrollMessagesToBottom(force = false) {
   if (!el) return;
   if (!force && !stickToBottom.value) return;
   stickToBottom.value = true;
-  el.scrollTop = el.scrollHeight;
+  const top = followScrollTop(el);
+  if (Math.abs(top - el.scrollTop) > 1) el.scrollTop = top;
+  threadPlaced.value = true;
 }
 
 async function send() {
@@ -1730,6 +1768,11 @@ async function send() {
   // Optimistic bubble — visible the instant send is pressed, before HTTP returns.
   const bot = props.bot.name;
   const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const alreadyWaiting = (state.messages[bot] || []).some(
+    (m) =>
+      m?.role === "user" &&
+      (m?.meta?.queued || String(m?.id || "").startsWith("tmp-"))
+  );
   const optimistic = {
     id: tempId,
     bot,
@@ -1739,7 +1782,7 @@ async function send() {
     attachments: attachments.map((a) =>
       typeof a === "string" ? { type: "image", url: a } : a
     ),
-    meta: {},
+    meta: runLocked.value || alreadyWaiting ? { queued: true } : {},
     created_at: new Date().toISOString(),
   };
   if (!state.messages[bot]) state.messages[bot] = [];
@@ -1837,8 +1880,21 @@ watch(
         .join("\0"),
     ].join("|"),
   async () => {
+    const el = scroller.value;
+    // A fresh history is still at the top: keep it hidden until the jump.
+    if (
+      stickToBottom.value &&
+      el &&
+      el.scrollTop < 40 &&
+      el.scrollHeight > el.clientHeight + 480
+    ) {
+      threadPlaced.value = false;
+    }
     await nextTick();
-    if (router.currentRoute.value.query?.msg) return;
+    if (router.currentRoute.value.query?.msg) {
+      threadPlaced.value = true;
+      return;
+    }
     scrollMessagesToBottom(false);
   }
 );
@@ -1847,10 +1903,18 @@ watch(
   () => props.bot.name,
   async () => {
     stickToBottom.value = true;
+    threadPlaced.value = false;
     await nextTick();
     if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
+    else threadPlaced.value = true;
   }
 );
+
+onMounted(async () => {
+  await nextTick();
+  if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
+  else threadPlaced.value = true;
+});
 
 watch(
   () => [props.bot.name, router.currentRoute.value.query?.msg],
