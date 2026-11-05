@@ -144,11 +144,17 @@ _CLARIFY_SYSTEM_HINT = (
 )
 
 _REACT_SYSTEM_HINT = (
-    "Reactions: call react(emoji) to put one emoji on the user message you are "
-    "answering (❤️ after thanks, 👍 after a confirmation). It returns immediately "
-    "and does NOT end the turn and does NOT replace a reply. If they still need "
-    "an answer, an action, or any follow-up, write that text after the tool. "
-    "If the reaction alone is the whole response, stop with no filler. "
+    "Emoji is occasional and has to be justified, not a habit and not a ban. "
+    "Most turns get no react() and no emoji in the reply. "
+    "Call react(emoji) only when the reaction adds something the words do not: "
+    "warmth after real thanks, a beat after a joke, a nod when they share good news. "
+    "Skip it when nothing is gained — a plain question such as « which MCP do you see? » "
+    "does not earn a 👍 just because you are answering. "
+    "Same rule in the reply text: plain sentences, an emoji only if it carries a meaning "
+    "the sentence does not already have. "
+    "react returns immediately and does NOT end the turn and does NOT replace a reply. "
+    "If they still need an answer, an action, or any follow-up, write that text after "
+    "the tool. If the reaction alone is the whole response, stop with no filler. "
     "Do not describe the tool call in the chat."
 )
 

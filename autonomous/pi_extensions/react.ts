@@ -68,12 +68,13 @@ export default function (pi: ExtensionAPI) {
     name: "react",
     label: "React",
     description:
-      "Put a single emoji reaction on the user message you are answering " +
-      "(example: ❤️ after « thanks »). Returns immediately. This does NOT end " +
-      "your turn and does NOT replace a reply: if they need an answer, an " +
-      "action, or any follow-up, write that text after this tool. If the " +
-      "reaction alone is the whole response (thanks, acknowledgment), stop " +
-      "without filler. One emoji only.",
+      "Occasional, and only when it is justified. One emoji on the user message " +
+      "when it adds something the reply does not (warmth after real thanks, a beat " +
+      "after a joke, a nod for good news). Skip it when nothing is gained: a plain " +
+      "question does not get a 👍 just because you answer it. Most turns: do not " +
+      "call this. Returns immediately. This does NOT end your turn and does NOT " +
+      "replace a reply: if they need an answer, write that text after this tool. " +
+      "If the reaction alone is enough, stop without filler. One emoji only.",
     parameters: Type.Object({
       emoji: Type.String({ description: "One emoji, e.g. ❤️ or 👍" }),
     }),

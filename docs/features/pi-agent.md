@@ -10,7 +10,7 @@
 - Home page (Autonomous brand): banner if Pi is not ready → link to model/provider config docs.
 - Each bot = one **Pi session** on the **host** machine (`data/bots/<name>/pi/`). Pi id = `autonomous-<uuid>`; the chat ↔ session link is `bots.pi_session_id` (not the slug).
 - Web messages → Pi prompt; assistant tokens over **SSE** (`message.delta` then `message.updated`).
-- Emoji reaction: the `react` tool puts an emoji on the turn's user bubble (`meta.reactions`), without a tool card. It does not end the turn: the reply text follows if needed. See [`reactions.md`](./reactions.md).
+- Emoji reaction: the `react` tool puts an emoji on the turn's user bubble (`meta.reactions`), without a tool card, only when it is justified (thanks, a joke, good news). Most turns get none; a plain question does not get one just because it was answered. It does not end the turn: the reply text follows if needed. See [`reactions.md`](./reactions.md).
 - Bot rail: sorted by **latest message** (sent or received), most recent at the top (`last_message_at` + live messages).
 - Chat layout: **user on the right**, **assistant on the left**, **tools grouped** in the centre (`ToolGroup`). During the run: live preview of the **last tool call** (fixed height + reserved space under the thread). As soon as an LLM reply (or other message) follows: the group **collapses** into a summary bar — unless the user opened the details (caret). Detail menu = **list of collapsed tools** (`vm_ground`, `vm_click`, `vm_drag`, `vm_scroll`, …) — no separate target/pointer blocks. A line's **Error** status is in red. Captures / crosses / overlays: only when expanding the relevant tool line.
 - Markdown code blocks (`<pre>`): **copy** icon top right (hover / focus) → clipboard, "Copied" feedback.

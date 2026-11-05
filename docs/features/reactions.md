@@ -2,11 +2,11 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/reactions.py`, `autonomous/pi_extensions/react.ts`, `autonomous/services/{chat,pi_rpc,agent,botmail}.py`, `frontend/src/components/ChatPane.vue`  
-**Last updated**: 2026-11-01
+**Last updated**: 2026-11-06 (rare, deliberate reactions)
 
 ## User behaviour
 
-- The bot can put **an emoji** on the user message it is replying to (`react`). Example: "Thanks!" → ❤️ on the bubble.
+- The bot can put **an emoji** on the user message it is replying to (`react`), only when it adds something the reply does not (thanks, a joke, good news). Most turns get none. A plain question does not get a 👍 just because the bot answers it. Same restraint in the reply text.
 - The badge is shown under the bubble, on the inner side (to the left of a user bubble).
 - A reaction **is not a reply**. The agent can follow up with text, a tool, an action. If the emoji is enough (thanks, acknowledgement), it can stop without a filler sentence.
 - No tool card in the thread. Several emojis possible (6 max), no duplicates.
