@@ -25,10 +25,13 @@ _OPEN_EXACT = {
     "/api/v1/auth/status",
     "/api/v1/devices/pair",
     "/api/v1/devices/pair-poll",
+    # Webhook fire with Authorization: Bearer <webhook-token> (no session).
+    "/api/v1/hooks",
 }
 # OpenAPI /docs require a session (or Bearer) — not listed here.
 _OPEN_PREFIXES = (
     "/static/",
+    # Legacy webhook URLs: /api/v1/hooks/<token>
     "/api/v1/hooks/",
 )
 

@@ -234,7 +234,12 @@ async function removeWebhook(w) {
 }
 
 async function copyUrl(w) {
-  const text = w.url || `${location.origin}${w.url_path || ""}`;
+  // Prefer Bearer header invoke — token stays out of the URL / proxy access logs.
+  const endpoint = w.url || `${location.origin}${w.url_path || "/api/v1/hooks"}`;
+  const token = w.token || "";
+  const text = token
+    ? `curl -sS -X POST '${endpoint}' -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' -d '{}'`
+    : endpoint;
   try {
     await navigator.clipboard.writeText(text);
   } catch {

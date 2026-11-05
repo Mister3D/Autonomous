@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/migrations/001_schema.sql`, `autonomous/services/{bot_events,cronutil,scheduler}.py`, `autonomous/api/{bots,hooks}.py`, `autonomous/pi_extensions/events.ts`, `frontend/src/components/{EventsPane,ChatPane}.vue`  
-**Last updated**: 2026-11-05 (webhook rate-limit)
+**Last updated**: 2026-11-05 (webhook POST + Bearer preferred)
 
 ## User behaviour
 
@@ -14,12 +14,12 @@
 - The open **Events** tab updates itself when the agent creates, modifies or deletes a reminder (SSE `schedule.updated` / `schedule.deleted`, same for webhooks). No need to switch tabs.
 - To know the time before a relative cron, the agent runs `TZ=<timezone> date` with `vm_terminal_exec` (the VM is requested if there isn't one). It does not invent the time. `date -u` is UTC and ignores `TZ=`: the terminal output points this out, along with the local time. No separate clock tool.
 - A one-shot whose time has already passed today (day and day-of-week as `*`) is **refused** (`oneshot_too_far`) instead of being silently pushed to the next day. To target another day, the cron must set the day of month and the month. `GET /clock` includes `now` (`YYYY-MM-DD HH:MM`).
-- **User**: small switch in front of the name (pause / resume, without the word "Actif"). Task: to the right of the next run, a delete icon. Webhook: the URL is not shown; copy and delete are two slightly larger icons, on the same line as the name (on the right). The copy button always puts the full URL on the clipboard. Deleting a webhook opens a confirmation in the list ("Oui, supprimer" / "Annuler"), not a browser dialog.
+- **User**: small switch in front of the name (pause / resume, without the word "Actif"). Task: to the right of the next run, a delete icon. Webhook: the token is not shown; copy and delete are two slightly larger icons, on the same line as the name (on the right). The copy button puts a **curl** with `Authorization: Bearer <token>` on the clipboard (token not in the URL). Deleting a webhook opens a confirmation in the list ("Oui, supprimer" / "Annuler"), not a browser dialog.
 - `recurring=false` → deleted after firing, **unless** the next slot is less than 15 minutes away (burst, e.g. every 5 min). The row then stays until the first longer gap. For an hour of reminders, the cron must set the day and the hour (`25-55/5 11 1 11 *`). An hour set to `*` repeats the burst every hour, then stops when the gap exceeds 15 minutes (e.g. `25-55/5` stops after :55).
 - Missed ticks: **catch-up** (at most **one** due execution per task if `next_run_at <= now`), no N×missed burst.
 - Firing → chat message `role=user` with `meta.kind=schedule|webhook` (FIFO queue if busy, like user messages). The bot always receives the preamble ("La tâche planifiée … dit ceci" / "Webhook déclenché"). In the thread: centred card, light orange background, dotted outline. The first line recalls the type and the name ("Tâche planifiée · …"), then "Message envoyé au bot :" followed by the instruction alone.
-- Public webhook: `GET|POST /api/v1/hooks/<token>` (no session auth; token is the secret). Rate-limited: 30 / min / token and 60 / min / client IP.
-- **From a VM** (desktop with Internet): `host.docker.internal` + env `AUTONOMOUS_HOOKS_BASE` / file `~/shared/.autonomous/host-api.env`. Helper: `autonomous-hook <token> '{"ok":true}'`. Without Internet (`network=none`) the VM cannot reach the host — recreate the desk with Internet, or call the webhook from outside.
+- Public webhook (preferred): **POST only** `/api/v1/hooks` with `Authorization: Bearer <token>` (no session auth; token is the secret). Legacy: `POST /api/v1/hooks/<token>` still works. GET is rejected (404/405). Rate-limited: 30 / min / token and 60 / min / client IP. Open prefix: exact `/api/v1/hooks` + `/api/v1/hooks/…`.
+- **From a VM** (desktop with Internet): `host.docker.internal` + env `AUTONOMOUS_HOOKS_BASE` / file `~/shared/.autonomous/host-api.env`. Helper: `autonomous-hook <token> '{"ok":true}'` (sends Bearer). Without Internet (`network=none`) the VM cannot reach the host — recreate the desk with Internet, or call the webhook from outside.
 
 ## Implementation
 
@@ -32,7 +32,7 @@
 ## Pitfalls / non-regressions
 
 - Don't name the service module `events.py` (conflict with `services.events.BUS`).
-- Open prefix `/api/v1/hooks/` in `app._OPEN_PREFIXES`.
+- Open: exact `/api/v1/hooks` + prefix `/api/v1/hooks/` in `app._OPEN_*` (Bearer path must not require a session cookie).
 - One-shot: delete **after** a successful fire, not before. If the cron has another slot within 15 minutes, advance `next_run_at` instead of deleting (otherwise "every 5 min for 1 h" disappears on the first shot).
 - Catch-up: advance `next_run_at` after a single fire (don't replay all missed ticks).
 - Webhook disabled / unknown token → 404 (no fine-grained existence leak).
@@ -45,22 +45,24 @@
 - The already open Pi session keeps the old tool text. The `oneshot_too_far` refusal, however, comes from the API and applies immediately.
 - `AUTONOMOUS_LLM_TEST_CLOCK=1` is only for the LLM test: `date` (with no other command) runs on the host instead of the VM. Don't enable it for normal `serve`.
 - The Events tab doesn't reload by itself only on mount: it must apply `schedule.updated` / `schedule.deleted` (otherwise a reminder created by the agent doesn't appear until you switch bots).
-- No creation form in the tab. Only the agent creates a task or a webhook. The user pauses, resumes, deletes, copies the URL. The webhook URL is not shown in the list: it stays behind the copy icon, on the same line as the name.
+- No creation form in the tab. Only the agent creates a task or a webhook. The user pauses, resumes, deletes, copies a Bearer curl. The webhook token is not shown in the list: it stays behind the copy icon, on the same line as the name.
 - Desks created **before** `host.docker.internal`: recreate the desktop (or `curl` via the Docker gateway IP). `sync_host_api_env` updates the env file on the shared volume on every wake.
 
 ## Quick check
 
 ```bash
-# UI: Events tab → webhook = switch + name, copy and delete aligned right on the same line, no URL
+# UI: Events tab → webhook = switch + name, copy curl (Bearer) + delete, no raw token in the list
 pytest tests/test_events.py tests/test_llm_schedules.py -q
 # Real model call (Pi + provider already configured on the host):
 # AUTONOMOUS_LLM_TESTS=1 pytest tests/test_llm_schedules.py -q -m llm
 ```
 
 ```bash
+# Preferred (Bearer — token not in the URL):
+#   curl -sS -X POST "$AUTONOMOUS_HOOKS_BASE" -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' -d '{}'
 # In the VM (Internet ON):
 #   autonomous-hook <token> '{"from":"vm"}'
-#   # or: curl -sS -X POST "$AUTONOMOUS_HOOKS_BASE/<token>" -H 'Content-Type: application/json' -d '{}'
+# Legacy still works: POST "$AUTONOMOUS_HOOKS_BASE/<token>"
 ```
 
 The LLM case sends "Pendants 1h, rapelle moi toutes les 5 min de me focus !" ("For 1h, remind me every 5 min to focus!") and requires a series of about one hour, every 5 minutes, that then stops. It does not run with the default suite. This test's `serve` has `AUTONOMOUS_LLM_TEST_CLOCK=1`: a bare `date` answers on the host, without a Docker desktop. This variable must not be set on the everyday server.

@@ -15,7 +15,7 @@ Auth:
 - Pi tool calls use a separate bot-scoped Bearer `abt_…` (rotated per RPC start; not the admin token)
 - WebSockets `/novnc/…` and `/ws/terminal/…` need the same session cookie or **admin** Bearer (bot tokens rejected)
 
-Public: `GET /health`, `GET /auth/status`, `POST /auth/login`, `POST /devices/pair` (+ poll), `GET|POST /hooks/:token` (token secret + rate-limited).
+Public: `GET /health`, `GET /auth/status`, `POST /auth/login`, `POST /devices/pair` (+ poll), `POST /hooks` (Bearer webhook token) or legacy `POST /hooks/:token` (rate-limited).
 
 ## Endpoints (summary)
 
@@ -56,7 +56,8 @@ GET|POST /bots/:name/schedules      # cron entered in host local time; cron_utc 
 PATCH|DELETE /bots/:name/schedules/:id
 GET|POST /bots/:name/webhooks       # webhooks inbound (token URL)
 PATCH|DELETE /bots/:name/webhooks/:id
-GET|POST /hooks/:token              # public — triggers webhook (token secret; rate-limited)
+POST /hooks                         # public — Bearer <webhook-token> (preferred)
+POST /hooks/:token                  # public — legacy token-in-path (rate-limited)
 GET    /bots/:name/events           # SSE per bot
 
 GET    /bots/:name/desk

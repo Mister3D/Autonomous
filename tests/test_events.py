@@ -165,13 +165,16 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     assert r.status_code == 201, r.data
     wh = r.json
     assert wh["token"]
-    assert wh["url_path"].startswith("/api/v1/hooks/")
-    assert "/hooks/" in (wh.get("url") or "")
+    assert wh["url_path"] == "/api/v1/hooks"
+    assert wh["url_path_legacy"].startswith("/api/v1/hooks/")
+    assert wh.get("url", "").endswith("/api/v1/hooks")
+    assert "/hooks/" in (wh.get("url_legacy") or "")
 
-    # Public fire (no auth)
+    # Preferred: Bearer header (token not in the URL)
     fire = auth_client.post(
-        wh["url_path"],
+        "/api/v1/hooks",
         json={"hello": "world"},
+        headers={"Authorization": f"Bearer {wh['token']}"},
     )
     assert fire.status_code == 200, fire.data
     assert fire.json["ok"] is True
@@ -189,6 +192,37 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     assert hit[-1]["meta"].get("payload") == {"hello": "world"}
     assert "Traite" in hit[-1]["content"]
 
+    # Legacy path still works
+    legacy = auth_client.post(wh["url_path_legacy"], json={"legacy": True})
+    assert legacy.status_code == 200, legacy.data
+
+
+def test_webhook_bearer_required(auth_client, home):
+    bots_svc.create_bot("bearbot", home=home)
+    wh = events_svc.create_webhook("bearbot", name="b", home=home)
+    missing = auth_client.post("/api/v1/hooks", json={})
+    assert missing.status_code == 401
+    bad = auth_client.post(
+        "/api/v1/hooks",
+        json={},
+        headers={"Authorization": "Bearer not-a-real-token"},
+    )
+    assert bad.status_code == 404
+    ok = auth_client.post(
+        "/api/v1/hooks",
+        json={},
+        headers={"Authorization": f"Bearer {wh['token']}"},
+    )
+    assert ok.status_code == 200, ok.data
+    # GET must not fire (POST only) — Flask may answer 405 or 404 without a get().
+    get_r = auth_client.get(
+        "/api/v1/hooks",
+        headers={"Authorization": f"Bearer {wh['token']}"},
+    )
+    assert get_r.status_code in (404, 405)
+    get_legacy = auth_client.get(f"/api/v1/hooks/{wh['token']}")
+    assert get_legacy.status_code in (404, 405)
+
 
 def test_webhook_queues_when_busy(auth_client, home):
     bots_svc.create_bot("busybot", home=home)
@@ -200,7 +234,7 @@ def test_webhook_queues_when_busy(auth_client, home):
 
 
 def test_webhook_unknown_404(auth_client):
-    r = auth_client.get("/api/v1/hooks/not-a-real-token")
+    r = auth_client.post("/api/v1/hooks/not-a-real-token", json={})
     assert r.status_code == 404
 
 

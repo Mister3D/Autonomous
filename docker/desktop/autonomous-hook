@@ -5,6 +5,7 @@
 #   echo '{"ok":true}' | autonomous-hook <token>
 # Env (injected by Autonomous):
 #   AUTONOMOUS_HOOKS_BASE  e.g. http://host.docker.internal:8787/api/v1/hooks
+# Auth: Authorization: Bearer <token> (token is not put in the URL).
 set -euo pipefail
 
 token="${1:-}"
@@ -29,7 +30,7 @@ if [[ -z "$base" ]]; then
   exit 2
 fi
 
-url="${base%/}/${token}"
+url="${base%/}"
 payload=""
 if [[ $# -gt 0 ]]; then
   payload="$*"
@@ -37,11 +38,12 @@ elif [[ ! -t 0 ]]; then
   payload="$(cat || true)"
 fi
 
+auth=( -H "Authorization: Bearer ${token}" -H "Accept: application/json" )
 if [[ -n "$payload" ]]; then
   exec curl -sS -f -X POST "$url" \
+    "${auth[@]}" \
     -H "Content-Type: application/json" \
-    -H "Accept: application/json" \
     --data-binary "$payload"
 else
-  exec curl -sS -f -X POST "$url" -H "Accept: application/json"
+  exec curl -sS -f -X POST "$url" "${auth[@]}"
 fi

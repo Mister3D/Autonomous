@@ -126,8 +126,9 @@ def _events_system_hint(home) -> str:
         "recurring=false → delete after a successful fire, unless the next slot is "
         "within 15 minutes (a short burst such as every 5 minutes). "
         "For one hour of reminders, pin the day and the hour; hour '*' repeats the burst every hour. "
-        "Webhooks expose a public token URL (/api/v1/hooks/<token>); GET/POST injects "
-        "a user chat message (queued if busy). Only you create schedules and webhooks "
+        "Webhooks: prefer POST /api/v1/hooks with Authorization: Bearer <token> "
+        "(legacy POST /api/v1/hooks/<token> still works; GET is rejected). "
+        "A fire injects a user chat message (queued if busy). Only you create schedules and webhooks "
         "(schedule_create / webhook_create). The user pauses, resumes and deletes them "
         "in the Events inspector — there is no create form there."
     )

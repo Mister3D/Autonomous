@@ -245,7 +245,8 @@ export default function (pi: ExtensionAPI) {
       if (!rows.length) return textResult("No webhooks.");
       const lines = rows.map((w: any) => {
         const on = w.enabled ? "on" : "off";
-        return `- ${w.id} «${w.name}» [${on}] ${w.url || w.url_path || ""}`;
+        const ep = w.url || w.url_path || "/api/v1/hooks";
+        return `- ${w.id} «${w.name}» [${on}] POST ${ep} Authorization: Bearer <token>`;
       });
       return textResult("Webhooks:\n" + lines.join("\n"));
     },
@@ -255,8 +256,9 @@ export default function (pi: ExtensionAPI) {
     name: "webhook_create",
     label: "Create webhook",
     description:
-      "Create an inbound webhook. Returns a public URL "
-      + "`/api/v1/hooks/<token>` — GET/POST injects a chat message for this bot.",
+      "Create an inbound webhook. Prefer POST `/api/v1/hooks` with "
+      + "`Authorization: Bearer <token>` (token not in the URL). "
+      + "Legacy `/api/v1/hooks/<token>` still works. Fires inject a chat message for this bot.",
     parameters: Type.Object({
       name: Type.String({ description: "Short label" }),
       instruction: Type.Optional(
@@ -283,8 +285,11 @@ export default function (pi: ExtensionAPI) {
       );
       if (!res.ok) return textResult(`webhook_create failed: ${errMsg(res)}`);
       const w = res.data || {};
+      const ep = w.url || w.url_path || "/api/v1/hooks";
       return textResult(
-        `Webhook created: ${w.id} «${w.name}»\nURL: ${w.url || w.url_path}`,
+        `Webhook created: ${w.id} «${w.name}»\n`
+          + `POST ${ep}\nAuthorization: Bearer ${w.token || "<token>"}\n`
+          + `(legacy URL still works: ${w.url_legacy || w.url_path_legacy || ""})`,
         { webhook: w },
       );
     },

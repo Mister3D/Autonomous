@@ -233,7 +233,7 @@
   "events.on": "Actif",
   "events.off": "Pause",
   "events.delete": "Supprimer",
-  "events.copyUrl": "Copier l’URL",
+  "events.copyUrl": "Copier curl (Bearer)",
   "events.copied": "Copié",
   "events.oneShot": "une fois",
   "events.confirmDelete": "Supprimer « {name} » ?",
