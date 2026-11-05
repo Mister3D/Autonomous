@@ -108,6 +108,34 @@ def test_ssrf_blocks_metadata_ip():
     cfg.assert_safe_outbound_url("http://127.0.0.1:8000/v1")
 
 
+def test_search_llm_blocks_metadata_base_url(monkeypatch):
+    """NL search must not POST the API key to a metadata / link-local base_url."""
+    from autonomous.services import search as search_svc
+
+    monkeypatch.setattr(
+        search_svc,
+        "_llm_config",
+        lambda: {
+            "base_url": "http://169.254.169.254/latest",
+            "model": "m",
+            "api_key": "secret-key-must-not-leak",
+        },
+    )
+    called = {"n": 0}
+
+    def _boom(*_a, **_k):  # noqa: ANN001
+        called["n"] += 1
+        raise AssertionError("urlopen_safe must not be reached for metadata URLs")
+
+    monkeypatch.setattr(
+        "autonomous.services.setup_config.urlopen_safe",
+        _boom,
+    )
+    out = search_svc._llm_complete("hi", system="sys", timeout=1.0)
+    assert out is None
+    assert called["n"] == 0
+
+
 def test_urlopen_safe_blocks_redirect_to_metadata():
     """A 302 to link-local must not be followed (SSRF bounce-off)."""
     import threading

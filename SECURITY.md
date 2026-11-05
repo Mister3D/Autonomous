@@ -39,7 +39,7 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 | Public webhooks | `POST /api/v1/hooks` + `Authorization: Bearer` | Token not in the URL; GET rejected; rate-limited (30 / min / token, 60 / min / IP); treat the token as a secret |
 | Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only loopback + desk IPs of bots assigned to that companion with egress |
 | Self-update remote | Optional `update.remote_url` | `git fetch` + `npm`/`pip` + service restart — **treat as code execution**. Only a fork **you** control; `https://` / `ssh://` / `git@` only (`http://` and `git://` rejected) |
-| LLM / grounding URLs | Admin Settings | Cloud metadata / link-local blocked at save **and** runtime; redirects re-checked. LAN/localhost allowed for self-hosted endpoints |
+| LLM / grounding URLs | Admin Settings + NL search | Cloud metadata / link-local blocked at save **and** runtime (incl. chat NL search); redirects re-checked. LAN/localhost allowed for self-hosted endpoints |
 | Desk VMs | Untrusted | Prefer Internet off; `seccomp=unconfined` for Chrome — assume escape possible |
 | Host bash (Pi `bash` tool) | **Removed** | Always `--exclude-tools bash`; shell only inside desk VMs. Host access = credentials via vault if needed |
 | OpenAPI `/api/docs` | Auth required | Session / admin Bearer only |

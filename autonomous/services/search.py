@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -493,6 +492,15 @@ def _llm_complete(
     cfg = _llm_config()
     if not cfg:
         return None
+    # Same SSRF gate as Settings / grounding (metadata & link-local blocked).
+    from autonomous.services.setup_config import assert_safe_outbound_url, urlopen_safe
+
+    base = str(cfg["base_url"] or "").rstrip("/")
+    try:
+        assert_safe_outbound_url(base)
+    except ValidationError:
+        log.warning("search LLM base_url blocked by SSRF gate: %s", base[:120])
+        return None
     body = {
         "model": cfg["model"],
         "messages": [
@@ -502,7 +510,7 @@ def _llm_complete(
         "temperature": 0,
         "max_tokens": max_tokens,
     }
-    url = f"{cfg['base_url']}/chat/completions"
+    url = f"{base}/chat/completions"
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -515,9 +523,12 @@ def _llm_complete(
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urlopen_safe(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
         return str(payload["choices"][0]["message"]["content"] or "")
+    except ValidationError:
+        log.warning("search LLM request blocked by SSRF gate")
+        return None
     except Exception:
         log.exception("search LLM call failed")
         return None
