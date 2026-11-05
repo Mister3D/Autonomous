@@ -117,12 +117,14 @@ class SetupUpdate(MethodView):
             _handle(exc)
 
     def put(self):
-        """Set update channel: {channel: main|dev, confirm_dev?: true}."""
+        """Set update branch / remote: {channel?, remote_url?, confirm_dev?: true}."""
         body = _body()
         try:
-            return updates_svc.set_channel(
-                str(body.get("channel") or ""),
+            return updates_svc.configure(
                 home=g.home,
+                branch=None if "channel" not in body else str(body.get("channel") or ""),
+                remote_url_value=None if "remote_url" not in body else body.get("remote_url"),
+                set_remote="remote_url" in body,
                 confirm_dev=bool(body.get("confirm_dev")),
             )
         except AutonomousError as exc:

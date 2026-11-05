@@ -22,10 +22,13 @@ Public: `GET /health`, `GET /auth/status`, `POST /auth/login`, `POST /devices/pa
 ```
 GET    /health
 GET    /settings
-PUT    /settings                    # incl. timezone (IANA): display time zone for tasks
+PUT    /settings                    # incl. timezone (IANA); not update.channel / update.remote_url
 GET    /pi/status                   # Pi install + readiness
 GET    /pi/models                   # models listed by `pi --list-models`
 GET    /events                      # SSE global (multi-tab)
+GET|PUT /setup/update               # self-update status; PUT {channel?, remote_url?, confirm_dev?}
+POST   /setup/update/check
+POST   /setup/update/apply
 
 GET    /auth/status                 # + must_change_password
 POST   /auth/login                  # may return must_change_password

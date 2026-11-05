@@ -20,6 +20,7 @@ def _clean_cache(home):
 
 def test_default_channel_is_main(home):
     assert updates_svc.channel(home) == "main"
+    assert updates_svc.remote_url(home) == ""
 
 
 def test_set_channel_requires_confirm_dev(home, monkeypatch):
@@ -33,11 +34,52 @@ def test_set_channel_requires_confirm_dev(home, monkeypatch):
     assert settings_svc.get("update.channel", home=home) == "dev"
 
 
+def test_custom_branch_and_remote_url(home, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "can_switch_to", lambda *a, **k: {"ok": True, "channel": "release/1.2"})
+    monkeypatch.setattr(updates_svc, "_ensure_updates_remote", lambda url: None)
+    monkeypatch.setattr(updates_svc, "origin_url", lambda: "https://github.com/orig/Autonomous.git")
+
+    with pytest.raises(ValidationError) as exc:
+        updates_svc.set_channel("release/1.2", home=home, confirm_dev=False)
+    assert exc.value.code == "confirm_dev_required"
+
+    out = updates_svc.configure(
+        home=home,
+        branch="release/1.2",
+        remote_url_value="https://github.com/you/Autonomous.git",
+        set_remote=True,
+        confirm_dev=True,
+    )
+    assert out["channel"] == "release/1.2"
+    assert out["remote_url"] == "https://github.com/you/Autonomous.git"
+    assert settings_svc.get("update.remote_url", home=home) == "https://github.com/you/Autonomous.git"
+
+    cleared = updates_svc.set_remote_url("", home=home)
+    assert cleared["remote_url"] == ""
+
+
+def test_invalid_remote_and_branch_rejected(home):
+    with pytest.raises(ValidationError) as exc:
+        updates_svc.normalize_remote_url("file:///etc/passwd")
+    assert exc.value.code == "invalid_remote_url"
+    with pytest.raises(ValidationError):
+        updates_svc.normalize_branch("../evil")
+    with pytest.raises(ValidationError):
+        updates_svc.normalize_branch("branch;rm")
+
+
 def test_settings_put_rejects_channel_change(auth_client, home):
     settings_svc.set_value("update.channel", "main", home=home)
     r = auth_client.put("/api/v1/settings", json={"update.channel": "dev"})
     assert r.status_code == 400
     assert settings_svc.get("update.channel", home=home) == "main"
+    r2 = auth_client.put(
+        "/api/v1/settings",
+        json={"update.remote_url": "https://example.com/x.git"},
+    )
+    assert r2.status_code == 400
+    assert settings_svc.get("update.remote_url", home=home) in ("", None)
 
 
 def test_status_endpoint_cached(auth_client, home, monkeypatch):
@@ -133,6 +175,7 @@ def test_cache_roundtrip(home, monkeypatch):
         "ok": True,
         "available": False,
         "channel": "main",
+        "remote_url": "",
         "checked_at_epoch": 9_999_999_999,
         "git": True,
         "behind": 0,

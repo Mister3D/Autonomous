@@ -1,8 +1,11 @@
-"""Self-update: channel (main|dev), check cache 24h, apply + optional systemd restart.
+"""Self-update: branch + optional remote URL, check cache 24h, apply + systemd restart.
 
 Threat model: mono-user hub. Apply runs a fixed argv sequence (fetch / ff-only /
 frontend build / pip install -e). No user-supplied shell. Restart uses
 ``systemctl`` when an ``autonomous.service`` unit is active.
+
+Presets ``main`` / ``dev`` remain; any other valid branch name is allowed (forks).
+``update.remote_url`` points fetches at a dedicated ``updates`` remote when set.
 """
 
 from __future__ import annotations
@@ -24,9 +27,11 @@ from autonomous.paths import ensure_home
 from autonomous.services import settings as settings_svc
 from autonomous.services.errors import Conflict, ValidationError
 
-CHANNELS = ("main", "dev")
+CHANNELS = ("main", "dev")  # UI presets; channel() also accepts custom branches
 CACHE_TTL_S = 24 * 3600
 CHANNEL_KEY = "update.channel"
+REMOTE_URL_KEY = "update.remote_url"
+UPDATES_REMOTE = "updates"
 CACHE_NAME = "update-check.json"
 SERVICE_NAMES = (
     os.environ.get("AUTONOMOUS_SERVICE_NAME", "").strip(),
@@ -35,6 +40,12 @@ SERVICE_NAMES = (
 )
 
 _MIGRATION_RE = re.compile(r"^(\d+)_.*\.sql$")
+# Safe git branch / ref name (no shell metacharacters, no path escape).
+_BRANCH_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
+_REMOTE_URL_RE = re.compile(
+    r"^(https://|http://|git://|ssh://|git@)[^\s\"'`;|&$<>]+$",
+    re.IGNORECASE,
+)
 _lock = threading.Lock()
 _apply_running = False
 
@@ -68,9 +79,85 @@ def git_available() -> bool:
     return shutil.which("git") is not None
 
 
+def normalize_branch(raw: str | None) -> str:
+    name = str(raw or "").strip()
+    # Keep case for custom branches (Feature/foo); presets lowercased.
+    if name.lower() in CHANNELS:
+        return name.lower()
+    if not name or not _BRANCH_RE.match(name):
+        raise ValidationError(
+            "Invalid branch name (letters, digits, . _ / - ; no '..')",
+            code="invalid_channel",
+        )
+    return name
+
+
 def channel(home: Path | None = None) -> str:
-    raw = str(settings_svc.get(CHANNEL_KEY, home=home, default="main") or "main").strip().lower()
-    return raw if raw in CHANNELS else "main"
+    raw = str(settings_svc.get(CHANNEL_KEY, home=home, default="main") or "main").strip()
+    try:
+        return normalize_branch(raw)
+    except ValidationError:
+        return "main"
+
+
+def normalize_remote_url(raw: str | None) -> str:
+    url = str(raw or "").strip()
+    if not url:
+        return ""
+    if not _REMOTE_URL_RE.match(url):
+        raise ValidationError(
+            "Remote URL must be https://, http://, git://, ssh://, or git@…",
+            code="invalid_remote_url",
+        )
+    if len(url) > 500:
+        raise ValidationError("Remote URL too long", code="invalid_remote_url")
+    return url
+
+
+def remote_url(home: Path | None = None) -> str:
+    raw = settings_svc.get(REMOTE_URL_KEY, home=home, default="")
+    try:
+        return normalize_remote_url(raw if isinstance(raw, str) else str(raw or ""))
+    except ValidationError:
+        return ""
+
+
+def _remote_url_configured(home: Path | None) -> str:
+    return remote_url(home)
+
+
+def _git_remote_get_url(name: str) -> str | None:
+    p = _git("remote", "get-url", name)
+    if p.returncode != 0:
+        return None
+    return (p.stdout or "").strip() or None
+
+
+def origin_url() -> str | None:
+    return _git_remote_get_url("origin")
+
+
+def _ensure_updates_remote(url: str) -> None:
+    """Point the dedicated ``updates`` remote at ``url`` (add or set-url)."""
+    current = _git_remote_get_url(UPDATES_REMOTE)
+    if current is None:
+        p = _git("remote", "add", UPDATES_REMOTE, url)
+    elif current != url:
+        p = _git("remote", "set-url", UPDATES_REMOTE, url)
+    else:
+        return
+    if p.returncode != 0:
+        err = ((p.stderr or p.stdout or "git remote failed")[:300]).strip()
+        raise ValidationError(err or "Could not configure updates remote", code="remote_config_failed")
+
+
+def _fetch_remote_name(home: Path | None) -> str:
+    """Remote name used for fetch/merge: ``updates`` when a URL is set, else ``origin``."""
+    url = _remote_url_configured(home)
+    if url:
+        _ensure_updates_remote(url)
+        return UPDATES_REMOTE
+    return "origin"
 
 
 def _read_cache(home: Path | None) -> dict[str, Any] | None:
@@ -143,10 +230,8 @@ def _applied_migrations(home: Path | None) -> set[int]:
 
 
 def can_switch_to(target: str, *, home: Path | None = None) -> dict[str, Any]:
-    """Whether settings may change the update channel to ``target``."""
-    target = (target or "").strip().lower()
-    if target not in CHANNELS:
-        raise ValidationError("channel must be main or dev", code="invalid_channel")
+    """Whether settings may change the update branch to ``target``."""
+    target = normalize_branch(target)
     current = channel(home)
     if target == current:
         return {"ok": True, "channel": target, "current": current}
@@ -160,21 +245,22 @@ def can_switch_to(target: str, *, home: Path | None = None) -> dict[str, Any]:
             "current": current,
         }
 
-    # Fetch soft so origin/<target> exists when possible (best-effort).
+    remote = _fetch_remote_name(home)
+    # Soft fetch so remote/<target> exists when possible (best-effort).
     try:
-        _git("fetch", "--quiet", "origin", target, timeout=45.0)
+        _git("fetch", "--quiet", remote, target, timeout=45.0)
     except (OSError, subprocess.TimeoutExpired):
         pass
 
-    ref = f"origin/{target}"
+    ref = f"{remote}/{target}"
     if not _rev_parse(ref):
-        # Fall back to local branch tip if origin missing.
+        # Fall back to local branch tip if remote missing.
         ref = target if _rev_parse(target) else ""
     if not ref:
         return {
             "ok": False,
             "code": "unknown_branch",
-            "message": f"Branch {target} is not available on origin yet.",
+            "message": f"Branch {target} is not available on {remote} yet.",
             "channel": target,
             "current": current,
         }
@@ -203,23 +289,58 @@ def can_switch_to(target: str, *, home: Path | None = None) -> dict[str, Any]:
         "ok": True,
         "channel": target,
         "current": current,
-        "warning_dev": target == "dev",
+        "warning_dev": target != "main",
     }
 
 
 def set_channel(target: str, *, home: Path | None = None, confirm_dev: bool = False) -> dict[str, Any]:
-    target = (target or "").strip().lower()
+    target = normalize_branch(target)
     gate = can_switch_to(target, home=home)
     if not gate.get("ok"):
         raise ValidationError(gate.get("message") or "cannot switch channel", code=gate.get("code") or "channel_blocked")
-    if target == "dev" and channel(home) != "dev" and not confirm_dev:
+    # Leaving main for any other branch (dev or custom) needs an explicit confirm.
+    if target != "main" and channel(home) != target and not confirm_dev:
         raise ValidationError(
-            "Switching to dev requires confirm_dev=true (unstable + harder to return to main).",
+            "Switching away from main requires confirm_dev=true (unstable + harder to return).",
             code="confirm_dev_required",
         )
     settings_svc.set_value(CHANNEL_KEY, target, home=home)
     invalidate_cache(home)
-    return {"ok": True, "channel": target, "warning_dev": target == "dev"}
+    return {"ok": True, "channel": target, "warning_dev": target != "main"}
+
+
+def set_remote_url(url: str | None, *, home: Path | None = None) -> dict[str, Any]:
+    """Set or clear the self-update remote URL (empty → use origin)."""
+    cleaned = normalize_remote_url(url)
+    settings_svc.set_value(REMOTE_URL_KEY, cleaned, home=home)
+    if cleaned and git_available():
+        _ensure_updates_remote(cleaned)
+    invalidate_cache(home)
+    return {
+        "ok": True,
+        "remote_url": cleaned,
+        "origin_url": origin_url() if git_available() else None,
+    }
+
+
+def configure(
+    *,
+    home: Path | None = None,
+    branch: str | None = None,
+    remote_url_value: str | None = None,
+    set_remote: bool = False,
+    confirm_dev: bool = False,
+) -> dict[str, Any]:
+    """Update branch and/or remote URL from PUT /setup/update."""
+    out: dict[str, Any] = {"ok": True}
+    if set_remote:
+        out.update(set_remote_url(remote_url_value, home=home))
+    if branch is not None and str(branch).strip() != "":
+        out.update(set_channel(branch, home=home, confirm_dev=confirm_dev))
+    out["channel"] = channel(home)
+    out["remote_url"] = remote_url(home)
+    out["origin_url"] = origin_url() if git_available() else None
+    return out
 
 
 def _behind_count(local: str, remote: str) -> int:
@@ -235,12 +356,14 @@ def _behind_count(local: str, remote: str) -> int:
 def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
     """Return update status; refresh remote tip when cache expired or force=True."""
     ch = channel(home)
+    url = remote_url(home)
     cached = _read_cache(home)
     now = time.time()
     if (
         cached
         and not force
         and cached.get("channel") == ch
+        and cached.get("remote_url") == url
         and isinstance(cached.get("checked_at_epoch"), (int, float))
         and now - float(cached["checked_at_epoch"]) < CACHE_TTL_S
     ):
@@ -250,6 +373,9 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
         "ok": True,
         "available": False,
         "channel": ch,
+        "remote_url": url,
+        "origin_url": None,
+        "fetch_remote": "origin",
         "cached": False,
         "checked_at": _now_iso(),
         "checked_at_epoch": now,
@@ -272,12 +398,21 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
         _write_cache(home, base)
         return base
 
+    base["origin_url"] = origin_url()
     local = _rev_parse("HEAD")
     base["local_sha"] = local
     base["dirty"] = _dirty()
 
     try:
-        fetch = _git("fetch", "--quiet", "origin", ch, timeout=90.0)
+        remote_name = _fetch_remote_name(home)
+    except ValidationError as exc:
+        base.update(ok=False, code=exc.code or "remote_config_failed", message=exc.message)
+        _write_cache(home, base)
+        return base
+    base["fetch_remote"] = remote_name
+
+    try:
+        fetch = _git("fetch", "--quiet", remote_name, ch, timeout=90.0)
     except (OSError, subprocess.TimeoutExpired) as exc:
         base.update(ok=False, code="fetch_failed", message=str(exc)[:300])
         _write_cache(home, base)
@@ -289,17 +424,18 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
         _write_cache(home, base)
         return base
 
-    remote = _rev_parse(f"origin/{ch}") or _rev_parse(ch)
-    base["remote_sha"] = remote
-    if local and remote and local != remote:
-        behind = _behind_count(local, remote)
+    remote_sha = _rev_parse(f"{remote_name}/{ch}") or _rev_parse(ch)
+    base["remote_sha"] = remote_sha
+    if local and remote_sha and local != remote_sha:
+        behind = _behind_count(local, remote_sha)
         base["behind"] = behind
         base["available"] = behind > 0
         if behind == 0:
-            # Local has commits remote doesn't (or diverge) — still offer update only if behind.
-            base["message"] = "Local branch differs from origin; fast-forward update may not apply."
+            base["message"] = (
+                f"Local branch differs from {remote_name}; fast-forward update may not apply."
+            )
             base["code"] = "diverged"
-    elif local and remote and local == remote:
+    elif local and remote_sha and local == remote_sha:
         base["available"] = False
         base["behind"] = 0
 
@@ -314,8 +450,11 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
 def status(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
     st = check(home=home, force=force)
     st["channels"] = list(CHANNELS)
+    st["remote_url"] = remote_url(home)
+    st["origin_url"] = origin_url() if git_available() else None
+    current = channel(home)
     st["can_switch"] = {
-        c: can_switch_to(c, home=home) for c in CHANNELS if c != channel(home)
+        c: can_switch_to(c, home=home) for c in CHANNELS if c != current
     }
     with _lock:
         st["applying"] = _apply_running
@@ -412,6 +551,7 @@ def start_apply(*, home: Path | None = None) -> dict[str, Any]:
         )
 
     ch = channel(home)
+    remote_name = _fetch_remote_name(home)
     with _lock:
         if _apply_running:
             raise Conflict("an update is already running", code="update_running")
@@ -427,15 +567,28 @@ def start_apply(*, home: Path | None = None) -> dict[str, Any]:
         root = _repo_root()
         try:
             jobs_svc.update_job(job["id"], state="running", progress=5, home=home)
-            log(f"Updating channel={ch}")
+            log(f"Updating channel={ch} remote={remote_name}")
+            tip = f"{remote_name}/{ch}"
             steps: list[tuple[str, list[str]]] = [
-                ("fetch", ["git", "-C", str(root), "fetch", "origin", ch]),
-                ("checkout", ["git", "-C", str(root), "checkout", "-q", ch]),
-                (
-                    "ff-only",
-                    ["git", "-C", str(root), "merge", "-q", "--ff-only", f"origin/{ch}"],
-                ),
+                ("fetch", ["git", "-C", str(root), "fetch", remote_name, ch]),
             ]
+            # Create a local branch from the remote tip when it does not exist yet.
+            if _git("show-ref", "--verify", "--quiet", f"refs/heads/{ch}").returncode != 0:
+                steps.append(
+                    (
+                        "branch",
+                        ["git", "-C", str(root), "branch", "--track", ch, tip],
+                    )
+                )
+            steps.extend(
+                [
+                    ("checkout", ["git", "-C", str(root), "checkout", "-q", ch]),
+                    (
+                        "ff-only",
+                        ["git", "-C", str(root), "merge", "-q", "--ff-only", tip],
+                    ),
+                ]
+            )
             for label, argv in steps:
                 jobs_svc.update_job(job["id"], progress=15, home=home)
                 rc = _stream_argv(job["id"], argv, home)

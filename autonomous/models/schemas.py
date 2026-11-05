@@ -370,7 +370,12 @@ class SettingsSchema(Schema):
     update_channel = fields.Str(
         data_key="update.channel",
         allow_none=True,
-        metadata={"description": "Self-update git channel: main | dev"},
+        metadata={"description": "Self-update git branch: main | dev | custom"},
+    )
+    update_remote_url = fields.Str(
+        data_key="update.remote_url",
+        allow_none=True,
+        metadata={"description": "Optional git remote URL for self-update (fork)"},
     )
     companions_enabled = fields.Bool(
         data_key="companions.enabled",

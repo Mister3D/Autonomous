@@ -6,7 +6,7 @@
 - `frontend/src/views/HubView.vue` (`selectTab`, `applyRoute`, `goBot`)
 - `frontend/src/store.js` (`state.tab`)
 
-**Last updated**: 2026-11-06 (logout in gear menu; language in Settings)
+**Last updated**: 2026-11-06 (General tab; logout in gear; language + version; update URL/branch)
 
 ## User behaviour
 
@@ -25,7 +25,7 @@ The URL reflects the active tab:
 - Switching bot from the rail: without split view → Conversation. With split view → the left pane saved for that bot.
 - **Two-pane** view: not an extra tab. The URL stays that of the **left** pane. The right pane is a local preference. See [desk-screen.md](./desk-screen.md).
 - Bot missing from the list (deleted, or "Delete all bots"): the `/b/<slug>/…` URL goes back to `/`, or to the first remaining bot. No loading of the old slug's messages (otherwise 404 in the console).
-- **Settings**: page `/settings/:section` (not a modal). Tabs on the left, in this order: `agent` (language, Pi, time zone, update channel, guard-rails), `vault`, `memory`, `companions`. `/settings/general` goes back to `agent`. Return to the current bot.
+- **Settings**: page `/settings/:section` (not a modal). Tabs on the left, in this order: `agent` (label **General** — language + Pi version, time zone, updates, guard-rails), `vault`, `memory`, `companions`. `/settings/general` goes back to `agent`. Return to the current bot.
 - Sidebar gear menu (`SettingsMenu`): Settings, delete all bots, **Log out** (moved out of the per-bot Manage panel). Language lives only under Settings → Agent.
 - **Setup / home**: `/` and `/setup` share the hub and **do not** auto-select a bot — the main pane shows the brand tagline ("Your bots. Your desktop.") or the setup checklist. Opening a bot is only via the rail (or a `/b/…` URL). Checklist until required items are ready; first-conversation button at the bottom (see [setup.md](./setup.md)). Logo link → `/` clears the current bot.
 

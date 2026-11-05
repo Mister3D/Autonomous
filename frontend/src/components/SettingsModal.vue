@@ -103,15 +103,10 @@
             </button>
           </div>
         </div>
-      </section>
-
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("pi.title") }}</h3>
-        <p v-if="loading" class="hint">…</p>
-        <div v-else class="info-row">
+        <div class="info-row settings-version-row">
           <span>
             <strong>{{ t("pi.version") }}</strong>
-            <small>{{ status?.version || "—" }}</small>
+            <small>{{ loading ? "…" : status?.version || "—" }}</small>
           </span>
         </div>
       </section>
@@ -155,9 +150,33 @@
         <h3>{{ t("update.channelTitle") }}</h3>
         <p class="hint">{{ t("update.channelHint") }}</p>
         <div class="settings-field">
+          <span>{{ t("update.remoteUrl") }}</span>
+          <input
+            v-model="updateRemoteDraft"
+            type="url"
+            :placeholder="t('update.remoteUrlPlaceholder')"
+            :disabled="updateChannelBusy || !updateGit"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <small>{{ t("update.remoteUrlHint") }}</small>
+          <small v-if="updateRemoteSaved">{{ t("update.remoteUsingCustom") }}</small>
+          <small v-else-if="updateOriginUrl">
+            {{ t("update.remoteUsingOrigin", { url: updateOriginUrl }) }}
+          </small>
+          <button
+            class="btn"
+            type="button"
+            :disabled="updateChannelBusy || !updateGit || updateRemoteDraft.trim() === updateRemoteSaved"
+            @click="saveUpdateRemote"
+          >
+            {{ t("update.remoteUrlSave") }}
+          </button>
+        </div>
+        <div class="settings-field">
           <span>{{ t("update.channel") }}</span>
           <div
-            class="update-channel-seg"
+            class="update-channel-seg update-channel-seg-3"
             role="radiogroup"
             :aria-label="t('update.channel')"
             :aria-disabled="updateChannelBusy || !updateGit ? 'true' : undefined"
@@ -166,8 +185,8 @@
               type="button"
               role="radio"
               class="update-channel-opt"
-              :class="{ active: updateChannel === 'main' }"
-              :aria-checked="updateChannel === 'main'"
+              :class="{ active: updatePreset === 'main' }"
+              :aria-checked="updatePreset === 'main'"
               :disabled="updateChannelBusy || !updateGit"
               @click="pickUpdateChannel('main')"
             >
@@ -178,13 +197,52 @@
               type="button"
               role="radio"
               class="update-channel-opt"
-              :class="{ active: updateChannel === 'dev' }"
-              :aria-checked="updateChannel === 'dev'"
+              :class="{ active: updatePreset === 'dev' }"
+              :aria-checked="updatePreset === 'dev'"
               :disabled="updateChannelBusy || !updateGit"
               @click="pickUpdateChannel('dev')"
             >
               <strong>{{ t("update.channelDev") }}</strong>
               <small>{{ t("update.channelDevHint") }}</small>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              class="update-channel-opt"
+              :class="{ active: updatePreset === 'custom' }"
+              :aria-checked="updatePreset === 'custom'"
+              :disabled="updateChannelBusy || !updateGit"
+              @click="pickUpdateChannel('custom')"
+            >
+              <strong>{{ t("update.channelCustom") }}</strong>
+              <small>{{ t("update.channelCustomHint") }}</small>
+            </button>
+          </div>
+          <div v-if="updatePreset === 'custom'" class="update-custom-branch">
+            <label>
+              <span>{{ t("update.customBranch") }}</span>
+              <input
+                v-model="updateCustomBranch"
+                type="text"
+                :placeholder="t('update.customBranchPlaceholder')"
+                :disabled="updateChannelBusy || !updateGit"
+                autocomplete="off"
+                spellcheck="false"
+                @keydown.enter.prevent="saveCustomBranch"
+              />
+            </label>
+            <button
+              class="btn"
+              type="button"
+              :disabled="
+                updateChannelBusy ||
+                !updateGit ||
+                !updateCustomBranch.trim() ||
+                updateCustomBranch.trim() === updateChannelSaved
+              "
+              @click="saveCustomBranch"
+            >
+              {{ t("update.customBranchSave") }}
             </button>
           </div>
           <small>{{ t("update.channelHelp") }}</small>
@@ -505,7 +563,17 @@ const updateChannel = ref("main");
 const updateChannelBusy = ref(false);
 const updateChannelError = ref("");
 const updateGit = ref(true);
+const updateCustomBranch = ref("");
+const updateRemoteDraft = ref("");
+const updateRemoteSaved = ref("");
+const updateOriginUrl = ref("");
 let updateChannelSaved = "main";
+
+const updatePreset = computed(() => {
+  const ch = updateChannel.value;
+  if (ch === "main" || ch === "dev") return ch;
+  return "custom";
+});
 
 function tzScore(zone, q) {
   const full = zone.toLowerCase();
@@ -821,9 +889,13 @@ async function loadUpdateChannel() {
   updateChannelError.value = "";
   try {
     const st = await api.updateStatus(false);
-    const ch = st.channel === "dev" ? "dev" : "main";
+    const ch = String(st.channel || "main").trim() || "main";
     updateChannel.value = ch;
     updateChannelSaved = ch;
+    updateCustomBranch.value = ch === "main" || ch === "dev" ? "" : ch;
+    updateRemoteSaved.value = String(st.remote_url || "").trim();
+    updateRemoteDraft.value = updateRemoteSaved.value;
+    updateOriginUrl.value = String(st.origin_url || "").trim();
     updateGit.value = st.git !== false && st.code !== "no_git";
   } catch (e) {
     updateChannelError.value = e.message || String(e);
@@ -831,24 +903,68 @@ async function loadUpdateChannel() {
   }
 }
 
-async function pickUpdateChannel(next) {
-  const want = next === "dev" ? "dev" : "main";
-  if (want === updateChannelSaved || updateChannelBusy.value || !updateGit.value) return;
+async function applyUpdateBranch(want) {
+  const branch = String(want || "").trim();
+  if (!branch || updateChannelBusy.value || !updateGit.value) return;
+  if (branch === updateChannelSaved) {
+    updateChannel.value = branch;
+    return;
+  }
   updateChannelError.value = "";
-  if (want === "dev") {
+  if (branch !== "main") {
     if (!confirm(t("update.confirmDev"))) return;
   }
-  updateChannel.value = want;
+  updateChannel.value = branch;
   updateChannelBusy.value = true;
   try {
     await api.setUpdateChannel({
-      channel: want,
-      confirm_dev: want === "dev",
+      channel: branch,
+      confirm_dev: branch !== "main",
     });
-    updateChannelSaved = want;
+    updateChannelSaved = branch;
+    if (branch !== "main" && branch !== "dev") {
+      updateCustomBranch.value = branch;
+    }
   } catch (e) {
     updateChannelError.value = e.message || String(e);
     updateChannel.value = updateChannelSaved;
+  } finally {
+    updateChannelBusy.value = false;
+  }
+}
+
+async function pickUpdateChannel(next) {
+  if (next === "custom") {
+    updateChannel.value =
+      updateCustomBranch.value.trim() ||
+      (updateChannelSaved !== "main" && updateChannelSaved !== "dev"
+        ? updateChannelSaved
+        : "");
+    if (!updateCustomBranch.value.trim() && updateChannel.value) {
+      updateCustomBranch.value = updateChannel.value;
+    }
+    return;
+  }
+  await applyUpdateBranch(next === "dev" ? "dev" : "main");
+}
+
+async function saveCustomBranch() {
+  await applyUpdateBranch(updateCustomBranch.value.trim());
+}
+
+async function saveUpdateRemote() {
+  if (updateChannelBusy.value || !updateGit.value) return;
+  const next = updateRemoteDraft.value.trim();
+  if (next === updateRemoteSaved.value) return;
+  updateChannelError.value = "";
+  updateChannelBusy.value = true;
+  try {
+    const st = await api.setUpdateChannel({ remote_url: next });
+    updateRemoteSaved.value = String(st.remote_url || "").trim();
+    updateRemoteDraft.value = updateRemoteSaved.value;
+    updateOriginUrl.value = String(st.origin_url || updateOriginUrl.value || "").trim();
+  } catch (e) {
+    updateChannelError.value = e.message || String(e);
   } finally {
     updateChannelBusy.value = false;
   }

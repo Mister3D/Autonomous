@@ -26,8 +26,10 @@ DEFAULTS: dict[str, Any] = {
     "first_chat_prefs_pending": None,
     # While true, memory_propose auto-saves (no Confirm card) for a fluid setup.
     "first_chat_onboarding": False,
-    # Self-update git channel (main = stable, dev = pre-release).
+    # Self-update git channel / branch (main = stable, dev = pre-release, or custom).
     "update.channel": "main",
+    # Optional git remote URL for self-update (forks). Empty → use origin.
+    "update.remote_url": "",
     # When false, public companion pairing (/devices/pair + pair-poll) is refused.
     "companions.enabled": True,
 }
@@ -90,19 +92,23 @@ def set_many(values: dict[str, Any], home: Path | None = None) -> dict[str, Any]
             if key in _OBSOLETE_KEYS:
                 conn.execute("DELETE FROM settings WHERE key = ?", (key,))
                 continue
-            if key == "update.channel":
+            if key in ("update.channel", "update.remote_url"):
                 row = conn.execute(
                     "SELECT value_json FROM settings WHERE key = ?", (key,)
                 ).fetchone()
                 current = (
                     json.loads(row["value_json"])
                     if row is not None
-                    else DEFAULTS.get(key, "main")
+                    else DEFAULTS.get(key, "" if key.endswith("url") else "main")
                 )
-                want = str(value or "").strip().lower()
-                if want != str(current or "").strip().lower():
+                want = str(value or "").strip()
+                cur = str(current or "").strip()
+                if key == "update.channel":
+                    want = want.lower()
+                    cur = cur.lower()
+                if want != cur:
                     raise ValidationError(
-                        "Use PUT /setup/update to change update.channel (guards apply)",
+                        "Use PUT /setup/update to change update.channel / update.remote_url",
                         code="use_setup_update",
                     )
                 continue

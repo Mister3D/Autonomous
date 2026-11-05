@@ -965,6 +965,36 @@ a:focus-visible {
   max-width: 28rem;
 }
 
+.update-channel-seg-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+  max-width: 34rem;
+}
+
+.update-custom-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  max-width: 28rem;
+}
+
+.update-custom-branch label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.update-custom-branch input {
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fafafa;
+}
+
+.settings-version-row {
+  margin-top: 0.85rem;
+}
+
 .update-channel-opt {
   display: flex;
   flex-direction: column;
@@ -2672,17 +2702,16 @@ label.muted {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+  scroll-behavior: auto;
+}
+.messages.messages-placing {
+  visibility: hidden;
 }
 
-/* Keeps the tool group from dancing at the bottom while tools run. */
 .messages-tail {
   flex: none;
   height: 0;
   pointer-events: none;
-}
-.messages-tail.reserved {
-  min-height: min(28vh, 14rem);
-  height: min(28vh, 14rem);
 }
 
 .day-sep {
@@ -4703,14 +4732,6 @@ label.muted {
 
 .bubble.event {
   color: #4a4a4e;
-}
-
-.composer-queue-hint {
-  margin: 0 0.85rem 0.2rem;
-  padding: 0;
-  font-size: 0.75rem;
-  color: var(--muted, #6b6b72);
-  text-align: center;
 }
 
 .composer-secret-refuse {
