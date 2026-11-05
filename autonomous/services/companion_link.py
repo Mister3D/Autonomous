@@ -32,46 +32,72 @@ SendFrame = Callable[[int, int, bytes], None]
 _HUBS: dict[str, "CompanionHub"] = {}
 _HUBS_LOCK = threading.Lock()
 _PEER_LOCK = threading.Lock()
-_PEER_IPS: set[str] = set()
-_PEER_AT = 0.0
+# (home_key, device_id) → (monotonic_ts, ips)
+_PEER_CACHE: dict[tuple[str, str], tuple[float, set[str]]] = {}
 _PEER_TTL = 5.0
 
 
-def _bot_peer_ips(*, force: bool = False) -> set[str]:
-    """IPs of running Autonomous desk containers (SOCKS/DNS allowlist)."""
+def _authorized_peer_ips(
+    device_id: str,
+    *,
+    home: Path | None = None,
+    force: bool = False,
+) -> set[str]:
+    """Desk IPs of bots that may use this companion's SOCKS/DNS.
+
+    Only bots with ``companion_id == device_id`` and ``companion_egress`` on.
+    Other desks on the host are rejected even if they are Autonomous VMs.
+    """
     import time
 
-    global _PEER_IPS, _PEER_AT
+    key = (str(home or ""), str(device_id or ""))
     now = time.monotonic()
     with _PEER_LOCK:
-        if not force and _PEER_IPS is not None and now - _PEER_AT < _PEER_TTL:
-            return set(_PEER_IPS)
+        hit = _PEER_CACHE.get(key)
+        if not force and hit is not None and now - hit[0] < _PEER_TTL:
+            return set(hit[1])
+    ips: set[str] = set()
     try:
+        from autonomous.services import bots as bots_svc
         from autonomous.services.companion_egress import bot_endpoints
 
-        ips_map, _subnets = bot_endpoints()
-        ips = set(ips_map.values())
+        names = {
+            str(row.get("name") or "")
+            for row in bots_svc.companion_routes(home=home)
+            if str(row.get("companion_id") or "") == str(device_id or "")
+            and row.get("egress")
+        }
+        names.discard("")
+        if names:
+            ips_map, _subnets = bot_endpoints()
+            ips = {ips_map[name] for name in names if name in ips_map}
     except Exception:
         ips = set()
     with _PEER_LOCK:
-        _PEER_IPS = ips
-        _PEER_AT = time.monotonic()
+        _PEER_CACHE[key] = (time.monotonic(), set(ips))
         return set(ips)
 
 
-def peer_allowed(ip: str) -> bool:
-    """Only loopback and desk container IPs may use companion SOCKS/DNS.
+def peer_allowed(
+    ip: str,
+    *,
+    device_id: str | None = None,
+    home: Path | None = None,
+) -> bool:
+    """Loopback or a desk IP authorized for this companion may use SOCKS/DNS.
 
     Listeners stay on 0.0.0.0 so iptables REDIRECT (docker bridge) still works;
-    LAN clients are rejected here.
+    LAN clients and desks routed to another companion are rejected here.
     """
     if not ip:
         return False
     if ip == "::1" or ip.startswith("127."):
         return True
-    if ip in _bot_peer_ips():
+    if not device_id:
+        return False
+    if ip in _authorized_peer_ips(device_id, home=home):
         return True
-    return ip in _bot_peer_ips(force=True)
+    return ip in _authorized_peer_ips(device_id, home=home, force=True)
 
 
 def hub_for(home: Path | None) -> "CompanionHub":
@@ -103,8 +129,15 @@ class Stream:
 class CompanionSession:
     """One connected companion. `send_frame` writes a protocol frame to the socket."""
 
-    def __init__(self, device_id: str, send_frame: SendFrame) -> None:
+    def __init__(
+        self,
+        device_id: str,
+        send_frame: SendFrame,
+        *,
+        home: Path | None = None,
+    ) -> None:
         self.device_id = device_id
+        self.home = home
         self.send_frame = send_frame
         self.streams: dict[int, Stream] = {}
         self.lock = threading.Lock()
@@ -222,7 +255,7 @@ class CompanionSession:
             except OSError:
                 return
             peer = addr[0] if addr else ""
-            if not peer_allowed(peer):
+            if not peer_allowed(peer, device_id=self.device_id, home=self.home):
                 try:
                     conn.close()
                 except OSError:
@@ -269,7 +302,7 @@ class CompanionSession:
             if not data:
                 continue
             peer = addr[0] if addr else ""
-            if not peer_allowed(peer):
+            if not peer_allowed(peer, device_id=self.device_id, home=self.home):
                 continue
             threading.Thread(
                 target=self._dns_one, args=(sock, data, addr), daemon=True

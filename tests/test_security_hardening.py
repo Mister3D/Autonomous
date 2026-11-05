@@ -110,12 +110,31 @@ def test_ssrf_blocks_metadata_ip():
 
 def test_peer_allowed_loopback_only_without_bots(monkeypatch):
     monkeypatch.setattr(
-        "autonomous.services.companion_link._bot_peer_ips",
-        lambda force=False: set(),
+        "autonomous.services.companion_link._authorized_peer_ips",
+        lambda device_id, home=None, force=False: set(),
     )
-    assert peer_allowed("127.0.0.1")
-    assert not peer_allowed("192.168.1.50")
-    assert not peer_allowed("10.0.0.8")
+    assert peer_allowed("127.0.0.1", device_id="pc-a")
+    assert not peer_allowed("192.168.1.50", device_id="pc-a")
+    assert not peer_allowed("10.0.0.8", device_id="pc-a")
+    assert not peer_allowed("10.0.0.8")  # no device → deny (except loopback)
+
+
+def test_peer_allowed_only_bots_for_that_companion(monkeypatch):
+    def fake_ips(device_id, home=None, force=False):
+        if device_id == "pc-a":
+            return {"10.0.0.2"}
+        if device_id == "pc-b":
+            return {"10.0.0.3"}
+        return set()
+
+    monkeypatch.setattr(
+        "autonomous.services.companion_link._authorized_peer_ips",
+        fake_ips,
+    )
+    assert peer_allowed("10.0.0.2", device_id="pc-a")
+    assert not peer_allowed("10.0.0.3", device_id="pc-a")
+    assert peer_allowed("10.0.0.3", device_id="pc-b")
+    assert not peer_allowed("10.0.0.2", device_id="pc-b")
 
 
 def test_rate_limiter_window():

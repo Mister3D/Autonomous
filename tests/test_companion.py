@@ -417,6 +417,56 @@ def test_notify_only_checked_companions(auth_client, home):
         hub.detach("off", session_off)
 
 
+def test_authorized_peer_ips_only_egress_bots_for_device(auth_client, client, home, monkeypatch):
+    from autonomous.services import bots as bots_svc
+    from autonomous.services import companion_link as link
+
+    def _pair(name: str) -> str:
+        started = client.post(
+            "/api/v1/devices/pair",
+            json={"name": name, "platform": "linux"},
+        )
+        body = started.get_json()
+        assert auth_client.post(f"/api/v1/devices/pair/{body['pair_id']}/approve").status_code == 200
+        polled = client.post(
+            "/api/v1/devices/pair-poll",
+            json={"pair_id": body["pair_id"], "poll_secret": body["poll_secret"]},
+        )
+        return polled.get_json()["device_id"]
+
+    pc_a = _pair("PcA")
+    pc_b = _pair("PcB")
+    bots_svc.create_bot("alpha", home=home)
+    bots_svc.create_bot("beta", home=home)
+    bots_svc.create_bot("gamma", home=home)
+    bots_svc.patch_bot(
+        "alpha",
+        {"companion_id": pc_a, "companion_egress": True},
+        home=home,
+    )
+    bots_svc.patch_bot(
+        "beta",
+        {"companion_id": pc_b, "companion_egress": True},
+        home=home,
+    )
+    bots_svc.patch_bot(
+        "gamma",
+        {"companion_id": pc_a, "companion_egress": False},
+        home=home,
+    )
+    monkeypatch.setattr(
+        "autonomous.services.companion_egress.bot_endpoints",
+        lambda: (
+            {"alpha": "10.0.0.2", "beta": "10.0.0.3", "gamma": "10.0.0.4"},
+            ["10.0.0.0/24"],
+        ),
+    )
+    link._PEER_CACHE.clear()
+    assert link._authorized_peer_ips(pc_a, home=home, force=True) == {"10.0.0.2"}
+    assert link._authorized_peer_ips(pc_b, home=home, force=True) == {"10.0.0.3"}
+    assert link._authorized_peer_ips("missing", home=home, force=True) == set()
+
+
 def test_plan_is_per_bot():
     rules = plan(
         [

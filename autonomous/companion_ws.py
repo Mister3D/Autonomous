@@ -54,7 +54,7 @@ def attach_companion(conn: socket.socket, home: Path, token: str, leftover: byte
         with lock:
             ws_send(sock, encode_frame(op, stream_id, payload))
 
-    session = CompanionSession(device["id"], send_frame)
+    session = CompanionSession(device["id"], send_frame, home=home)
     session.start_listeners()
     hub = hub_for(home)
     hub.attach(device["id"], session)

@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-05 (pairing off switch + pair-poll rate-limit)
+**Last updated**: 2026-11-06 (SOCKS/DNS allowlist scoped per companion)
 
 ## User behaviour
 
@@ -20,7 +20,7 @@
 ## Implementation
 
 - Public pairing: `POST /api/v1/devices/pair` then `POST /api/v1/devices/pair-poll`. The token is returned only once. It does not open the rest of the API (only `/api/v1/devices/me` and `/ws/companion`). Pair starts: 5 / min / IP. Pair-poll: 60 / min / IP and 120 / min / `pair_id`. Both return 403 when `companions.enabled` is false.
-- Tunnel: outgoing WebSocket `/ws/companion`, binary frames from `companion_proto.py` (OPEN / DATA / DNS / MCP_CALL). The server listens on a SOCKS and a DNS on `0.0.0.0` (needed for iptables `REDIRECT` onto the docker bridge address) but **accepts only** loopback and IPs of running `autonomous.bot` containers — LAN clients are dropped.
+- Tunnel: outgoing WebSocket `/ws/companion`, binary frames from `companion_proto.py` (OPEN / DATA / DNS / MCP_CALL). The server listens on a SOCKS and a DNS on `0.0.0.0` (needed for iptables `REDIRECT` onto the docker bridge address) but **accepts only** loopback and desk IPs of bots that have **this** companion selected with egress ON — other Autonomous VMs and LAN clients are dropped.
 - `AUTONOMOUS_COMPANION_IPTABLES=0` disables iptables (pytest tests set it).
 - Rules live in the `AUTONOMOUS_EGRESS` and `AUTONOMOUS_EGRESS_FILTER` chains. When `serve` starts, the current policy is reapplied (often "off", which removes the chains).
 - Pi extension `companion.ts`: `mcp_list`, `mcp_call`, `notify_user`. An already launched Pi session only sees the extension in the next process.

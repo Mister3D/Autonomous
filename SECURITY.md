@@ -36,7 +36,7 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 | WebSockets VNC / terminal | Session cookie or **admin** Bearer | Bot tokens are rejected; unauthenticated upgrades are rejected |
 | Companion WebSocket | Device token `adc_…` | Validated before HTTP 101; scoped; cannot call admin API |
 | Public webhooks | `POST /api/v1/hooks` + `Authorization: Bearer` | Token not in the URL; GET rejected; rate-limited (30 / min / token, 60 / min / IP); treat the token as a secret |
-| Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only desk container IPs + loopback accepted |
+| Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only loopback + desk IPs of bots assigned to that companion with egress |
 | Desk VMs | Untrusted | Prefer Internet off; `seccomp=unconfined` for Chrome — assume escape possible |
 | Host bash (Pi `bash` tool) | **Removed** | Always `--exclude-tools bash`; shell only inside desk VMs. Host access = credentials via vault if needed |
 | OpenAPI `/api/docs` | Auth required | Session / admin Bearer only |
