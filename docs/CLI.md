@@ -9,7 +9,7 @@ autonomous serve --host 127.0.0.1 --port 8787
 All business commands import the **services** (not HTTP), unless stated otherwise.
 
 ```text
-autonomous init
+autonomous init [--password …] [--must-change-password]
 autonomous serve [start] [--host 127.0.0.1] [--port 8787] [--dev]
 autonomous serve stop
 autonomous health [--json]

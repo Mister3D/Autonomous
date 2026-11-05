@@ -75,6 +75,11 @@ export const api = {
   health: () => request("/health"),
   authStatus: () => request("/auth/status"),
   login: (password) => request("/auth/login", { method: "POST", body: { password } }),
+  changePassword: (currentPassword, newPassword) =>
+    request("/auth/password", {
+      method: "POST",
+      body: { current_password: currentPassword, new_password: newPassword },
+    }),
   logout: () => request("/auth/logout", { method: "POST", body: {} }),
   listBots: () => request("/bots"),
   createBot: (body) => request("/bots", { method: "POST", body }),

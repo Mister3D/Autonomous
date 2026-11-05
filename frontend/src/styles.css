@@ -5439,6 +5439,13 @@ a.bot-mention:hover,
   margin-bottom: 1.25rem;
 }
 
+.login-card .login-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0 0 1.1rem;
+}
+
 .terminal-pane,
 .screen-pane {
   flex: 1;

@@ -27,8 +27,9 @@ GET    /pi/status                   # Pi install + readiness
 GET    /pi/models                   # models listed by `pi --list-models`
 GET    /events                      # SSE global (multi-tab)
 
-GET    /auth/status
-POST   /auth/login
+GET    /auth/status                 # + must_change_password
+POST   /auth/login                  # may return must_change_password
+POST   /auth/password               # {current_password, new_password} — unlocks after generated install
 POST   /auth/logout
 
 GET    /bots

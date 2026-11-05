@@ -4,6 +4,8 @@ import { uid } from "./uid";
 
 export const state = reactive({
   authenticated: false,
+  /** Generated install password still in force — UI stays on the change form. */
+  mustChangePassword: false,
   bots: [],
   currentBot: null,
   tab: "discussion",

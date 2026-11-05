@@ -58,6 +58,8 @@ def cmd_init(args) -> int:
         print("Password required", file=sys.stderr)
         return 2
     auth_mod.set_password(home, password)
+    if getattr(args, "must_change_password", False):
+        auth_mod.mark_password_must_change(home)
     print(t("init.done", home=str(home)))
     print(t("init.password_set"))
     print(t("init.token_written"))
@@ -633,6 +635,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     init = sub.add_parser("init", parents=[common], help="Initialize data dir, token, password")
     init.add_argument("--password", help="Login password (prompted if omitted)")
+    init.add_argument(
+        "--must-change-password",
+        action="store_true",
+        help="Force a password change on first web login (generated install password)",
+    )
     init.set_defaults(func=cmd_init)
 
     serve = sub.add_parser("serve", parents=[common], help="Run or stop HTTP server")

@@ -20,7 +20,13 @@ from flask import g, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from autonomous.i18n import t
-from autonomous.paths import password_path, secret_path, token_path
+from autonomous.paths import (
+    initial_password_path,
+    must_change_password_path,
+    password_path,
+    secret_path,
+    token_path,
+)
 
 BOT_TOKEN_PREFIX = "abt_"
 
@@ -124,6 +130,55 @@ def verify_password(home: Path, password: str) -> bool:
     return check_password_hash(stored, password)
 
 
+def mark_password_must_change(home: Path) -> None:
+    path = must_change_password_path(home)
+    path.write_text("", encoding="utf-8")
+    os.chmod(path, 0o600)
+
+
+def clear_password_must_change(home: Path) -> None:
+    for path in (must_change_password_path(home), initial_password_path(home)):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
+def password_must_change(home: Path) -> bool:
+    """True when install left a generated password that has not been replaced yet."""
+    if must_change_password_path(home).exists():
+        return True
+    return initial_password_path(home).exists()
+
+
+def consume_initial_password(home: Path) -> None:
+    """Drop the plaintext file once the operator has logged in; keep the must-change flag."""
+    if initial_password_path(home).exists() and not must_change_password_path(home).exists():
+        mark_password_must_change(home)
+    try:
+        initial_password_path(home).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+
+
+def change_password(home: Path, current: str, new: str) -> None:
+    """Replace the login password and clear the generated-password gate."""
+    if not verify_password(home, current):
+        raise ValueError("invalid")
+    new = (new or "").strip()
+    if len(new) < 8:
+        raise ValueError("too_short")
+    if secrets.compare_digest(current, new):
+        raise ValueError("unchanged")
+    set_password(home, new)
+    clear_password_must_change(home)
+    session.pop("must_change_password", None)
+
+
 def _bearer_raw() -> str | None:
     auth = request.headers.get("Authorization", "")
     if not auth.lower().startswith("bearer "):
@@ -197,13 +252,29 @@ def require_auth(view):
     return wrapped
 
 
-def login_user() -> None:
+def login_user(*, must_change: bool = False) -> None:
     session["authenticated"] = True
     session.permanent = True
+    if must_change:
+        session["must_change_password"] = True
+    else:
+        session.pop("must_change_password", None)
 
 
 def logout_user() -> None:
     session.clear()
+
+
+def session_needs_password_change(home: Path | None = None) -> bool:
+    """Session cookie stuck behind the forced password change (Bearer admin bypasses)."""
+    if not session.get("authenticated"):
+        return False
+    if session.get("must_change_password"):
+        return True
+    if home is not None and password_must_change(home):
+        session["must_change_password"] = True
+        return True
+    return False
 
 
 def _claim_bot(req) -> str | None:

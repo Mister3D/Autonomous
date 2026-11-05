@@ -48,17 +48,25 @@ router.beforeEach(async (to) => {
   try {
     const status = await api.authStatus();
     state.authenticated = !!status.authenticated;
+    state.mustChangePassword = !!(
+      status.authenticated && status.must_change_password
+    );
   } catch {
     state.authenticated = false;
+    state.mustChangePassword = false;
   }
   if (!to.meta.public && !state.authenticated) {
     return { name: "login", query: { next: to.fullPath } };
   }
-  if (to.name === "login" && state.authenticated) {
+  // Generated install password: stay on /login until replaced.
+  if (state.authenticated && state.mustChangePassword && to.name !== "login") {
+    return { name: "login", query: { next: to.fullPath } };
+  }
+  if (to.name === "login" && state.authenticated && !state.mustChangePassword) {
     const next = typeof to.query.next === "string" ? to.query.next : "/";
     return next || "/";
   }
-  if (state.authenticated) {
+  if (state.authenticated && !state.mustChangePassword) {
     connectEvents();
     try {
       await refreshBots();

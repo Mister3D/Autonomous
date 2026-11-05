@@ -28,6 +28,14 @@ _OPEN_EXACT = {
     # Webhook fire with Authorization: Bearer <webhook-token> (no session).
     "/api/v1/hooks",
 }
+# Reachable with a session that still must change a generated password.
+_PASSWORD_CHANGE_EXACT = {
+    "/api/v1/auth/status",
+    "/api/v1/auth/login",
+    "/api/v1/auth/logout",
+    "/api/v1/auth/password",
+    "/api/v1/health",
+}
 # OpenAPI /docs require a session (or Bearer) — not listed here.
 _OPEN_PREFIXES = (
     "/static/",
@@ -197,6 +205,15 @@ def create_app(home: Path | None = None) -> Flask:
 
         if not auth_mod.is_authenticated(g.home):
             return jsonify({"error": "Authentication required", "code": "auth_required"}), 401
+        # Generated install password: session may only hit auth/password until replaced.
+        # Admin / bot Bearers are not gated (CLI and Pi keep working).
+        if auth_mod.session_needs_password_change(g.home) and path not in _PASSWORD_CHANGE_EXACT:
+            return jsonify(
+                {
+                    "error": "Password change required",
+                    "code": "password_change_required",
+                }
+            ), 403
         return None
 
     @app.errorhandler(AutonomousError)

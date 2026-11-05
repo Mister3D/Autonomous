@@ -306,7 +306,12 @@ init_app() {
 	GENERATED_PASSWORD=""
 	read_password
 	info "Initialising $DATA_HOME"
-	AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" init --password "$PASSWORD" >/dev/null
+	init_args=(init --password "$PASSWORD")
+	# Generated password → force change on first web login and drop plaintext ASAP.
+	if [ -n "${GENERATED_PASSWORD_FILE:-}" ]; then
+		init_args+=(--must-change-password)
+	fi
+	AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" "${init_args[@]}" >/dev/null
 	PASSWORD=""
 }
 
@@ -363,13 +368,13 @@ EOT
 		echo "     then open http://127.0.0.1:$PORT/"
 	fi
 	if [ -n "${GENERATED_PASSWORD:-}" ]; then
-		echo "  2. Login password (save it, then delete the file):"
+		echo "  2. Temporary login password (you will be forced to change it on first login):"
 		echo "       $GENERATED_PASSWORD"
-		echo "     Also written to: $GENERATED_PASSWORD_FILE"
+		echo "     Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
 	elif [ -n "${GENERATED_PASSWORD_FILE:-}" ] && [ -r "$GENERATED_PASSWORD_FILE" ]; then
-		echo "  2. Login password (save it, then delete the file):"
+		echo "  2. Temporary login password (you will be forced to change it on first login):"
 		echo "       $(cat "$GENERATED_PASSWORD_FILE")"
-		echo "     Also written to: $GENERATED_PASSWORD_FILE"
+		echo "     Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
 	fi
 	echo "  Then follow the setup page: it lists what is left (LLM, desktop image, optional"
 	echo "  grounding and companion) with Configure links and Install/Build buttons."

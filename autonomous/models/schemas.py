@@ -26,10 +26,26 @@ class LoginSchema(Schema):
     username = fields.Str(load_default="user")
 
 
+class ChangePasswordSchema(Schema):
+    current_password = fields.Str(required=True, load_only=True)
+    new_password = fields.Str(
+        required=True,
+        load_only=True,
+        validate=validate.Length(min=8, max=256),
+    )
+
+
 class AuthStatusSchema(Schema):
     authenticated = fields.Bool(required=True)
     password_set = fields.Bool(required=True)
+    must_change_password = fields.Bool(dump_default=False)
     mono_user = fields.Bool(dump_default=True)
+
+
+class LoginResultSchema(Schema):
+    ok = fields.Bool(required=True)
+    message = fields.Str()
+    must_change_password = fields.Bool(dump_default=False)
 
 
 class GuardSchema(Schema):

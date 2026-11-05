@@ -38,7 +38,12 @@ def _session_ok(headers: dict[str, str], app: Any) -> bool:
         data = serializer.loads(value)
     except Exception:
         return False
-    return bool(isinstance(data, dict) and data.get("authenticated"))
+    if not isinstance(data, dict) or not data.get("authenticated"):
+        return False
+    # Block VNC/terminal until a generated install password is replaced.
+    if data.get("must_change_password"):
+        return False
+    return True
 
 
 def ws_authenticated(headers: dict[str, str], *, app: Any, home: Path) -> bool:

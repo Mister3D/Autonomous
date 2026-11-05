@@ -15,7 +15,8 @@ These live under `$AUTONOMOUS_HOME` (default `./data/`) and must stay **out of g
 | `data/db.sqlite` | Bots, chat, grants, schedules |
 | `data/bots/` | Per-bot Pi sessions + VM home volumes |
 | `data/grounder.env` | Grounding URL / token (mode 600) |
-| `data/initial-password` | One-shot password from `install.sh` (delete after login) |
+| `data/initial-password` | One-shot generated password from `install.sh` (deleted on first login) |
+| `data/password.must_change` | Flag: web UI forces a password change before the hub unlocks |
 
 Also never commit ad-hoc copies such as a root-level `TOKEN` / `db.sqlite` / `*.sqlite` file, `.env`, or provider API keys.
 
@@ -51,6 +52,7 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 - Treat desk VMs as untrusted: prefer Internet off when not needed. Pi has no host bash — only VM shells.
 - Webhook tokens are capabilities: prefer Bearer header invokes (avoids token-in-URL proxy logs); do not paste tokens into public chats; rotate by deleting and recreating the webhook.
 - Rotate `data/token` / `data/secret` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots). Restarting a bot's Pi session rotates its `abt_…` token automatically.
+- Non-interactive `install.sh` writes a generated password + `password.must_change`: the first web login deletes `initial-password` and blocks the API until `POST /auth/password` sets a new one.
 - `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
 - Companion pairing is public but rate-limited (`pair` + `pair-poll`); disable new pairing in Settings → Companions when unused. Only approve codes you initiated on your own PC.
 

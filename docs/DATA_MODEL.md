@@ -8,6 +8,8 @@ Directory: `$AUTONOMOUS_HOME` (default `~/.autonomous` or `./data` depending on 
 $AUTONOMOUS_HOME/
   token                 # Bearer, mode 0600
   password.hash         # werkzeug hash (web login)
+  initial-password      # plaintext from install.sh (deleted on first login)
+  password.must_change  # empty flag → force POST /auth/password before hub use
   vault.key             # 32 bytes, mode 0600 (vault encryption)
   db.sqlite             # SQLite (single schema: migrations/001_schema.sql)
   bots/<name>/

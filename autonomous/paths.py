@@ -49,6 +49,16 @@ def password_path(home: Path | None = None) -> Path:
     return ensure_home(home) / "password.hash"
 
 
+def initial_password_path(home: Path | None = None) -> Path:
+    """One-shot generated password from install.sh (delete after first login)."""
+    return ensure_home(home) / "initial-password"
+
+
+def must_change_password_path(home: Path | None = None) -> Path:
+    """Flag: web UI must set a new password before using the hub."""
+    return ensure_home(home) / "password.must_change"
+
+
 def bot_dir(name: str, home: Path | None = None) -> Path:
     path = ensure_home(home) / "bots" / name
     path.mkdir(parents=True, exist_ok=True)
