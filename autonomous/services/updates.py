@@ -42,8 +42,9 @@ SERVICE_NAMES = (
 _MIGRATION_RE = re.compile(r"^(\d+)_.*\.sql$")
 # Safe git branch / ref name (no shell metacharacters, no path escape).
 _BRANCH_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
+# https / ssh only — http:// and git:// are rejected (cleartext / unauthenticated).
 _REMOTE_URL_RE = re.compile(
-    r"^(https://|http://|git://|ssh://|git@)[^\s\"'`;|&$<>]+$",
+    r"^(https://|ssh://|git@)[^\s\"'`;|&$<>]+$",
     re.IGNORECASE,
 )
 _lock = threading.Lock()
@@ -106,7 +107,7 @@ def normalize_remote_url(raw: str | None) -> str:
         return ""
     if not _REMOTE_URL_RE.match(url):
         raise ValidationError(
-            "Remote URL must be https://, http://, git://, ssh://, or git@…",
+            "Remote URL must be https://, ssh://, or git@… (http:// and git:// rejected)",
             code="invalid_remote_url",
         )
     if len(url) > 500:

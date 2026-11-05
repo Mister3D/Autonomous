@@ -180,7 +180,13 @@ def _chat_completions(
             "(Settings → Grounding / grounder.env / AUTONOMOUS_GROUNDER_TOKEN).",
             code="grounder_unconfigured",
         )
-    url = f"{base_url}/chat/completions"
+    from autonomous.services.setup_config import assert_safe_outbound_url, urlopen_safe
+
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    try:
+        assert_safe_outbound_url(base_url)
+    except ValidationError as exc:
+        raise AutonomousError(str(exc), code=exc.code or "forbidden_url") from exc
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -193,10 +199,12 @@ def _chat_completions(
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urlopen_safe(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
+    except ValidationError as exc:
+        raise AutonomousError(str(exc), code=exc.code or "forbidden_url") from exc
     except urllib.error.HTTPError as exc:
-        err = exc.read().decode("utf-8", errors="replace")[:400]
+        err = exc.read().decode("utf-8", errors="replace")[:400] if exc.fp else str(exc.reason)
         raise AutonomousError(
             f"LLM HTTP {exc.code}: {err}",
             code="grounder_http",

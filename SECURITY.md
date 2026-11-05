@@ -38,6 +38,8 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 | Companion WebSocket | Device token `adc_…` | Validated before HTTP 101; scoped; cannot call admin API |
 | Public webhooks | `POST /api/v1/hooks` + `Authorization: Bearer` | Token not in the URL; GET rejected; rate-limited (30 / min / token, 60 / min / IP); treat the token as a secret |
 | Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only loopback + desk IPs of bots assigned to that companion with egress |
+| Self-update remote | Optional `update.remote_url` | `git fetch` + `npm`/`pip` + service restart — **treat as code execution**. Only a fork **you** control; `https://` / `ssh://` / `git@` only (`http://` and `git://` rejected) |
+| LLM / grounding URLs | Admin Settings | Cloud metadata / link-local blocked at save **and** runtime; redirects re-checked. LAN/localhost allowed for self-hosted endpoints |
 | Desk VMs | Untrusted | Prefer Internet off; `seccomp=unconfined` for Chrome — assume escape possible |
 | Host bash (Pi `bash` tool) | **Removed** | Always `--exclude-tools bash`; shell only inside desk VMs. Host access = credentials via vault if needed |
 | OpenAPI `/api/docs` | Auth required | Session / admin Bearer only |
@@ -55,6 +57,7 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 - Non-interactive `install.sh` writes a generated password + `password.must_change`: the first web login deletes `initial-password` and blocks the API until `POST /auth/password` sets a new one.
 - `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
 - Companion pairing is public but rate-limited (`pair` + `pair-poll`); disable new pairing in Settings → Companions when unused. Only approve codes you initiated on your own PC.
+- Custom update repository URL: empty keeps `origin`. A wrong or hostile remote can replace the installed code on apply — same trust as cloning that repo yourself.
 
 ## Reverse proxy checklist
 

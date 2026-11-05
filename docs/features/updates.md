@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/updates.py`, `autonomous/api/setup_routes.py` (`/setup/update*`), `frontend/src/components/SetupPanel.vue`, Settings → General  
-**Last updated**: 2026-11-06 (custom remote URL + branch)
+**Last updated**: 2026-11-06 (https/ssh-only remote; document apply = code exec)
 
 ## User behaviour
 
@@ -10,7 +10,7 @@
 - **Check** forces a remote check (otherwise results are cached **24 h** under `$AUTONOMOUS_HOME/update-check.json`).
 - **Update** fast-forwards to `<remote>/<branch>`, runs `npm ci` + `npm run build` in `frontend/`, `pip install -e .` in the venv, then **restarts** `autonomous.service` via `systemctl` when a unit is active (delayed ~2 s). Manual restart if no unit.
 - Settings → General → **Updates**:
-  - **Repository URL** (optional): empty keeps `origin`; a fork URL configures a dedicated git remote named `updates`.
+  - **Repository URL** (optional): empty keeps `origin`; a fork URL configures a dedicated git remote named `updates`. Only `https://`, `ssh://`, or `git@…` — applying an update from that remote runs `npm`/`pip` and may restart the service (**code execution**).
   - **Branch**: presets Stable (`main`) / Pre-release (`dev`) / Custom (any valid branch name). Leaving `main` asks for confirmation. Returning to `main` is refused when the DB has migration versions absent from that branch (`migrations_ahead`).
 
 ## Implementation
@@ -26,7 +26,8 @@
 - Non-git installs (no `.git`) → UI shows unavailable; no fake update path.
 - Do not allow channel / remote_url flips through `set_many` without the migration / confirm guards.
 - After apply, expect the HTTP process to die if systemd restart succeeds — the job log may truncate.
-- Branch names are validated (`[A-Za-z0-9._/-]`, no `..`); remote URLs must be `https://` / `http://` / `git://` / `ssh://` / `git@…`.
+- Branch names are validated (`[A-Za-z0-9._/-]`, no `..`); remote URLs must be `https://` / `ssh://` / `git@…` (`http://` and `git://` rejected).
+- Do not point `update.remote_url` at a repo you do not control.
 
 ## Quick check
 

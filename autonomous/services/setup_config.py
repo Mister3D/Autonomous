@@ -105,6 +105,26 @@ def assert_safe_outbound_url(url: str) -> None:
         raise ValidationError("URL host is not allowed", code="forbidden_url")
 
 
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-check each redirect hop (blocks metadata/link-local bounce-off)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        try:
+            assert_safe_outbound_url(newurl)
+        except ValidationError as exc:
+            raise urllib.error.HTTPError(
+                newurl, 403, str(exc), headers, None
+            ) from exc
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def urlopen_safe(req: urllib.request.Request, *, timeout: float = 6.0):
+    """``urlopen`` that re-validates redirect targets with ``assert_safe_outbound_url``."""
+    assert_safe_outbound_url(req.full_url)
+    opener = urllib.request.build_opener(_SafeRedirectHandler)
+    return opener.open(req, timeout=timeout)  # noqa: S310 (admin URL, gated)
+
+
 def http_get_json(url: str, key: str = "", timeout: float = 6.0) -> tuple[int, Any]:
     """GET ``url`` with an optional Bearer key → (status, json|None). Never logs the key."""
     try:
@@ -115,7 +135,7 @@ def http_get_json(url: str, key: str = "", timeout: float = 6.0) -> tuple[int, A
     if key:
         req.add_header("Authorization", f"Bearer {key}")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (admin URL)
+        with urlopen_safe(req, timeout=timeout) as resp:
             body = resp.read(2_000_000)
             try:
                 return resp.status, json.loads(body.decode("utf-8", "replace"))
@@ -123,7 +143,9 @@ def http_get_json(url: str, key: str = "", timeout: float = 6.0) -> tuple[int, A
                 return resp.status, None
     except urllib.error.HTTPError as exc:
         return exc.code, None
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except (urllib.error.URLError, OSError, ValueError, ValidationError) as exc:
+        if isinstance(exc, ValidationError):
+            return 0, {"error": exc.code or "forbidden_url"}
         reason = getattr(exc, "reason", exc)
         return 0, {"error": str(reason)[:200]}
 
@@ -668,8 +690,8 @@ def save_grounding(body: dict[str, Any], home: Path | None = None) -> dict[str, 
                 continue  # empty = keep current
         elif fid.endswith("_url"):
             val = val.rstrip("/")
-            if val and not val.startswith(("http://", "https://")):
-                raise ValidationError(f"{fid}: must start with http:// or https://", code="invalid_url")
+            if val:
+                assert_safe_outbound_url(val)
         if any(c in val for c in "\r\n"):
             raise ValidationError(f"{fid}: invalid value", code="invalid_value")
         updates[env_name] = val

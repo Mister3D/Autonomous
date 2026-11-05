@@ -2,7 +2,7 @@
 
 **Status**: in place (localisation only — no click)  
 **Key files**: `autonomous/services/grounding{,_image,_parse}.py`, `POST /bots/:name/screen/ground`, `vm_ground` (`pi_extensions/vm.ts`), `grounding.md`  
-**Last updated**: 2026-11-01 (Settings guard-rails without a Save button)
+**Last updated**: 2026-11-06 (grounder URL SSRF gate + redirect re-check)
 
 ## User behaviour
 
@@ -61,6 +61,7 @@ POST /bots/:name/screen/ground
 
 ## Pitfalls / non-regressions
 
+- Saving `grounder_url` (and runtime `_chat_completions`) uses the same SSRF gate as LLM URLs; redirects are re-checked (`urlopen_safe`).
 - Role separation: the grounder points, the judge validates (short hollow reticle — no full-screen cross).
 - Don't redisplay capture / grounding notes as separate items: `meta.kind=grounding` and `meta.grounding` captures stay in the adjacent tool group.
 - Coords = original capture after remap.

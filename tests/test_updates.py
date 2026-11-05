@@ -63,6 +63,16 @@ def test_invalid_remote_and_branch_rejected(home):
     with pytest.raises(ValidationError) as exc:
         updates_svc.normalize_remote_url("file:///etc/passwd")
     assert exc.value.code == "invalid_remote_url"
+    for bad in (
+        "http://github.com/you/Autonomous.git",
+        "git://github.com/you/Autonomous.git",
+        "ftp://example.com/repo.git",
+    ):
+        with pytest.raises(ValidationError) as exc:
+            updates_svc.normalize_remote_url(bad)
+        assert exc.value.code == "invalid_remote_url"
+    assert updates_svc.normalize_remote_url("https://github.com/you/Autonomous.git").startswith("https://")
+    assert updates_svc.normalize_remote_url("git@github.com:you/Autonomous.git").startswith("git@")
     with pytest.raises(ValidationError):
         updates_svc.normalize_branch("../evil")
     with pytest.raises(ValidationError):

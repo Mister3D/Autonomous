@@ -318,7 +318,7 @@
   "update.customBranchPlaceholder": "ex. main, release/1.2",
   "update.customBranchSave": "Utiliser cette branche",
   "update.remoteUrl": "URL du dépôt",
-  "update.remoteUrlHint": "Laisser vide pour garder origin. Utile pour un fork.",
+  "update.remoteUrlHint": "Laisser vide pour garder origin. Uniquement un fork que vous contrôlez (https:// ou ssh). Appliquer une mise à jour installe ce code.",
   "update.remoteUrlPlaceholder": "https://github.com/vous/Autonomous.git",
   "update.remoteUrlSave": "Enregistrer l’URL",
   "update.remoteUsingOrigin": "Actuellement : origin ({url})",

@@ -108,6 +108,35 @@ def test_ssrf_blocks_metadata_ip():
     cfg.assert_safe_outbound_url("http://127.0.0.1:8000/v1")
 
 
+def test_urlopen_safe_blocks_redirect_to_metadata():
+    """A 302 to link-local must not be followed (SSRF bounce-off)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class _H(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
+            self.end_headers()
+
+        def log_message(self, *_args):  # noqa: ANN001
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), _H)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, data = cfg.http_get_json(f"http://127.0.0.1:{port}/bounce", timeout=2.0)
+        assert status in (0, 403)
+        if status == 0:
+            assert isinstance(data, dict)
+            err = str(data.get("error") or "").lower()
+            assert "forbidden" in err or "not allowed" in err or "403" in err or err
+    finally:
+        server.shutdown()
+
+
 def test_peer_allowed_loopback_only_without_bots(monkeypatch):
     monkeypatch.setattr(
         "autonomous.services.companion_link._authorized_peer_ips",

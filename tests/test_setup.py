@@ -127,6 +127,18 @@ def test_llm_save_preserves_and_masks(auth_client, fake_home):
     assert SECRET not in text and g.get_json()["primary"]["api_key"]["hint"] == "…1234"
 
 
+def test_grounding_save_rejects_metadata_url(auth_client, home):
+    r = auth_client.put("/api/v1/setup/grounding", json={
+        "enabled": True,
+        "grounder_url": "http://169.254.169.254/latest/meta-data/",
+        "grounder_model": "ui-tars",
+        "grounder_token": SECRET,
+    })
+    assert r.status_code == 400
+    body = r.get_json() or {}
+    assert body.get("code") == "forbidden_url" or "not allowed" in (body.get("message") or "").lower()
+
+
 def test_grounding_save_masks_and_env_readonly(auth_client, home, monkeypatch):
     r = auth_client.put("/api/v1/setup/grounding", json={
         "enabled": True, "grounder_url": "http://tars.test/v1", "grounder_model": "ui-tars",
