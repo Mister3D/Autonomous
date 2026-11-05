@@ -17,20 +17,6 @@
       </svg>
     </button>
     <ul v-if="open" class="settings-pop" role="menu">
-      <li class="settings-group">{{ t("lang.choose") }}</li>
-      <li v-for="code in codes" :key="code">
-        <button
-          type="button"
-          role="menuitemradio"
-          :aria-checked="code === current"
-          :class="{ active: code === current }"
-          @click="chooseLang(code)"
-        >
-          <LocaleFlag :code="code" />
-          <span>{{ labelOf(code) }}</span>
-        </button>
-      </li>
-      <li class="settings-sep" role="separator" />
       <li>
         <button type="button" role="menuitem" @click="openSettings">
           <span>{{ t("settings.title") }}</span>
@@ -56,37 +42,30 @@
           {{ t("files.cancel") }}
         </button>
       </li>
+      <li class="settings-sep" role="separator" />
+      <li>
+        <button type="button" role="menuitem" @click="logout">
+          <span>{{ t("manage.logout") }}</span>
+        </button>
+      </li>
     </ul>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { api } from "../api";
-import { setLocale } from "../i18n";
 import { state } from "../store";
-import LocaleFlag from "./LocaleFlag.vue";
+import { disconnectEvents } from "../sync";
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const router = useRouter();
 const open = ref(false);
 const confirming = ref(false);
 const deleting = ref(false);
 const root = ref(null);
-const codes = ["fr", "en"];
-
-const current = computed(() => (locale.value === "fr" ? "fr" : "en"));
-
-function labelOf(code) {
-  return code === "fr" ? t("lang.fr") : t("lang.en");
-}
-
-function chooseLang(code) {
-  setLocale(code);
-  open.value = false;
-}
 
 function openSettings() {
   open.value = false;
@@ -95,6 +74,15 @@ function openSettings() {
     sessionStorage.setItem("autonomous.settingsReturn", here);
   }
   router.push({ name: "settings", params: { section: "agent" } });
+}
+
+async function logout() {
+  open.value = false;
+  await api.logout();
+  state.authenticated = false;
+  state.mustChangePassword = false;
+  disconnectEvents();
+  router.push("/login");
 }
 
 async function deleteAllBots() {

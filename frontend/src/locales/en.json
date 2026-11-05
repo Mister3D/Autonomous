@@ -532,5 +532,6 @@
   "login.changeSubmit": "Save",
   "login.changeMismatch": "Passwords do not match",
   "login.changeTooShort": "At least 8 characters",
-  "login.changeError": "Could not change the password"
+  "login.changeError": "Could not change the password",
+  "settings.languageHint": "Interface language (bots and chats stay as they are)."
 }

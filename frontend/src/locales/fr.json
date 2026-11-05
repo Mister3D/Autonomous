@@ -532,5 +532,6 @@
   "login.changeSubmit": "Enregistrer",
   "login.changeMismatch": "Les mots de passe ne correspondent pas",
   "login.changeTooShort": "Au moins 8 caractères",
-  "login.changeError": "Impossible de changer le mot de passe"
+  "login.changeError": "Impossible de changer le mot de passe",
+  "settings.languageHint": "Langue de l’interface (bots et conversations inchangés)."
 }

@@ -27,8 +27,6 @@
         {{ t("files.cancel") }}
       </button>
     </div>
-
-    <button type="button" @click="logout">{{ t("manage.logout") }}</button>
   </div>
 </template>
 
@@ -38,7 +36,6 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { api } from "../api";
 import { state } from "../store";
-import { disconnectEvents } from "../sync";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
@@ -135,12 +132,5 @@ async function remove() {
   } finally {
     deleting.value = false;
   }
-}
-
-async function logout() {
-  await api.logout();
-  state.authenticated = false;
-  disconnectEvents();
-  router.push("/login");
 }
 </script>

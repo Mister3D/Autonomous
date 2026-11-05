@@ -80,6 +80,32 @@
         <p v-if="guardError" class="vault-error">{{ guardError }}</p>
       </section>
       <section v-if="section === 'agent'" class="settings-block">
+        <h3>{{ t("lang.choose") }}</h3>
+        <p class="hint">{{ t("settings.languageHint") }}</p>
+        <div class="settings-field">
+          <div
+            class="lang-seg"
+            role="radiogroup"
+            :aria-label="t('lang.choose')"
+          >
+            <button
+              v-for="code in langCodes"
+              :key="code"
+              type="button"
+              role="radio"
+              class="lang-opt"
+              :class="{ active: localeCode === code }"
+              :aria-checked="localeCode === code"
+              @click="chooseLang(code)"
+            >
+              <LocaleFlag :code="code" />
+              <strong>{{ code === "fr" ? t("lang.fr") : t("lang.en") }}</strong>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="section === 'agent'" class="settings-block">
         <h3>{{ t("pi.title") }}</h3>
         <p v-if="loading" class="hint">…</p>
         <div v-else class="info-row">
@@ -381,10 +407,12 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../api";
+import { setLocale } from "../i18n";
 import { botPath } from "../router";
 import { currentBotObj, state } from "../store";
-import LlmSettings from "./LlmSettings.vue";
 import GroundingSettings from "./GroundingSettings.vue";
+import LlmSettings from "./LlmSettings.vue";
+import LocaleFlag from "./LocaleFlag.vue";
 
 function platformLabel(raw) {
   const key = String(raw || "").trim().toLowerCase();
@@ -406,9 +434,15 @@ const tabs = [
   { id: "companions", label: "companion.title" },
 ];
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const route = useRoute();
 const router = useRouter();
+const langCodes = ["fr", "en"];
+const localeCode = computed(() => (locale.value === "fr" ? "fr" : "en"));
+
+function chooseLang(code) {
+  setLocale(code);
+}
 const needCompanion = computed(() => route.query.besoin === "connexion");
 const section = computed(() => {
   const raw = String(route.params.section || "agent");
