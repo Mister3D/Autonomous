@@ -1,0 +1,59 @@
+# Security
+
+Autonomous is a **mono-user local hub**. The default threat model is: one trusted operator on `127.0.0.1`, untrusted desk VMs, and optional companions on the user's PCs. It is **not** a multi-tenant SaaS. Exposing the raw HTTP port on the internet without a reverse proxy and TLS is unsupported.
+
+## Do not commit
+
+These live under `$AUTONOMOUS_HOME` (default `./data/`) and must stay **out of git**:
+
+| Path | What |
+|------|------|
+| `data/token` | API Bearer token (`autonomous init`) |
+| `data/password.hash` | Web login password hash |
+| `data/vault.key` | Vault encryption key |
+| `data/db.sqlite` | Bots, chat, grants, schedules |
+| `data/bots/` | Per-bot Pi sessions + VM home volumes |
+| `data/grounder.env` | Grounding URL / token (mode 600) |
+| `data/initial-password` | One-shot password from `install.sh` (delete after login) |
+
+Also never commit ad-hoc copies such as a root-level `TOKEN` / `db.sqlite` / `*.sqlite` file, `.env`, or provider API keys.
+
+## Reporting
+
+If you discover a vulnerability in Autonomous, open a **private** GitHub Security Advisory on [Mister3D/Autonomous](https://github.com/Mister3D/Autonomous) before public disclosure. Do not file a public issue with exploit details.
+
+## License note
+
+Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requires offering the corresponding source to the users of that service (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
+
+## Threat model (self-host)
+
+| Surface | Default | Notes |
+|---------|---------|--------|
+| HTTP API | Session cookie or Bearer (`data/token`) | Login rate-limited (10 / 5 min / IP) |
+| WebSockets VNC / terminal | Same session cookie or Bearer | Unauthenticated upgrades are rejected |
+| Companion WebSocket | Device token `adc_…` | Scoped; cannot call admin API |
+| Public webhooks | Token in URL | Rate-limited (30 / min / token, 60 / min / IP); treat URL as a secret |
+| Companion SOCKS / DNS | Bound `0.0.0.0` (iptables REDIRECT) | Only desk container IPs + loopback accepted |
+| Desk VMs | Untrusted | Prefer Internet off; `seccomp=unconfined` for Chrome — assume escape possible |
+| Host shell (`allow_host_shell`) | **Off** | When enabled, Pi `bash` runs as the `serve` user (full host RCE) |
+| OpenAPI `/api/docs` | Auth required | Same session / Bearer as the API |
+| Vault at rest | HMAC + SHA-256 keystream (stdlib) | Mono-user local; not a HSM / multi-tenant KMS |
+
+## Operational tips
+
+- Bind `serve` to **`127.0.0.1`** (default). Non-loopback binds require `AUTONOMOUS_BIND_PUBLIC=1` and should sit behind TLS.
+- Set `AUTONOMOUS_COOKIE_SECURE=1` (or `AUTONOMOUS_PUBLIC_URL=https://…`) when the UI is served over HTTPS.
+- Run `autonomous init` before `serve`. Without a token / `AUTONOMOUS_SECRET`, serve refuses to start (`AUTONOMOUS_ALLOW_INSECURE=1` only for throwaway local experiments).
+- Treat desk VMs as untrusted: prefer Internet off when not needed; host shell stays off by default.
+- Webhook URLs are capabilities: do not paste them into public chats; rotate by deleting and recreating the webhook.
+- Rotate `data/token` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots).
+- `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
+- Companion pairing is public but rate-limited; only approve codes you initiated on your own PC.
+
+## Reverse proxy checklist
+
+1. Terminate TLS at the proxy; set `AUTONOMOUS_PUBLIC_URL=https://…` and `AUTONOMOUS_COOKIE_SECURE=1`.
+2. Proxy WebSocket upgrades for `/novnc/`, `/ws/terminal/`, `/ws/companion`.
+3. Keep `serve` on localhost; do not publish Docker VNC ports.
+4. Forward `X-Forwarded-For` only from the proxy (rate limits use it).

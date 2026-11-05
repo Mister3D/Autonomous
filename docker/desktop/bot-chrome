@@ -1,0 +1,207 @@
+#!/bin/bash
+# Autonomous Chrome launcher: headed + WebGL enabled + CDP spoof (no SwiftShader).
+set -euo pipefail
+
+REAL=/usr/bin/google-chrome-stable.real
+if [ ! -x "$REAL" ]; then
+  REAL=/usr/bin/google-chrome-stable
+fi
+PORT="${BOT_CHROME_PORT:-9222}"
+export DISPLAY="${DISPLAY:-:1}"
+# Container image may still ship LANG=en_US — force FR unless caller overrides.
+export TZ="${TZ:-Europe/Paris}"
+export LANG="${LANG:-fr_FR.UTF-8}"
+export LANGUAGE="${LANGUAGE:-fr_FR:fr:en_US:en}"
+export LC_ALL="${LC_ALL:-$LANG}"
+
+# Strip automation / headless / swiftshader if a caller tries to force them
+args=()
+for a in "$@"; do
+  case "$a" in
+    --enable-automation|--headless|--headless=*|--use-gl=swiftshader|--use-gl=swiftshader-webgl|--disable-gpu|--disable-software-rasterizer) ;;
+    --remote-debugging-port=*|--window-size=*|--window-position=*) ;;
+    *) args+=("$a") ;;
+  esac
+done
+
+# If Chrome already listens on CDP, reuse the singleton (dock click → new window)
+devtools_ws() {
+  python3 - "$PORT" <<'PY' 2>/dev/null
+import json, sys, urllib.request
+try:
+    print(json.load(urllib.request.urlopen(f"http://127.0.0.1:{sys.argv[1]}/json/version", timeout=1))["webSocketDebuggerUrl"])
+except Exception:
+    pass
+PY
+}
+
+if [ -n "$(devtools_ws)" ]; then
+  exec "$REAL" "${args[@]}" --new-window about:blank
+fi
+
+# Profile MUST be non-default (Chrome ≥136 ignores --remote-debugging-port on the
+# standard ~/.config/google-chrome path). Keep a dedicated dir for CDP.
+# Persist under ~/shared (host bind-mount) — NOT under $HOME alone, which dies
+# when the container is recreated (cookies / anti-bot clearance / prefs lost).
+legacy_udd="$HOME/.autonomous-chrome"
+udd="${BOT_CHROME_USER_DATA_DIR:-$HOME/shared/.autonomous-chrome}"
+if [ ! -d "$udd" ] && [ -d "$legacy_udd" ]; then
+  mkdir -p "$(dirname "$udd")"
+  mv "$legacy_udd" "$udd" 2>/dev/null || cp -a "$legacy_udd" "$udd"
+fi
+mkdir -p "$udd/Default"
+# Keep a symlink at the old path so any leftover scripts still find the profile.
+if [ "$udd" != "$legacy_udd" ] && [ ! -e "$legacy_udd" ]; then
+  ln -sfn "$udd" "$legacy_udd" 2>/dev/null || true
+elif [ -d "$legacy_udd" ] && [ ! -L "$legacy_udd" ] && [ "$udd" != "$legacy_udd" ]; then
+  # Stale non-persistent copy — prefer shared; leave it (do not delete mid-run).
+  :
+fi
+# Sentinel that skips first-run / Additional Terms of Service modal on Linux.
+# --no-first-run alone is not enough on recent Google Chrome builds.
+: >"$udd/First Run"
+python3 - "$udd/Default/Preferences" <<'PY' 2>/dev/null || true
+import json, os, sys
+p = sys.argv[1]
+try:
+    d = json.load(open(p))
+except Exception:
+    d = {}
+d["credentials_enable_service"] = False
+profile = d.setdefault("profile", {})
+profile["password_manager_enabled"] = False
+# Avoid "Restore pages?" bubble that fights window maximize.
+profile["exit_type"] = "Normal"
+d["exited_cleanly"] = True
+
+# Disable Translate (policy + prefs)
+translate = d.setdefault("translate", {})
+translate["enabled"] = False
+# Block common locales so the offer never appears
+d["translate_blocked_languages"] = [
+    "en", "en-US", "en-GB", "fr", "fr-FR", "de", "es", "it", "pt", "nl", "ru", "zh", "ja", "ko",
+]
+d["translate_site_blacklist"] = []
+
+# Skip first-run / welcome / EULA chrome
+browser = d.setdefault("browser", {})
+browser["has_seen_welcome_page"] = True
+browser["should_reset_check_default_browser"] = False
+browser["check_default_browser"] = False
+dist = d.setdefault("distribution", {})
+dist["import_bookmarks"] = False
+dist["import_history"] = False
+dist["skip_first_run_ui"] = True
+dist["require_eula"] = False
+dist["show_welcome_page"] = False
+dist["suppress_first_run_default_browser_prompt"] = True
+dist["make_chrome_default_for_user"] = False
+d.setdefault("signin", {})["allowed"] = False
+d["search"] = d.get("search") or {}
+d["search"]["suggest_enabled"] = False
+# Metrics / privacy onboarding noise
+d.setdefault("user_experience_metrics", {})["reporting_enabled"] = False
+ps = d.setdefault("privacy_sandbox", {})
+ps["m1"] = ps.get("m1") or {}
+for k in (
+    "row_notice_acknowledged",
+    "eea_notice_acknowledged",
+    "topics_consent_given",
+    "restricted_notice_acknowledged",
+):
+    ps["m1"][k] = True
+
+
+# FR Accept-Language / UI (pairs with --lang and container TZ).
+intl = d.setdefault("intl", {})
+intl["accept_languages"] = os.environ.get("BOT_CHROME_ACCEPT_LANGUAGES", "fr-FR,fr,en-US,en")
+intl.setdefault("selected_languages", "fr-FR,fr,en-US,en")
+
+# Force maximized on next launch.
+# Geometry matches TigerVNC 1920x1200 with bottom XFCE panel (~29px).
+wa_w, wa_h = 1920, 1171
+browser["window_placement"] = {
+    "maximized": True,
+    "left": 0,
+    "top": 0,
+    "right": wa_w,
+    "bottom": wa_h,
+    "work_area_left": 0,
+    "work_area_top": 0,
+    "work_area_right": wa_w,
+    "work_area_bottom": wa_h,
+}
+os.makedirs(os.path.dirname(p), exist_ok=True)
+tmp = p + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(d, f)
+os.replace(tmp, p)
+PY
+
+# Start CDP WebGL spoof daemon (idempotent)
+if ! pgrep -f "webgl-spoof-cdp.py --port ${PORT}" >/dev/null 2>&1; then
+  nohup python3 /usr/local/bin/webgl-spoof-cdp.py --port "$PORT" \
+    >>"${HOME}/.chrome-webgl-spoof.log" 2>&1 &
+fi
+
+# WebGL on + ignore blocklist. Software framebuffer OK; do NOT force SwiftShader.
+# Prefer the REAL Chrome sandbox (desk containers use security_opt seccomp=unconfined).
+# --no-sandbox is a strong anti-bot signal — only if BOT_CHROME_NO_SANDBOX=1 (escape hatch).
+# Prefer FR UI/Accept-Language (override with BOT_CHROME_LANG).
+CHROME_LANG="${BOT_CHROME_LANG:-fr-FR}"
+extra_flags=()
+if [ "${BOT_CHROME_NO_SANDBOX:-0}" = "1" ]; then
+  echo "WARNING: BOT_CHROME_NO_SANDBOX=1 — Chrome runs without sandbox (anti-bot risk)" >&2
+  extra_flags+=(--no-sandbox --test-type)
+fi
+
+"$REAL" "${args[@]}" \
+  --user-data-dir="$udd" \
+  --remote-debugging-port="$PORT" \
+  --remote-allow-origins="http://127.0.0.1:${PORT}" \
+  "${extra_flags[@]}" \
+  --disable-dev-shm-usage \
+  --ignore-gpu-blocklist \
+  --enable-webgl \
+  --use-gl=angle \
+  --use-angle=gl \
+  --lang="$CHROME_LANG" \
+  --no-first-run \
+  --no-default-browser-check \
+  --password-store=basic \
+  --disable-features=Translate,TranslateUI \
+  --disable-default-apps \
+  --disable-sync \
+  --no-service-autorun \
+  --start-maximized \
+  about:blank &
+chrome_pid=$!
+
+# Fail loud if Chrome dies or CDP never comes up (no silent --no-sandbox fallback).
+cdp_ok=0
+for _ in $(seq 1 40); do
+  if ! kill -0 "$chrome_pid" 2>/dev/null; then
+    echo "ERROR: Chrome exited before CDP was ready (sandbox/userns?). Check desk security_opt=seccomp=unconfined. Set BOT_CHROME_NO_SANDBOX=1 only as last resort." >&2
+    wait "$chrome_pid" || true
+    exit 1
+  fi
+  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/json/version" 2>/dev/null || true)
+  if [ "$code" = "200" ]; then
+    cdp_ok=1
+    break
+  fi
+  sleep 0.25
+done
+if [ "$cdp_ok" != "1" ]; then
+  echo "ERROR: Chrome CDP not ready on :${PORT} after ~10s — refusing to keep a half-broken browser." >&2
+  kill "$chrome_pid" 2>/dev/null || true
+  wait "$chrome_pid" 2>/dev/null || true
+  exit 1
+fi
+
+python3 /usr/local/bin/maximize-window.py --port "$PORT" --timeout 30 \
+  >>"${HOME}/.chrome-maximize.log" 2>&1 || true
+# Belt-and-suspenders: if Additional Terms modal still appears, accept it.
+python3 /usr/local/bin/dismiss-chrome-tos.py \
+  >>"${HOME}/.chrome-tos-dismiss.log" 2>&1 || true
+wait "$chrome_pid"

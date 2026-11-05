@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Google Chrome
+Comment=Start Chrome when the session begins
+Exec=/usr/local/bin/bot-chrome
+Terminal=false
+X-GNOME-Autostart-enabled=true
+StartupNotify=false

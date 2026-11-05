@@ -1,0 +1,25 @@
+{
+  "id": "pieuvre",
+  "title": "Pieuvre",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "tentacle-1",
+      "tentacle-4",
+      "tentacle-6",
+      "tentacle-3",
+      "tentacle-2",
+      "tentacle-5"
+    ],
+    "pivots": {
+      "tentacle-1": "93% 23%",
+      "tentacle-6": "7% 23%",
+      "tentacle-2": "92% 10%",
+      "tentacle-5": "8% 10%",
+      "tentacle-3": "79% 6%",
+      "tentacle-4": "12% 6%"
+    }
+  },
+  "hasVectorcraft": true
+}

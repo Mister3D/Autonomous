@@ -1,0 +1,35 @@
+{
+  "id": "axolotl",
+  "title": "Axolotl",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "gills-l",
+      "tail",
+      "paw-r",
+      "gills-r",
+      "leg-back-l",
+      "paw-l",
+      "leg-back-r"
+    ],
+    "pivots": {
+      "gills-l": "8% 60%",
+      "gills-r": "92% 60%",
+      "paw-l": "50% 10%",
+      "paw-r": "50% 10%",
+      "leg-back-l": "50% 15%",
+      "leg-back-r": "50% 15%"
+    },
+    "tintFills": [
+      "#fba0ae",
+      "#faa1ac",
+      "#fbd8d7",
+      "#fbd6d3",
+      "#faafb4",
+      "#fad2cf"
+    ],
+    "tintKeep": "[data-id^=\"Joue\"],[data-id=\"Langue\"]"
+  },
+  "hasVectorcraft": true
+}

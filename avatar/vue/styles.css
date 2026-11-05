@@ -1,0 +1,228 @@
+/* Companion avatar animations — portable (no page chrome). */
+/* ===== Avatar animation system ===== */
+.avatar-svg{width:100%;height:100%;overflow:visible;display:block}
+.avatar-svg .part{transform-box:fill-box}
+.avatar-svg .rig{transform-box:fill-box;transform-origin:50% 100%}
+/* eyes: default closed */
+.avatar-svg [data-part="eyes-open"]{display:none}
+.av[data-eyes="open"] [data-part="eyes-open"]{display:inline}
+.av[data-eyes="open"] [data-part="eyes-closed"]{display:none}
+.avatar-svg .eye-side{transition:transform .08s linear}
+
+/* WORK: busy, like the crab */
+.av[data-state="work"] .rig{animation:bob .6s ease-in-out infinite}
+.av[data-state="work"] [data-part="tail"]{animation:wag .45s ease-in-out infinite alternate}
+.av[data-state="work"] [data-part="ear-l"]{animation:earL .7s ease-in-out infinite alternate}
+.av[data-state="work"] [data-part="ear-r"]{animation:earR .7s ease-in-out infinite alternate-reverse}
+.av[data-state="work"] [data-part="paw-l"]{animation:pawL .3s ease-in-out infinite alternate}
+.av[data-state="work"] [data-part="paw-r"]{animation:pawR .3s ease-in-out .15s infinite alternate}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5%)}}
+@keyframes wag{from{transform:rotate(-9deg)}to{transform:rotate(9deg)}}
+@keyframes earL{from{transform:rotate(-7deg)}to{transform:rotate(4deg)}}
+@keyframes earR{from{transform:rotate(7deg)}to{transform:rotate(-4deg)}}
+@keyframes pawL{from{transform:rotate(-6deg)}to{transform:rotate(5deg)}}
+@keyframes pawR{from{transform:rotate(6deg)}to{transform:rotate(-5deg)}}
+
+/* penguin / chick: waddle, flapping wings, stepping feet */
+.av[data-av="pingouin"][data-state="work"] .rig{animation:waddle .7s ease-in-out infinite}
+.av[data-av="poussin"][data-state="work"] .rig{animation:bob .5s ease-in-out infinite}
+.av[data-state="work"] [data-part="wing-l"]{animation:wingL .35s ease-in-out infinite alternate}
+.av[data-state="work"] [data-part="wing-r"]{animation:wingR .35s ease-in-out infinite alternate}
+.av[data-state="work"] [data-part="foot-l"]{animation:footL .7s ease-in-out infinite}
+.av[data-state="work"] [data-part="foot-r"]{animation:footL .7s ease-in-out -.35s infinite}
+.av[data-state="work"] [data-part="tuft"]{animation:tuft .5s ease-in-out infinite alternate}
+.av[data-av="ours"][data-state="work"] [data-part="leg-back-l"]{animation:legTap .6s ease-in-out infinite alternate}
+.av[data-av="ours"][data-state="work"] [data-part="leg-back-r"]{animation:legTap .6s ease-in-out -.3s infinite alternate}
+@keyframes waddle{0%,100%{transform:rotate(-4deg)}25%{transform:rotate(0) translateY(-2%)}50%{transform:rotate(4deg)}75%{transform:rotate(0) translateY(-2%)}}
+@keyframes wingL{from{transform:rotate(-2deg)}to{transform:rotate(16deg)}}
+@keyframes wingR{from{transform:rotate(2deg)}to{transform:rotate(-16deg)}}
+@keyframes footL{0%,50%,100%{transform:rotate(0) translateY(0)}25%{transform:rotate(-6deg) translateY(-6%)}}
+@keyframes tuft{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}
+@keyframes legTap{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+
+/* NOTIFY: eyes open, one part twitches every 5 s (class added by JS) */
+.av .twitch-ear-l{animation:twEarL .6s ease-in-out}
+.av .twitch-ear-r{animation:twEarR .6s ease-in-out}
+.av .twitch-tail{animation:twTail .8s ease-in-out}
+.av .twitch-paw-r{animation:twPaw .7s ease-in-out}
+
+.av .twitch-wing-l{animation:twWingL .7s ease-in-out}
+.av .twitch-wing-r{animation:twWingR .7s ease-in-out}
+.av .twitch-foot-l,.av .twitch-foot-r{animation:twFoot .6s ease-in-out}
+.av .twitch-tuft{animation:twTail .8s ease-in-out}
+.av .twitch-paw-l{animation:twPawL .7s ease-in-out}
+.av .twitch-leg-back-l,.av .twitch-leg-back-r{animation:twFoot .6s ease-in-out}
+@keyframes twWingL{0%,100%{transform:rotate(0)}25%{transform:rotate(22deg)}50%{transform:rotate(4deg)}75%{transform:rotate(18deg)}}
+@keyframes twWingR{0%,100%{transform:rotate(0)}25%{transform:rotate(-22deg)}50%{transform:rotate(-4deg)}75%{transform:rotate(-18deg)}}
+@keyframes twFoot{0%,100%{transform:rotate(0)}30%{transform:rotate(-10deg) translateY(-5%)}60%{transform:rotate(4deg)}}
+@keyframes twPawL{0%,100%{transform:rotate(0)}30%{transform:rotate(10deg)}60%{transform:rotate(6deg)}}
+@keyframes twEarL{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}50%{transform:rotate(5deg)}75%{transform:rotate(-8deg)}}
+@keyframes twEarR{0%,100%{transform:rotate(0)}25%{transform:rotate(14deg)}50%{transform:rotate(-5deg)}75%{transform:rotate(8deg)}}
+@keyframes twTail{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}45%{transform:rotate(-10deg)}70%{transform:rotate(7deg)}}
+@keyframes twPaw{0%,100%{transform:rotate(0)}30%{transform:rotate(-10deg)}60%{transform:rotate(-6deg)}}
+
+/* WAIT: jumps on the spot with squash & stretch */
+.av[data-state="wait"] .rig{animation:jump 1.4s cubic-bezier(.3,0,.3,1) infinite}
+@keyframes jump{
+ 0%{transform:translateY(0) scale(1,1)}
+ 12%{transform:translateY(0) scale(1.12,.86)}
+ 30%{transform:translateY(-13%) scale(.93,1.08)}
+ 45%{transform:translateY(-15%) scale(1,1)}
+ 62%{transform:translateY(0) scale(.95,1.06)}
+ 72%{transform:translateY(0) scale(1.14,.84)}
+ 86%,100%{transform:translateY(0) scale(1,1)}}
+
+/* IDLE: no motion (eyes closed by default) */
+.av[data-state="idle"] .rig{animation:none}
+
+/* AWAIT: same as wait (user action needed) */
+.av[data-state="await"] .rig{animation:jump 1.4s cubic-bezier(.3,0,.3,1) infinite}
+@media (prefers-reduced-motion:reduce){.av *{animation:none!important}}
+
+/* pingouin: smaller wing amplitude (beyond ~10deg the belly shows under the wing) */
+.av[data-av="pingouin"][data-state="work"] [data-part="wing-l"]{animation-name:pgWingL}
+.av[data-av="pingouin"][data-state="work"] [data-part="wing-r"]{animation-name:pgWingR}
+.av[data-av="pingouin"] .twitch-wing-l{animation-name:pgTwWingL}
+.av[data-av="pingouin"] .twitch-wing-r{animation-name:pgTwWingR}
+@keyframes pgWingL{from{transform:rotate(-2deg)}to{transform:rotate(8deg)}}
+@keyframes pgWingR{from{transform:rotate(2deg)}to{transform:rotate(-8deg)}}
+@keyframes pgTwWingL{0%,100%{transform:rotate(0)}25%{transform:rotate(9deg)}50%{transform:rotate(2deg)}75%{transform:rotate(7deg)}}
+@keyframes pgTwWingR{0%,100%{transform:rotate(0)}25%{transform:rotate(-9deg)}50%{transform:rotate(-2deg)}75%{transform:rotate(-7deg)}}
+
+/* pieuvre: tentacles pivot at their root; per-tentacle safe range (measured: outline/gap peeks beyond these) */
+.av[data-av="pieuvre"] [data-part="tentacle-1"]{--lo:-2deg;--hi:7deg;--d:1.05s;--dl:0s}
+.av[data-av="pieuvre"] [data-part="tentacle-2"]{--lo:-5deg;--hi:5deg;--d:.9s;--dl:-.3s}
+.av[data-av="pieuvre"] [data-part="tentacle-3"]{--lo:-1deg;--hi:2deg;--d:.8s;--dl:-.55s}
+.av[data-av="pieuvre"] [data-part="tentacle-4"]{--lo:-2deg;--hi:1deg;--d:.85s;--dl:-.15s}
+.av[data-av="pieuvre"] [data-part="tentacle-5"]{--lo:5deg;--hi:-5deg;--d:.95s;--dl:-.6s}
+.av[data-av="pieuvre"] [data-part="tentacle-6"]{--lo:2deg;--hi:-7deg;--d:1.1s;--dl:-.4s}
+.av[data-av="pieuvre"][data-state="work"] .rig{animation:float 1.6s ease-in-out infinite}
+.av[data-av="pieuvre"][data-state="work"] [data-part^="tentacle-"]{animation:tent var(--d) ease-in-out var(--dl) infinite alternate}
+.av[data-av="pieuvre"] [class*="twitch-tentacle"]{animation:twTent .8s ease-in-out}
+@keyframes tent{from{transform:rotate(var(--lo))}to{transform:rotate(var(--hi))}}
+@keyframes twTent{0%,100%{transform:rotate(0)}25%{transform:rotate(var(--hi))}50%{transform:rotate(var(--lo))}75%{transform:rotate(calc(var(--hi)*.6))}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
+
+/* licorne: tail swish, ear wiggle (mane, forelock, horn rigid with head), legs tap (pivot at top, small so hooves stay grounded) */
+.av[data-av="licorne"] [data-part="tail"]{--lo:-7deg;--hi:7deg;--d:.7s;--dl:0s}
+.av[data-av="licorne"] [data-part="ear-l"]{--lo:-5deg;--hi:4deg;--d:.6s;--dl:-.1s}
+.av[data-av="licorne"] [data-part="leg-front-l"]{--lo:-3deg;--hi:3deg;--d:.6s;--dl:0s}
+.av[data-av="licorne"] [data-part="leg-front-r"]{--lo:-3deg;--hi:3deg;--d:.6s;--dl:-.3s}
+.av[data-av="licorne"] [data-part="leg-back-l"]{--lo:-3deg;--hi:3deg;--d:.6s;--dl:-.45s}
+.av[data-av="licorne"][data-state="work"] .rig{animation:bob .6s ease-in-out infinite}
+.av[data-av="licorne"][data-state="work"] :is([data-part="tail"],[data-part="ear-l"],[data-part^="leg-"]){animation:tent var(--d) ease-in-out var(--dl) infinite alternate}
+.av[data-av="licorne"] :is(.twitch-tail,.twitch-ear-l,.twitch-leg-front-l,.twitch-leg-front-r,.twitch-leg-back-l){animation:twTent .8s ease-in-out}
+/* licorne head nod: head group + mane + mane-face share one neck pivot (set in JS absPivots); -3..+1deg is gap-free */
+.av[data-av="licorne"] :is([data-part="head"],[data-part="mane"],[data-part="mane-face"]){--lo:-3deg;--hi:1deg;--d:1.2s;--dl:0s}
+.av[data-av="licorne"][data-state="work"] :is([data-part="head"],[data-part="mane"],[data-part="mane-face"]){animation:tent var(--d) ease-in-out var(--dl) infinite}
+.av[data-av="licorne"] .twitch-head,.av[data-av="licorne"]:has(.twitch-head) :is([data-part="mane"],[data-part="mane-face"]){animation:twTent .9s ease-in-out}
+/* axolotl: gills sway subtly from their root (behind the head, stay attached), tail swish, paws/legs tap; ranges below the measured gap/peek limits */
+.av[data-av="axolotl"] [data-part="gills-l"]{--lo:-2deg;--hi:3deg;--d:1.1s;--dl:0s}
+.av[data-av="axolotl"] [data-part="gills-r"]{--lo:2deg;--hi:-3deg;--d:1.1s;--dl:-.15s}
+.av[data-av="axolotl"] [data-part="tail"]{--lo:-6deg;--hi:6deg;--d:.75s;--dl:-.2s}
+.av[data-av="axolotl"] [data-part="paw-l"]{--lo:-5deg;--hi:5deg;--d:.55s;--dl:0s}
+.av[data-av="axolotl"] [data-part="paw-r"]{--lo:5deg;--hi:-5deg;--d:.55s;--dl:-.27s}
+.av[data-av="axolotl"] [data-part="leg-back-l"]{--lo:-3deg;--hi:3deg;--d:.6s;--dl:-.1s}
+.av[data-av="axolotl"] [data-part="leg-back-r"]{--lo:0deg;--hi:4deg;--d:.6s;--dl:-.4s}
+.av[data-av="axolotl"][data-state="work"] .rig{animation:bob .6s ease-in-out infinite}
+.av[data-av="axolotl"][data-state="work"] :is([data-part^="gills-"],[data-part="tail"],[data-part^="paw-"],[data-part^="leg-"]){animation:tent var(--d) ease-in-out var(--dl) infinite alternate}
+.av[data-av="axolotl"] :is(.twitch-gills-l,.twitch-gills-r,.twitch-tail,.twitch-paw-l,.twitch-paw-r,.twitch-leg-back-l,.twitch-leg-back-r){animation:twTent .8s ease-in-out}
+
+/* v2 expressive WORK: pieuvre (whole-rig squash/stretch + tilt, livelier tempo) */
+.av[data-av="pieuvre"][data-state="work"] .rig{animation:pvSwim 1s ease-in-out infinite}
+.av[data-av="pieuvre"] [data-part="tentacle-1"]{--d:.5s;--dl:0s}
+.av[data-av="pieuvre"] [data-part="tentacle-2"]{--d:.5s;--dl:-.1s}
+.av[data-av="pieuvre"] [data-part="tentacle-3"]{--d:.5s;--dl:-.2s}
+.av[data-av="pieuvre"] [data-part="tentacle-4"]{--d:.5s;--dl:-.3s}
+.av[data-av="pieuvre"] [data-part="tentacle-5"]{--d:.5s;--dl:-.4s}
+.av[data-av="pieuvre"] [data-part="tentacle-6"]{--d:.5s;--dl:-.5s}
+@keyframes pvSwim{0%,100%{transform:scale(1.08,.9) rotate(0)}25%{transform:scale(.94,1.08) translateY(-6%) rotate(-6deg)}50%{transform:scale(1.05,.94) translateY(-2%) rotate(0)}75%{transform:scale(.94,1.08) translateY(-6%) rotate(6deg)}}
+
+/* capybara: chunky body squash/sway, flicking ears, drumming front paws */
+.av[data-av="capybara"][data-state="work"] .rig{animation:cpWork .8s ease-in-out infinite}
+.av[data-av="capybara"][data-state="work"] [data-part="ear-l"]{animation:cpEarL .32s ease-in-out infinite alternate}
+.av[data-av="capybara"][data-state="work"] [data-part="ear-r"]{animation:cpEarR .32s ease-in-out -.16s infinite alternate}
+.av[data-av="capybara"][data-state="work"] [data-part="paw-l"]{animation:cpPaw .2s ease-in-out infinite alternate}
+.av[data-av="capybara"][data-state="work"] [data-part="paw-r"]{animation:cpPaw .2s ease-in-out -.1s infinite alternate}
+@keyframes cpWork{0%,100%{transform:scale(1.05,.95) rotate(0)}25%{transform:scale(.97,1.04) translateY(-4%) rotate(-3deg)}50%{transform:scale(1.04,.96) rotate(0)}75%{transform:scale(.97,1.04) translateY(-4%) rotate(3deg)}}
+@keyframes cpEarL{from{transform:rotate(var(--cpLo,-6deg))}to{transform:rotate(var(--cpHi,10deg))}}
+@keyframes cpEarR{from{transform:rotate(6deg)}to{transform:rotate(-10deg)}}
+@keyframes cpPaw{from{transform:translateY(0)}to{transform:translateY(-4%)}}
+/* capybara notify paws v2: little lift-and-wave about the paw's top (no sideways slide of the foot), soft settle */
+.av[data-av="capybara"] .twitch-paw-r{animation:cpTwPawR .9s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="capybara"] .twitch-paw-l{animation:cpTwPawL .9s cubic-bezier(.2,.7,.3,1)}
+@keyframes cpTwPawR{0%,100%{transform:translateY(0) rotate(0)}22%{transform:translateY(-9%) rotate(4deg)}40%{transform:translateY(-8%) rotate(-2deg)}58%{transform:translateY(-8.5%) rotate(3deg)}80%{transform:translateY(1%) rotate(0)}90%{transform:translateY(-.5%) rotate(0)}}
+@keyframes cpTwPawL{0%,100%{transform:translateY(0) rotate(0)}22%{transform:translateY(-9%) rotate(-4deg)}40%{transform:translateY(-8%) rotate(2deg)}58%{transform:translateY(-8.5%) rotate(-3deg)}80%{transform:translateY(1%) rotate(0)}90%{transform:translateY(-.5%) rotate(0)}}
+
+/* crabe: side shuffle, waving claws with snapping pincers, scuttling legs (staggered wave). --s mirrors right side */
+.av[data-av="crabe"] [data-part$="-l"],.av[data-av="crabe"] [data-part*="-l-"]{--s:1}
+.av[data-av="crabe"] [data-part$="-r"],.av[data-av="crabe"] [data-part*="-r-"]{--s:-1}
+.av[data-av="crabe"][data-state="work"] .rig{animation:crShuffle .9s ease-in-out infinite}
+.av[data-av="crabe"][data-state="work"] [data-part="claw-l"]{animation:crClaw .45s ease-in-out infinite alternate}
+.av[data-av="crabe"][data-state="work"] [data-part="claw-r"]{animation:crClaw .45s ease-in-out -.22s infinite alternate}
+.av[data-av="crabe"][data-state="work"] [data-part^="pincer-"]{animation:crSnap .18s ease-in-out infinite alternate}
+.av[data-av="crabe"][data-state="work"] [data-part^="leg-"]{animation:crLeg .3s ease-in-out var(--dl,0s) infinite alternate}
+.av[data-av="crabe"][data-state="work"] [data-part$="-tip"]{animation-name:crTip}
+.av[data-av="crabe"] [data-part^="leg-front"]{--dl:0s}
+.av[data-av="crabe"] [data-part^="leg-middle"]{--dl:-.1s}
+.av[data-av="crabe"] [data-part^="leg-back"]{--dl:-.2s}
+
+@keyframes crShuffle{0%,100%{transform:translateX(0) scale(1.04,.96)}25%{transform:translateX(-4%) translateY(-2%) scale(.97,1.03) rotate(-2deg)}50%{transform:translateX(0) scale(1.04,.96)}75%{transform:translateX(4%) translateY(-2%) scale(.97,1.03) rotate(2deg)}}
+@keyframes crClaw{from{transform:rotate(calc(var(--s)*-9deg))}to{transform:rotate(calc(var(--s)*6deg))}}
+@keyframes crSnap{from{transform:rotate(calc(var(--s)*-7deg))}to{transform:rotate(calc(var(--s)*5deg))}}
+@keyframes crLeg{from{transform:rotate(calc(var(--s)*-7deg))}to{transform:rotate(calc(var(--s)*6deg))}}
+@keyframes crTip{from{transform:rotate(calc(var(--s)*-9deg))}to{transform:rotate(calc(var(--s)*8deg))}}
+/* notify twitches */
+.av[data-av="crabe"] :is(.twitch-claw-l,.twitch-claw-r){animation:crTwClaw .9s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="crabe"] :is(.twitch-pincer-l,.twitch-pincer-r){animation:crTwSnap .7s ease-out}
+.av[data-av="crabe"] [class*="twitch-leg-"]{animation:crTwLeg .7s cubic-bezier(.2,.7,.3,1)}
+@keyframes crTwClaw{0%,100%{transform:rotate(0)}25%{transform:rotate(calc(var(--s)*-12deg))}45%{transform:rotate(calc(var(--s)*-4deg))}65%{transform:rotate(calc(var(--s)*-9deg))}85%{transform:rotate(calc(var(--s)*1deg))}}
+@keyframes crTwSnap{0%,100%{transform:rotate(0)}20%{transform:rotate(calc(var(--s)*-10deg))}35%{transform:rotate(calc(var(--s)*6deg))}55%{transform:rotate(calc(var(--s)*-8deg))}70%{transform:rotate(calc(var(--s)*4deg))}}
+@keyframes crTwLeg{0%,100%{transform:rotate(0)}30%{transform:rotate(calc(var(--s)*-10deg))}60%{transform:rotate(calc(var(--s)*3deg))}80%{transform:rotate(calc(var(--s)*-1deg))}}
+
+/* champignon: cap + cap-under are ONE rigid block on two planes: same rule, same keyframes/timing, same SVG pivot (set in JS) */
+.av[data-av="champignon"] :is([data-part="cap"],[data-part="cap-under"]){--cs:1}
+.av[data-av="champignon"][data-state="work"] .rig{animation:chWork .7s ease-in-out infinite}
+.av[data-av="champignon"][data-state="work"] :is([data-part="cap"],[data-part="cap-under"]){animation:chCap .7s ease-in-out infinite}
+.av[data-av="champignon"][data-state="work"] [data-part="arm-r"]{animation:chArmR .3s ease-in-out infinite alternate}
+.av[data-av="champignon"][data-state="work"] [data-part="arm-l"]{animation:chArmL .3s ease-in-out -.15s infinite alternate}
+.av[data-av="champignon"][data-state="work"] [data-part="foot-r"]{animation:chStep .7s ease-in-out infinite}
+.av[data-av="champignon"][data-state="work"] [data-part="foot-l"]{animation:chStep .7s ease-in-out -.35s infinite}
+@keyframes chWork{0%,100%{transform:scale(1.05,.95)}25%{transform:scale(.97,1.04) translateY(-3%) rotate(-2deg)}50%{transform:scale(1.05,.95)}75%{transform:scale(.97,1.04) translateY(-3%) rotate(2deg)}}
+@keyframes chCap{0%,100%{transform:translateY(6px) rotate(0)}25%{transform:translateY(-10px) rotate(4deg)}50%{transform:translateY(6px) rotate(0)}75%{transform:translateY(-10px) rotate(-4deg)}}
+@keyframes chArmR{from{transform:rotate(-8deg)}to{transform:rotate(12deg)}}
+@keyframes chArmL{from{transform:rotate(8deg)}to{transform:rotate(-12deg)}}
+@keyframes chStep{0%,50%,100%{transform:translateY(0)}25%{transform:translateY(-14%)}}
+.av[data-av="champignon"] .twitch-cap{animation:chTwCap .9s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="champignon"] .twitch-arm-r{animation:chTwArmR .7s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="champignon"] .twitch-arm-l{animation:chTwArmL .7s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="champignon"] :is(.twitch-foot-l,.twitch-foot-r){animation:chTwFoot .7s cubic-bezier(.2,.7,.3,1)}
+@keyframes chTwCap{0%,100%{transform:rotate(0)}25%{transform:translateY(-14px) rotate(-6deg)}50%{transform:rotate(3deg)}75%{transform:rotate(-1.5deg)}}
+@keyframes chTwArmR{0%,100%{transform:rotate(0)}30%{transform:rotate(-16deg)}55%{transform:rotate(-6deg)}75%{transform:rotate(-12deg)}}
+@keyframes chTwArmL{0%,100%{transform:rotate(0)}30%{transform:rotate(16deg)}55%{transform:rotate(6deg)}75%{transform:rotate(12deg)}}
+@keyframes chTwFoot{0%,100%{transform:translateY(0)}30%{transform:translateY(-18%)}60%{transform:translateY(2%)}80%{transform:translateY(-3%)}}
+/* chat: pivots at attachment points (JS absPivots); back legs on the ground only lift (no tilt, no slide); translations in fixed units */
+.av[data-av="chat"][data-state="work"] .rig{animation:caWork 1s ease-in-out infinite}
+.av[data-av="chat"][data-state="work"] [data-part="tail"]{animation:caTail 1.2s cubic-bezier(.45,0,.55,1) infinite}
+.av[data-av="chat"][data-state="work"] [data-part="ear-r"]{animation:caEarR 2s ease-in-out infinite}
+.av[data-av="chat"][data-state="work"] [data-part="ear-l"]{animation:caEarL 2s ease-in-out -.7s infinite}
+.av[data-av="chat"][data-state="work"] [data-part="paw-r"]{animation:caKnead .5s ease-in-out infinite}
+.av[data-av="chat"][data-state="work"] [data-part="paw-l"]{animation:caKnead .5s ease-in-out -.25s infinite}
+.av[data-av="chat"][data-state="work"] [data-part="leg-back-r"]{animation:caTap 1s ease-in-out infinite}
+.av[data-av="chat"][data-state="work"] [data-part="leg-back-l"]{animation:caTap 1s ease-in-out -.5s infinite}
+@keyframes caWork{0%,100%{transform:scale(1.04,.96) rotate(0)}25%{transform:scale(.98,1.03) rotate(-2deg)}50%{transform:scale(1.04,.96) rotate(0)}75%{transform:scale(.98,1.03) rotate(2deg)}}
+@keyframes caTail{0%,100%{transform:rotate(-12deg)}35%{transform:rotate(14deg)}50%{transform:rotate(10deg)}85%{transform:rotate(-14deg)}}
+@keyframes caEarR{0%,60%,100%{transform:rotate(0)}68%{transform:rotate(-10deg)}76%{transform:rotate(3deg)}84%{transform:rotate(-6deg)}}
+@keyframes caEarL{0%,60%,100%{transform:rotate(0)}68%{transform:rotate(10deg)}76%{transform:rotate(-3deg)}84%{transform:rotate(6deg)}}
+@keyframes caKnead{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-14px) rotate(-5deg)}}
+@keyframes caTap{0%,40%,100%{transform:translateY(0)}20%{transform:translateY(-16px)}}
+.av[data-av="chat"] .twitch-tail{animation:caTwTail 1s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="chat"] .twitch-ear-r{animation:caTwEarR .7s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="chat"] .twitch-ear-l{animation:caTwEarL .7s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="chat"] :is(.twitch-paw-r,.twitch-paw-l){animation:caTwPaw .7s cubic-bezier(.2,.7,.3,1)}
+.av[data-av="chat"] :is(.twitch-leg-back-r,.twitch-leg-back-l){animation:caTwLeg .7s cubic-bezier(.2,.7,.3,1)}
+@keyframes caTwTail{0%,100%{transform:rotate(0)}25%{transform:rotate(14deg)}50%{transform:rotate(-10deg)}75%{transform:rotate(5deg)}}
+@keyframes caTwEarR{0%,100%{transform:rotate(0)}30%{transform:rotate(-14deg)}55%{transform:rotate(4deg)}75%{transform:rotate(-6deg)}}
+@keyframes caTwEarL{0%,100%{transform:rotate(0)}30%{transform:rotate(14deg)}55%{transform:rotate(-4deg)}75%{transform:rotate(6deg)}}
+@keyframes caTwPaw{0%,100%{transform:translateY(0) rotate(0)}30%{transform:translateY(-22px) rotate(-6deg)}55%{transform:translateY(-8px) rotate(4deg)}75%{transform:translateY(-16px) rotate(-3deg)}}
+@keyframes caTwLeg{0%,100%{transform:translateY(0)}30%{transform:translateY(-20px)}60%{transform:translateY(2px)}80%{transform:translateY(-4px)}}

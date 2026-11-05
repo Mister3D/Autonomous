@@ -1,0 +1,59 @@
+{
+  "id": "chat",
+  "title": "Chat",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "tail",
+      "ear-l",
+      "paw-r",
+      "ear-r",
+      "tail",
+      "paw-l",
+      "leg-back-r",
+      "leg-back-l"
+    ],
+    "pivots": {
+      "absPivots": {
+        "tail": [
+          880,
+          1050
+        ],
+        "ear-r": [
+          330,
+          320
+        ],
+        "ear-l": [
+          800,
+          330
+        ],
+        "paw-r": [
+          440,
+          775
+        ],
+        "paw-l": [
+          710,
+          775
+        ],
+        "leg-back-r": [
+          446,
+          1150
+        ],
+        "leg-back-l": [
+          692,
+          1150
+        ]
+      }
+    },
+    "tintFills": [
+      "#fabc8e",
+      "#fabb8d",
+      "#faba8d",
+      "#fab78a",
+      "#fab688",
+      "#fab487"
+    ]
+  },
+  "hasVectorcraft": true
+}

@@ -1,0 +1,88 @@
+import { createRouter, createWebHistory } from "vue-router";
+import LoginView from "./views/LoginView.vue";
+import HubView from "./views/HubView.vue";
+import SettingsModal from "./components/SettingsModal.vue";
+import { api } from "./api";
+import { state } from "./store";
+import { connectEvents, disconnectEvents, refreshBots } from "./sync";
+
+export const TABS = ["discussion", "terminal", "screen"];
+
+const TAB_ALIASES = {
+  discussion: "discussion",
+  messages: "discussion",
+  message: "discussion",
+  terminal: "terminal",
+  screen: "screen",
+  ecran: "screen",
+  écran: "screen",
+};
+
+export function normalizeTab(tab) {
+  if (tab == null || tab === "") return "discussion";
+  const key = String(tab).toLowerCase();
+  return TAB_ALIASES[key] || (TABS.includes(key) ? key : "discussion");
+}
+
+export function botPath(name, tab = "discussion") {
+  return `/b/${encodeURIComponent(name)}/${normalizeTab(tab)}`;
+}
+
+export const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: "/login", name: "login", component: LoginView, meta: { public: true } },
+    { path: "/settings/:section?", name: "settings", component: SettingsModal },
+    { path: "/", name: "hub", component: HubView },
+    { path: "/setup", name: "setup", component: HubView },
+    {
+      path: "/b/:name/:tab?",
+      name: "bot",
+      component: HubView,
+      props: true,
+    },
+  ],
+});
+
+router.beforeEach(async (to) => {
+  try {
+    const status = await api.authStatus();
+    state.authenticated = !!status.authenticated;
+  } catch {
+    state.authenticated = false;
+  }
+  if (!to.meta.public && !state.authenticated) {
+    return { name: "login", query: { next: to.fullPath } };
+  }
+  if (to.name === "login" && state.authenticated) {
+    const next = typeof to.query.next === "string" ? to.query.next : "/";
+    return next || "/";
+  }
+  if (state.authenticated) {
+    connectEvents();
+    try {
+      await refreshBots();
+    } catch {
+      /* ignore */
+    }
+  } else {
+    disconnectEvents();
+  }
+
+  // Canonicalize /b/:name/:tab (aliases → discussion|terminal|screen)
+  if (to.name === "bot") {
+    const name = to.params.name;
+    const raw = to.params.tab;
+    const tab = normalizeTab(raw);
+    if (raw == null || raw === "" || String(raw) !== tab) {
+      return {
+        name: "bot",
+        params: { name, tab },
+        query: to.query,
+        hash: to.hash,
+        replace: true,
+      };
+    }
+  }
+  return true;
+});

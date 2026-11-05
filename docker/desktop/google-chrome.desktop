@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Name=Google Chrome
+GenericName=Web Browser
+Comment=Access the Internet
+Exec=/usr/local/bin/bot-chrome %U
+Terminal=false
+X-MultipleArgs=false
+Type=Application
+Icon=google-chrome
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=Google-chrome

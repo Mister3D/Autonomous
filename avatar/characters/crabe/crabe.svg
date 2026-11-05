@@ -1,0 +1,97 @@
+<svg class="avatar-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1254 1254">
+  <g data-part="claw-l" class="part part-claw-l" data-src-name="claw-l">
+    <g data-part="arm-l" class="part part-arm-l" data-src-name="arm-l">
+      <path d="M126.2 562.5 C138.5 588.7 167.5 613.2 194.3 623.4 C204.6 627.3 289.8 646.8 294.2 643.4 C311.1 630.6 238.6 444.9 196.8 429.6 C124.4 403.1 105.5 518.1 126.2 562.5 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g data-part="pincer-l" class="part part-pincer-l" data-src-name="claw-l">
+      <path d="M230 170.4 C156.9 172.9 83.5 236.6 60 304 C19.1 421.3 102.5 531.8 228.9 498.4 C282.4 484.2 331.7 442.4 355.8 392.7 C394 314.1 339.5 186.3 300.9 252.7 C265.2 314.2 192.5 350.3 239.2 244.5 C254 210.9 309.5 167.7 230 170.4 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M155.2 287.8 C137.1 309.9 113.7 320.6 102.9 311.7 C92.2 302.9 98.2 277.9 116.4 255.8 C134.6 233.8 158 223.1 168.7 231.9 C179.4 240.8 173.4 265.8 155.2 287.8 Z" fill="#fcc0af"/>
+    </g>
+  </g>
+  <g data-part="claw-r" class="part part-claw-r" data-src-name="claw-r">
+    <g data-part="arm-r" class="part part-arm-r" data-src-name="arm-r">
+      <path d="M1126.8 562.5 C1147.5 518.1 1128.6 403.1 1056.2 429.6 C1014.4 444.9 941.9 630.6 958.8 643.4 C963.2 646.8 1048.4 627.3 1058.7 623.4 C1085.5 613.2 1114.5 588.7 1126.8 562.5 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g data-part="pincer-r" class="part part-pincer-r" data-src-name="claw-r">
+      <path d="M1023 170.4 C943.5 167.7 999 210.9 1013.8 244.5 C1060.5 350.3 987.8 314.2 952.1 252.7 C913.5 186.3 859 314.1 897.2 392.7 C921.3 442.4 970.6 484.2 1024.1 498.4 C1150.5 531.8 1233.9 421.3 1193 304 C1169.5 236.6 1096.1 172.9 1023 170.4 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1097.8 287.8 C1079.6 265.8 1073.6 240.8 1084.3 231.9 C1095 223.1 1118.4 233.8 1136.6 255.8 C1154.8 277.9 1160.8 302.9 1150.1 311.7 C1139.3 320.6 1115.9 309.9 1097.8 287.8 Z" fill="#fcc0af"/>
+    </g>
+  </g>
+  <g data-part="leg-front-l" class="part part-leg-front-l" data-src-name="leg-front-l">
+    <g>
+      <g data-part="leg-front-l-tip" class="part part-leg-front-l-tip" data-src-name="leg-front-l-tip">
+        <path d="M151.9 730 C111.4 767.6 65.4 777.7 50.7 842.7 C43.2 876.3 55.9 945.3 94.8 893 C114.2 866.9 208.7 777.5 214.5 759 C225.3 725.1 187.5 696.9 151.9 730 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <path d="M199.7 822 C229.7 823.1 339.5 799.7 349.1 768.2 C366.1 712.6 294.9 718.4 264 717 C233.9 715.6 101.1 706 138.9 767.6 C156.4 796.1 163.2 820.6 199.7 822 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g data-part="leg-back-l" class="part part-leg-back-l" data-src-name="leg-back-l">
+    <g>
+      <path d="M409 865 C367.9 913.7 308.5 974.7 333.9 1044.5 C358.3 1111.5 386.5 1048.8 404.9 1020.2 C431.4 979 449.2 942.4 467.5 896.9 C486.8 848.6 445.4 821.9 409 865 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g data-part="leg-back-r" class="part part-leg-back-r" data-src-name="leg-back-r">
+    <g>
+      <path d="M844 865 C807.6 821.9 766.2 848.6 785.5 896.9 C803.8 942.4 821.6 979 848.1 1020.2 C866.5 1048.8 894.7 1111.5 919.1 1044.5 C944.5 974.7 885.1 913.7 844 865 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g data-part="leg-front-r" class="part part-leg-front-r" data-src-name="leg-front-r">
+    <g>
+      <g data-part="leg-front-r-tip" class="part part-leg-front-r-tip" data-src-name="leg-front-r-tip">
+        <path d="M1101.1 730 C1065.5 696.9 1027.7 725.1 1038.5 759 C1044.3 777.5 1138.8 866.9 1158.2 893 C1197.1 945.3 1209.8 876.3 1202.3 842.7 C1187.6 777.7 1141.6 767.6 1101.1 730 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <path d="M1053.3 822 C1089.8 820.6 1096.6 796.1 1114.1 767.6 C1151.9 706 1019.1 715.6 989 717 C958.1 718.4 886.9 712.6 903.9 768.2 C913.5 799.7 1023.3 823.1 1053.3 822 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g data-part="avatar" class="part part-avatar" data-src-name="avatar">
+    <g data-part="body" class="part part-body" data-src-name="body">
+      <path data-id="body-fill" d="M357.7 493.2 C251.7 578.3 175.7 722 291.4 834.4 C321.6 863.7 348.4 892 383.1 916.2 C469.6 976.6 539.2 992.2 643.5 990 C793.7 986.9 869.7 927.5 970.8 825.2 C1041.6 753.6 1027.9 654.9 974.4 577.7 C910.4 485.2 816.5 429.9 706.6 410.4 C586.8 389 453.6 416.4 357.7 493.2 Z" fill="#fb9285"/>
+      <path data-id="belly" d="M536.6 764.5 C456.5 779.9 396.9 802.8 354.4 874 C305.5 869.5 414.1 937 427.5 944.4 C545.2 1009.1 727.6 1006.4 841.9 934.6 C850.6 929.1 956.2 854.5 895.9 872.5 C842.5 759.5 644.7 743.6 536.6 764.5 Z" fill="#fcdbc6"/>
+      <path d="M389 898 C430.9 860.8 467.7 851.4 521 841 C606.2 824.4 735.1 828.5 815 864 C837.9 874.2 844.4 879.5 863 896" fill="none" stroke="#f8c8ad" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M468 943 C509.6 913 562 906.4 612 905 C676.2 903.2 734 907.4 789 944" fill="none" stroke="#f8c8ad" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M530.7 479.8 C508.6 486.1 488.1 482.2 485 471.1 C481.8 460.1 497.2 446 519.2 439.7 C541.3 433.4 561.8 437.3 564.9 448.4 C568.1 459.5 552.7 473.5 530.7 479.8 Z" fill="#fcc0af"/>
+      <path d="M722.3 479.8 C700.3 473.5 684.9 459.5 688.1 448.4 C691.2 437.3 711.7 433.4 733.8 439.7 C755.8 446 771.2 460.1 768 471.1 C764.9 482.2 744.4 486.1 722.3 479.8 Z" fill="#fcc0af"/>
+      <path d="M428.3 528.9 C412 537.8 394.9 538 390.1 529.3 C385.4 520.6 394.8 506.3 411.2 497.4 C427.6 488.5 444.7 488.3 449.4 497 C454.1 505.7 444.7 520 428.3 528.9 Z" fill="#fcc0af"/>
+      <path d="M824.7 528.9 C808.3 520 798.9 505.7 803.6 497 C808.3 488.3 825.4 488.5 841.8 497.4 C858.2 506.3 867.6 520.6 862.9 529.3 C858.1 538 841 537.8 824.7 528.9 Z" fill="#fcc0af"/>
+      <path data-id="body-outline" d="M357.7 493.2 C251.7 578.3 175.7 722 291.4 834.4 C321.6 863.7 348.4 892 383.1 916.2 C469.6 976.6 539.2 992.2 643.5 990 C793.7 986.9 869.7 927.5 970.8 825.2 C1041.6 753.6 1027.9 654.9 974.4 577.7 C910.4 485.2 816.5 429.9 706.6 410.4 C586.8 389 453.6 416.4 357.7 493.2 Z" fill="none" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M386.2 742.9 C354.2 744.1 327.6 728.3 326.9 707.6 C326.1 686.9 351.4 669.1 383.3 667.9 C415.3 666.7 441.9 682.5 442.6 703.2 C443.4 723.9 418.1 741.7 386.2 742.9 Z" fill="#fb7c71"/>
+      <path d="M866.8 742.9 C834.9 741.7 809.6 723.9 810.4 703.2 C811.1 682.5 837.7 666.7 869.7 667.9 C901.6 669.1 926.9 686.9 926.1 707.6 C925.4 728.3 898.8 744.1 866.8 742.9 Z" fill="#fb7c71"/>
+      <path d="M375.3 695.7 C371.1 701.3 366.9 707 362.6 712.7" fill="none" stroke="#fcc0af" stroke-width="15.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M402.4 695.8 C398.8 701.6 395.1 707.4 391.5 713.2" fill="none" stroke="#fcc0af" stroke-width="15.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M861.3 693.7 C857.1 699.3 852.9 705 848.6 710.7" fill="none" stroke="#fcc0af" stroke-width="15.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M888.4 693.8 C884.8 699.6 881.1 705.4 877.5 711.2" fill="none" stroke="#fcc0af" stroke-width="15.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <g data-part="mouth" class="part part-mouth" data-src-name="mouth">
+        <path d="M633.5 641.8 C613.4 639.3 604.7 648.7 582.2 642.9 C544.2 633.1 566.2 655.8 570.8 673.6 C577.4 699.4 589.7 719.5 618 724.1 C653.7 730 674.7 704.6 682.7 672.9 C686.8 656.4 708.9 629.7 672.7 640.7 C653.5 646.6 652.1 644 633.5 641.8 Z" fill="#501f15"/>
+        <path d="M598.3 699.3 C628 729.4 674.1 691.1 660.3 673.9 C648 658.5 561.2 661.6 598.3 699.3 Z" fill="#fc9394"/>
+      </g>
+    </g>
+  </g>
+  <g data-part="leg-middle-l" class="part part-leg-middle-l" data-src-name="leg-middle-l">
+    <g>
+      <g data-part="leg-middle-l-tip" class="part part-leg-middle-l-tip" data-src-name="leg-middle-l-tip">
+        <path d="M227.5 850.8 C185.7 899.3 119.3 940.6 147 1017.9 C175.5 1097.4 201.4 1007.6 221.8 982 C247.6 949.7 248.3 931.8 271.1 897.8 C308.6 842 256.9 816.7 227.5 850.8 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <path d="M222.3 858.7 C198.3 880.5 208.9 875.9 225 894.6 C249.5 923.1 242.5 945.1 289.3 928.6 C317.9 918.4 358.9 889 338.6 854.6 C309.9 805.8 255.2 828.9 222.3 858.7 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g data-part="leg-middle-r" class="part part-leg-middle-r" data-src-name="leg-middle-r">
+    <g>
+      <g data-part="leg-middle-r-tip" class="part part-leg-middle-r-tip" data-src-name="leg-middle-r-tip">
+        <path d="M1025.5 850.8 C996.1 816.7 944.4 842 981.9 897.8 C1004.7 931.8 1005.4 949.7 1031.2 982 C1051.6 1007.6 1077.5 1097.4 1106 1017.9 C1133.7 940.6 1067.3 899.3 1025.5 850.8 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <path d="M1030.7 858.7 C997.8 828.9 943.1 805.8 914.4 854.6 C894.1 889 935.1 918.4 963.7 928.6 C1010.5 945.1 1003.5 923.1 1028 894.6 C1044.1 875.9 1054.7 880.5 1030.7 858.7 Z" fill="#fc8a7e" stroke="#501f15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g data-part="eyes-closed" class="part part-eyes-closed" data-src-name="eyes-closed">
+    <path data-id="eye-l-closed" d="M391.5 623.288 C405.6 600.388 412.8 587.988 441.5 586.788 C474.6 585.388 480.7 597.588 495.5 624.788" fill="none" stroke="#501f15" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <path data-id="eye-r-closed" d="M770.5 624.788 C785.3 597.588 791.4 585.388 824.5 586.788 C853.2 587.988 860.4 600.388 874.5 623.288" fill="none" stroke="#501f15" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g data-part="eyes-open" class="part part-eyes-open" data-src-name="eyes-open">
+    <path data-id="Œil_ouvert_droit" data-name="Œil ouvert droit" d="M445.502 552.504 C467.24 552.504 484.862 573.209 484.862 598.752 C484.862 624.295 467.24 645 445.502 645 C423.763 645 406.142 624.295 406.142 598.752 C406.142 573.209 423.763 552.504 445.502 552.504 Z" fill="#501f15"/>
+    <path data-id="Reflet_droit" data-name="Reflet droit" d="M458.294 568.248 C465.902 568.248 472.07 574.416 472.07 582.024 C472.07 589.632 465.902 595.8 458.294 595.8 C450.685 595.8 444.518 589.632 444.518 582.024 C444.518 574.416 450.685 568.248 458.294 568.248 Z" fill="#ffffff"/>
+    <path data-id="Petit_reflet_droit" data-name="Petit reflet droit" d="M431.726 611.544 C434.986 611.544 437.63 614.187 437.63 617.448 C437.63 620.709 434.986 623.352 431.726 623.352 C428.465 623.352 425.822 620.709 425.822 617.448 C425.822 614.187 428.465 611.544 431.726 611.544 Z" fill="#ffffff"/>
+    <path data-id="Œil_ouvert_gauche" data-name="Œil ouvert gauche" d="M824.498 552.504 C846.237 552.504 863.858 573.209 863.858 598.752 C863.858 624.295 846.237 645 824.498 645 C802.76 645 785.138 624.295 785.138 598.752 C785.138 573.209 802.76 552.504 824.498 552.504 Z" fill="#501f15"/>
+    <path data-id="Reflet_gauche" data-name="Reflet gauche" d="M837.29 568.248 C844.899 568.248 851.066 574.416 851.066 582.024 C851.066 589.632 844.899 595.8 837.29 595.8 C829.682 595.8 823.514 589.632 823.514 582.024 C823.514 574.416 829.682 568.248 837.29 568.248 Z" fill="#ffffff"/>
+    <path data-id="Petit_reflet_gauche" data-name="Petit reflet gauche" d="M810.722 611.544 C813.983 611.544 816.626 614.187 816.626 617.448 C816.626 620.709 813.983 623.352 810.722 623.352 C807.462 623.352 804.818 620.709 804.818 617.448 C804.818 614.187 807.462 611.544 810.722 611.544 Z" fill="#ffffff"/>
+  </g>
+  </svg>

@@ -1,0 +1,85 @@
+{
+  "id": "crabe",
+  "title": "Crabe",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "claw-r",
+      "leg-front-l",
+      "claw-l",
+      "leg-middle-r",
+      "pincer-r",
+      "leg-back-l",
+      "pincer-l",
+      "leg-front-r"
+    ],
+    "pivots": {
+      "absPivots": {
+        "claw-l": [
+          280,
+          620
+        ],
+        "claw-r": [
+          973,
+          620
+        ],
+        "pincer-l": [
+          205,
+          490
+        ],
+        "pincer-r": [
+          1048,
+          490
+        ],
+        "leg-front-l": [
+          340,
+          765
+        ],
+        "leg-front-r": [
+          913,
+          765
+        ],
+        "leg-front-l-tip": [
+          208,
+          765
+        ],
+        "leg-front-r-tip": [
+          1045,
+          765
+        ],
+        "leg-middle-l": [
+          335,
+          850
+        ],
+        "leg-middle-r": [
+          918,
+          850
+        ],
+        "leg-middle-l-tip": [
+          278,
+          862
+        ],
+        "leg-middle-r-tip": [
+          975,
+          862
+        ],
+        "leg-back-l": [
+          445,
+          860
+        ],
+        "leg-back-r": [
+          808,
+          860
+        ]
+      }
+    },
+    "tintFills": [
+      "#fc8a7e",
+      "#fb9285",
+      "#fcc0af"
+    ],
+    "tintKeep": "[data-part=\"mouth\"]"
+  },
+  "hasVectorcraft": true
+}

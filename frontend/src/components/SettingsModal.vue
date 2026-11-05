@@ -1,0 +1,753 @@
+<template>
+  <div class="settings-page">
+    <header class="settings-page-head">
+      <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M15 6 9 12l6 6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <h1>{{ t("settings.title") }}</h1>
+    </header>
+    <div class="settings-layout">
+      <nav class="settings-nav" :aria-label="t('settings.title')">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          :class="{ active: section === tab.id }"
+          :aria-current="section === tab.id ? 'page' : undefined"
+          @click="openSection(tab.id)"
+        >
+          <svg v-if="tab.id === 'agent'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4.5" y="5" width="15" height="14" rx="2" />
+            <path d="M8 10.2 10.2 12 8 13.8M12.2 14.2h3.6" />
+          </svg>
+          <svg v-else-if="tab.id === 'vault'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6" y="10.2" width="12" height="8.3" rx="1.6" />
+            <path d="M9 10.2V8.2a3 3 0 0 1 6 0v2" />
+          </svg>
+          <svg v-else-if="tab.id === 'llm'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+          </svg>
+          <svg v-else-if="tab.id === 'grounding'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="6" />
+            <path d="M12 3v5M12 16v5M3 12h5M16 12h5" />
+          </svg>
+          <svg v-else-if="tab.id === 'memory'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.5 7h11M6.5 12h11M6.5 17h7" />
+          </svg>
+          <svg v-else class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="5" width="16" height="11" rx="1.8" />
+            <path d="M9 19.5h6M12 16v3.5" />
+          </svg>
+          <span>{{ t(tab.label) }}</span>
+        </button>
+      </nav>
+      <div class="settings-main">
+      <LlmSettings v-if="section === 'llm'" />
+      <section v-if="section === 'llm'" class="settings-block">
+        <h3>{{ t("guard.limitsTitle") }}</h3>
+        <label class="settings-field">
+          <span>{{ t("guard.maxImages") }}</span>
+          <input
+            v-model.number="guard.maxImages"
+            type="number"
+            min="1"
+            max="8"
+            step="1"
+            @change="flushGuard"
+          />
+          <small>{{ t("guard.maxImagesHint") }}</small>
+        </label>
+        <p v-if="guardError" class="vault-error">{{ guardError }}</p>
+      </section>
+      <GroundingSettings v-if="section === 'grounding'" />
+      <section v-if="section === 'grounding'" class="settings-block">
+        <h3>{{ t("guard.limitsTitle") }}</h3>
+        <label class="settings-field">
+          <span>{{ t("guard.groundingLoops") }}</span>
+          <input
+            v-model.number="guard.groundingLoops"
+            type="number"
+            min="1"
+            max="8"
+            step="1"
+            @change="flushGuard"
+          />
+          <small>{{ t("guard.groundingLoopsHint") }}</small>
+        </label>
+        <p v-if="guardError" class="vault-error">{{ guardError }}</p>
+      </section>
+      <section v-if="section === 'agent'" class="settings-block">
+        <h3>{{ t("pi.title") }}</h3>
+        <p v-if="loading" class="hint">…</p>
+        <div v-else class="info-row">
+          <span>
+            <strong>{{ t("pi.version") }}</strong>
+            <small>{{ status?.version || "—" }}</small>
+          </span>
+        </div>
+      </section>
+
+      <section v-if="section === 'agent'" class="settings-block">
+        <h3>{{ t("settings.timezone") }}</h3>
+        <p class="hint">{{ t("settings.timezoneHint") }}</p>
+        <div class="settings-field">
+          <div class="settings-tz">
+            <input
+              v-model="tzQuery"
+              type="text"
+              :placeholder="t('settings.timezonePlaceholder')"
+              autocomplete="off"
+              spellcheck="false"
+              role="combobox"
+              aria-autocomplete="list"
+              :aria-expanded="tzOpen && timezoneMatches.length > 0"
+              @focus="onTzFocus"
+              @input="onTzInput"
+              @keydown="onTzKey"
+              @blur="onTzBlur"
+            />
+            <ul v-if="tzOpen && timezoneMatches.length" class="tz-suggest" role="listbox">
+              <li v-for="(zone, i) in timezoneMatches" :key="zone">
+                <button
+                  type="button"
+                  :class="{ active: i === tzActive }"
+                  @mousedown.prevent="pickTimezone(zone)"
+                >
+                  {{ zone }}
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p v-if="tzError" class="vault-error">{{ tzError }}</p>
+      </section>
+
+
+      <section v-if="section === 'agent'" class="settings-block">
+        <h3>{{ t("guard.title") }}</h3>
+        <p class="hint">{{ t("guard.hint") }}</p>
+        <label class="settings-field">
+          <span>{{ t("guard.reviewEvery") }}</span>
+          <input
+            v-model.number="guard.reviewEvery"
+            type="number"
+            min="0"
+            max="100000"
+            step="1"
+            @change="flushGuard"
+          />
+          <small>{{ t("guard.reviewEveryHint") }}</small>
+        </label>
+        <label class="settings-field">
+          <span>{{ t("guard.maxActions") }}</span>
+          <input
+            v-model.number="guard.maxActions"
+            type="number"
+            min="1"
+            max="100000"
+            step="1"
+            @change="flushGuard"
+          />
+          <small>{{ t("guard.maxActionsHint") }}</small>
+        </label>
+        <p v-if="guardError" class="vault-error">{{ guardError }}</p>
+      </section>
+
+      <section v-if="section === 'vault'" class="settings-block">
+        <h3>{{ t("vault.title") }}</h3>
+        <p class="hint">{{ t("vault.settingsHint") }}</p>
+        <p v-if="vaultError" class="vault-error">{{ vaultError }}</p>
+        <ul v-if="entries.length" class="settings-list">
+          <li v-for="e in entries" :key="e.id">
+            <div>
+              <strong>{{ e.label }}</strong>
+              <small>{{ e.kind }}<template v-if="e.origin"> · {{ e.origin }}</template></small>
+            </div>
+            <button
+              class="vault-trash"
+              type="button"
+              :title="t('vault.delete')"
+              :aria-label="t('vault.delete')"
+              @click="removeEntry(e)"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path d="M5 7.5h14" />
+                <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+                <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+              </svg>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="hint">{{ t("vault.empty") }}</p>
+      </section>
+
+      <section v-if="section === 'memory'" class="settings-block">
+        <h3>{{ t("memory.title") }}</h3>
+        <p class="hint">{{ t("memory.settingsHint") }}</p>
+        <p v-if="memError" class="vault-error">{{ memError }}</p>
+        <ul v-if="memEntries.length" class="settings-list">
+          <li v-for="e in memEntries" :key="e.id">
+            <div>
+              <strong>{{ e.label }}</strong>
+              <small>
+                <code>{{ e.key }}</code>
+                · {{ e.tier === "core" ? t("memory.tierCore") : t("memory.tierBrowse") }}
+                · {{ e.value }}
+              </small>
+            </div>
+            <button
+              class="vault-trash"
+              type="button"
+              :title="t('memory.delete')"
+              :aria-label="t('memory.delete')"
+              @click="removeMemory(e)"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path d="M5 7.5h14" />
+                <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+                <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+              </svg>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="hint">{{ t("memory.empty") }}</p>
+      </section>
+
+      <section v-if="section === 'companions'" class="settings-block">
+        <h3>{{ t("companion.title") }}</h3>
+        <p v-if="needCompanion" class="companion-need">{{ t("companion.needOne") }}</p>
+        <p class="hint justified">{{ t("companion.hint") }}</p>
+        <p class="hint justified companion-responsibility">{{ t("companion.responsibility") }}</p>
+        <p v-if="deviceError" class="vault-error">{{ deviceError }}</p>
+        <ul v-if="devicePending.length" class="settings-list">
+          <li v-for="p in devicePending" :key="p.id">
+            <div>
+              <strong class="mono">{{ p.user_code }}</strong>
+              <small>{{ p.name }} · {{ platformLabel(p.platform) }} · {{ t("companion.pending") }}</small>
+            </div>
+            <span class="settings-row-side">
+              <button class="btn primary" type="button" @click="approveDevice(p)">
+                {{ t("companion.approve") }}
+              </button>
+              <button class="btn" type="button" @click="denyDevice(p)">
+                {{ t("companion.deny") }}
+              </button>
+            </span>
+          </li>
+        </ul>
+        <ul v-if="deviceRows.length" class="settings-list">
+          <li v-for="d in deviceRows" :key="d.id">
+            <div class="settings-identity">
+              <strong>{{ d.name }}</strong>
+              <span v-if="d.platform" class="settings-platform">{{ platformLabel(d.platform) }}</span>
+            </div>
+            <span class="settings-row-side">
+              <label class="settings-notify">
+                <span>{{ t("companion.notify") }}</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  :checked="!!d.notify"
+                  :aria-label="t('companion.notify')"
+                  @change="onDeviceNotify(d, $event)"
+                />
+              </label>
+              <span class="settings-status" :class="{ off: !d.online }">
+                {{ d.online ? t("companion.online") : t("companion.offline") }}
+              </span>
+              <button
+                class="settings-orb companion-revoke"
+                type="button"
+                :title="t('companion.revoke')"
+                :aria-label="t('companion.revoke')"
+                @click="revokeDevice(d)"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path d="M5 7.5h14" />
+                  <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+                  <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+                </svg>
+              </button>
+            </span>
+          </li>
+        </ul>
+        <div v-if="deviceRows.length" class="companion-notify-actions">
+          <button class="btn" type="button" :disabled="notifyTesting" @click="testNotify">
+            {{ t("companion.testNotify") }}
+          </button>
+          <p v-if="notifyNote" class="hint">{{ notifyNote }}</p>
+        </div>
+        <p v-else-if="devicesReady && !devicePending.length" class="hint">{{ t("companion.empty") }}</p>
+        <div class="companion-download">
+          <h4>{{ t("companion.downloadTitle") }}</h4>
+          <p class="hint justified">{{ t("companion.downloadHint") }}</p>
+          <p v-if="buildError" class="vault-error">{{ buildError }}</p>
+          <template v-if="companionBuild">
+            <p class="hint">
+              {{ t("companion.version") }} {{ companionBuild.version || "?" }} ·
+              {{ t("companion.buildStatus") }} {{ t("companion.state_" + companionBuild.state) }}
+            </p>
+            <ul v-if="companionBuild.artifacts.length" class="settings-list">
+              <li v-for="a in companionBuild.artifacts" :key="a.target">
+                <span>
+                  <strong>{{ platformLabel(a.platform) }}</strong>
+                  <small> · {{ a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
+                </span>
+                <a class="btn" :href="a.url" download>{{ t("companion.download") }}</a>
+              </li>
+            </ul>
+            <template v-if="companionBuild.state === 'no_toolchain'">
+              <p class="hint justified">{{ t("companion.noToolchain") }}</p>
+              <pre class="companion-cmd">{{ companionBuild.rustup_hint }}</pre>
+            </template>
+            <p v-for="n in companionBuild.notes" :key="n" class="hint">{{ n }}</p>
+            <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
+            <button
+              v-if="companionBuild.toolchain"
+              class="btn"
+              type="button"
+              :disabled="companionBuild.state === 'building'"
+              @click="rebuildCompanion"
+            >
+              {{ t("companion.rebuild") }}
+            </button>
+          </template>
+        </div>
+      </section>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import { api } from "../api";
+import { botPath } from "../router";
+import { currentBotObj, state } from "../store";
+import LlmSettings from "./LlmSettings.vue";
+import GroundingSettings from "./GroundingSettings.vue";
+
+function platformLabel(raw) {
+  const key = String(raw || "").trim().toLowerCase();
+  if (key === "windows") return "Windows";
+  if (key === "linux") return "Linux";
+  if (key === "macos" || key === "darwin" || key === "mac") return "macOS";
+  if (!key) return "";
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+const SECTIONS = ["agent", "llm", "grounding", "vault", "memory", "companions"];
+const DEFAULT_TZ = "Europe/Paris";
+const tabs = [
+  { id: "agent", label: "settings.tabAgent" },
+  { id: "llm", label: "settings.tabLlm" },
+  { id: "grounding", label: "settings.tabGrounding" },
+  { id: "vault", label: "vault.title" },
+  { id: "memory", label: "memory.title" },
+  { id: "companions", label: "companion.title" },
+];
+
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const needCompanion = computed(() => route.query.besoin === "connexion");
+const section = computed(() => {
+  const raw = String(route.params.section || "agent");
+  return SECTIONS.includes(raw) ? raw : "agent";
+});
+
+function openSection(id) {
+  router.replace({ name: "settings", params: { section: id } });
+}
+
+function leave() {
+  const back = sessionStorage.getItem("autonomous.settingsReturn") || "";
+  if (back.startsWith("/") && !back.startsWith("/settings")) {
+    router.push(back);
+    return;
+  }
+  const bot = currentBotObj();
+  if (bot?.name) router.push(botPath(bot.name, state.tab || "discussion"));
+  else router.push("/");
+}
+
+watch(
+  () => route.params.section,
+  (raw) => {
+    if (raw && !SECTIONS.includes(String(raw))) {
+      router.replace({ name: "settings", params: { section: "agent" } });
+    }
+  },
+  { immediate: true },
+);
+const status = ref(null);
+const loading = ref(true);
+const entries = ref([]);
+const vaultError = ref("");
+const devicePending = ref([]);
+const deviceRows = ref([]);
+const deviceError = ref("");
+const notifyNote = ref("");
+const notifyTesting = ref(false);
+const devicesReady = ref(false);
+let deviceTimer = 0;
+const memEntries = ref([]);
+const memError = ref("");
+const guardError = ref("");
+const guardReady = ref(false);
+let guardTimer = 0;
+let guardSaveGen = 0;
+let guardLast = "";
+const ALL_ZONES =
+  typeof Intl !== "undefined" && typeof Intl.supportedValuesOf === "function"
+    ? Intl.supportedValuesOf("timeZone")
+    : ["UTC", "Europe/Paris"];
+const timezone = ref("");
+const tzQuery = ref("");
+const tzOpen = ref(false);
+const tzActive = ref(0);
+const tzDirty = ref(false);
+const tzError = ref("");
+
+function tzScore(zone, q) {
+  const full = zone.toLowerCase();
+  const city = zone.split("/").pop().toLowerCase().replace(/_/g, " ");
+  const cityCompact = city.replace(/ /g, "");
+  const qCompact = q.replace(/[\s_]/g, "");
+  if (city === q || full === q) return 0;
+  if (city.startsWith(q) || cityCompact.startsWith(qCompact)) return 1;
+  if (full.startsWith(q)) return 2;
+  if (city.includes(q) || cityCompact.includes(qCompact)) return 3;
+  if (full.includes(q)) return 4;
+  return 9;
+}
+
+const timezoneMatches = computed(() => {
+  const q = tzQuery.value.trim().toLowerCase();
+  if (!q) return [];
+  return ALL_ZONES
+    .map((zone) => ({ zone, score: tzScore(zone, q) }))
+    .filter((row) => row.score < 9)
+    .sort((a, b) => a.score - b.score || a.zone.localeCompare(b.zone))
+    .slice(0, 8)
+    .map((row) => row.zone);
+});
+
+watch(timezoneMatches, () => {
+  tzActive.value = 0;
+});
+const guard = reactive({
+  reviewEvery: 100,
+  maxActions: 1000,
+  groundingLoops: 2,
+  maxImages: 2,
+});
+watch(
+  () => [guard.reviewEvery, guard.maxActions, guard.groundingLoops, guard.maxImages],
+  () => {
+    if (!guardReady.value) return;
+    window.clearTimeout(guardTimer);
+    guardTimer = window.setTimeout(saveGuard, 350);
+  },
+);
+async function loadTimezone() {
+  const s = await api.settings();
+  const stored = String(s.timezone || "").trim();
+  const current = stored || DEFAULT_TZ;
+  timezone.value = current;
+  if (!tzDirty.value) tzQuery.value = current;
+  if (!stored) {
+    await api.putSettings({ timezone: DEFAULT_TZ });
+    state.userTimezone = DEFAULT_TZ;
+  }
+}
+
+function onTzFocus(ev) {
+  tzOpen.value = true;
+  tzDirty.value = true;
+  ev.target.select();
+}
+
+function onTzInput() {
+  tzDirty.value = true;
+  tzOpen.value = true;
+}
+
+function onTzKey(ev) {
+  if (ev.key === "ArrowDown") {
+    ev.preventDefault();
+    tzOpen.value = true;
+    const last = Math.max(timezoneMatches.value.length - 1, 0);
+    tzActive.value = Math.min(tzActive.value + 1, last);
+  } else if (ev.key === "ArrowUp") {
+    ev.preventDefault();
+    tzActive.value = Math.max(tzActive.value - 1, 0);
+  } else if (ev.key === "Enter") {
+    ev.preventDefault();
+    const zone = timezoneMatches.value[tzActive.value];
+    if (zone) pickTimezone(zone);
+  } else if (ev.key === "Escape") {
+    tzOpen.value = false;
+    tzQuery.value = timezone.value;
+  }
+}
+
+function onTzBlur() {
+  tzOpen.value = false;
+  const only = timezoneMatches.value.length === 1 ? timezoneMatches.value[0] : "";
+  const q = tzQuery.value.trim().toLowerCase();
+  const exact = ALL_ZONES.find((zone) => zone.toLowerCase() === q);
+  if (only) pickTimezone(only);
+  else if (exact) pickTimezone(exact);
+  else tzQuery.value = timezone.value;
+}
+
+async function pickTimezone(zone) {
+  if (!zone) return;
+  tzOpen.value = false;
+  tzQuery.value = zone;
+  tzError.value = "";
+  if (zone === timezone.value) return;
+  const prev = timezone.value;
+  timezone.value = zone;
+  try {
+    await api.putSettings({ timezone: zone });
+    state.userTimezone = zone;
+  } catch (e) {
+    timezone.value = prev;
+    tzQuery.value = prev;
+    tzError.value = e.message;
+  }
+}
+
+function guardBody() {
+  const values = [guard.reviewEvery, guard.maxActions, guard.groundingLoops, guard.maxImages];
+  if (values.some((n) => typeof n !== "number" || !Number.isFinite(n))) return null;
+  return {
+    "guard.review_every": Math.max(0, Math.min(100000, Math.round(guard.reviewEvery))),
+    "guard.max_actions": Math.max(1, Math.min(100000, Math.round(guard.maxActions))),
+    "grounding.max_loops": Math.max(1, Math.min(8, Math.round(guard.groundingLoops))),
+    "guard.max_images_per_prompt": Math.max(1, Math.min(8, Math.round(guard.maxImages))),
+  };
+}
+
+function applyGuardBody(body) {
+  guard.reviewEvery = body["guard.review_every"];
+  guard.maxActions = body["guard.max_actions"];
+  guard.groundingLoops = body["grounding.max_loops"];
+  guard.maxImages = body["guard.max_images_per_prompt"];
+}
+
+async function loadGuard() {
+  guardReady.value = false;
+  const s = await api.settings();
+  const rev = s["guard.review_every"];
+  const maxA = s["guard.max_actions"];
+  const loops = s["grounding.max_loops"];
+  const maxImg = s["guard.max_images_per_prompt"];
+  if (rev != null) guard.reviewEvery = Number(rev);
+  if (maxA != null) guard.maxActions = Number(maxA);
+  if (loops != null) guard.groundingLoops = Number(loops);
+  if (maxImg != null) guard.maxImages = Number(maxImg);
+  guardLast = JSON.stringify(guardBody());
+  guardReady.value = true;
+}
+
+async function saveGuard() {
+  const body = guardBody();
+  if (!body) return;
+  const key = JSON.stringify(body);
+  if (key === guardLast) return;
+  const gen = ++guardSaveGen;
+  guardError.value = "";
+  try {
+    await api.putSettings(body);
+    if (gen !== guardSaveGen) return;
+    guardLast = key;
+    if (key !== JSON.stringify(guardBody())) applyGuardBody(body);
+  } catch (e) {
+    if (gen !== guardSaveGen) return;
+    guardError.value = e.message;
+  }
+}
+
+function flushGuard() {
+  window.clearTimeout(guardTimer);
+  const body = guardBody();
+  if (!body) {
+    if (guardLast) applyGuardBody(JSON.parse(guardLast));
+    return;
+  }
+  saveGuard();
+}
+
+async function loadVault() {
+  entries.value = await api.vaultEntries();
+}
+
+async function removeEntry(e) {
+  if (!confirm(t("vault.confirmDelete", { label: e.label }))) return;
+  try {
+    await api.deleteVaultEntry(e.id);
+    await loadVault();
+  } catch (err) {
+    vaultError.value = err.message;
+  }
+}
+
+async function loadMemory() {
+  memEntries.value = await api.memoryEntries();
+}
+
+async function removeMemory(e) {
+  if (!confirm(t("memory.confirmDelete", { label: e.label || e.key }))) return;
+  try {
+    await api.deleteMemoryEntry(e.key);
+    await loadMemory();
+  } catch (err) {
+    memError.value = err.message;
+  }
+}
+
+const companionBuild = ref(null);
+const buildError = ref("");
+
+async function loadCompanionBuild() {
+  try {
+    companionBuild.value = await api.companionBuild();
+    buildError.value = "";
+  } catch (e) {
+    buildError.value = e.message;
+  }
+}
+
+async function rebuildCompanion() {
+  try {
+    companionBuild.value = await api.rebuildCompanion();
+  } catch (e) {
+    buildError.value = e.message;
+  }
+}
+
+async function loadDevices() {
+  const data = await api.listDevices();
+  devicePending.value = data.pending || [];
+  deviceRows.value = data.devices || [];
+  devicesReady.value = true;
+}
+
+async function approveDevice(row) {
+  deviceError.value = "";
+  try {
+    await api.approveDevice(row.id);
+    await loadDevices();
+  } catch (err) {
+    deviceError.value = err.message;
+  }
+}
+
+async function denyDevice(row) {
+  deviceError.value = "";
+  try {
+    await api.denyDevice(row.id);
+    await loadDevices();
+  } catch (err) {
+    deviceError.value = err.message;
+  }
+}
+
+async function onDeviceNotify(row, ev) {
+  const next = ev.target.checked;
+  const previous = !!row.notify;
+  notifyNote.value = "";
+  deviceError.value = "";
+  row.notify = next;
+  try {
+    await api.patchDevice(row.id, { notify: next });
+  } catch (err) {
+    row.notify = previous;
+    ev.target.checked = previous;
+    deviceError.value = err.message;
+  }
+}
+
+async function testNotify() {
+  deviceError.value = "";
+  notifyNote.value = "";
+  notifyTesting.value = true;
+  try {
+    await api.notifyDevices({
+      title: t("companion.testNotifyTitle"),
+      body: t("companion.testNotifyBody"),
+    });
+    notifyNote.value = t("companion.testNotifyOk");
+  } catch (err) {
+    deviceError.value = err.message;
+  } finally {
+    notifyTesting.value = false;
+  }
+}
+
+async function revokeDevice(row) {
+  if (!confirm(t("companion.confirmRevoke", { name: row.name }))) return;
+  deviceError.value = "";
+  try {
+    await api.revokeDevice(row.id);
+    await loadDevices();
+  } catch (err) {
+    deviceError.value = err.message;
+  }
+}
+
+onUnmounted(() => {
+  window.clearTimeout(guardTimer);
+  window.clearInterval(deviceTimer);
+});
+
+onMounted(async () => {
+  loadTimezone().catch((e) => {
+    tzError.value = e.message;
+  });
+  try {
+    status.value = await api.piStatus();
+  } catch (e) {
+    status.value = { ready: false, reason: "error", doc_url: "https://pi.dev/docs/latest/models" };
+  } finally {
+    loading.value = false;
+  }
+  try {
+    await loadGuard();
+  } catch (e) {
+    guardError.value = e.message;
+  }
+  try {
+    await loadVault();
+  } catch (e) {
+    vaultError.value = e.message;
+  }
+  try {
+    await loadMemory();
+  } catch (e) {
+    memError.value = e.message;
+  }
+  try {
+    await loadDevices();
+  } catch (e) {
+    deviceError.value = e.message;
+  }
+  loadCompanionBuild();
+  deviceTimer = window.setInterval(() => {
+    loadDevices().catch((e) => {
+      deviceError.value = e.message;
+    });
+    if (section.value === "companions" && companionBuild.value?.state === "building") {
+      loadCompanionBuild();
+    }
+  }, 3000);
+});
+</script>

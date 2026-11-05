@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Fire an Autonomous inbound webhook from inside the desk VM.
+# Usage:
+#   autonomous-hook <token> [json-or-text]
+#   echo '{"ok":true}' | autonomous-hook <token>
+# Env (injected by Autonomous):
+#   AUTONOMOUS_HOOKS_BASE  e.g. http://host.docker.internal:8787/api/v1/hooks
+set -euo pipefail
+
+token="${1:-}"
+if [[ -z "$token" || "$token" == "-h" || "$token" == "--help" ]]; then
+  echo "Usage: autonomous-hook <token> [payload]" >&2
+  echo "  payload: JSON string, or omit to read stdin (empty = no body)." >&2
+  exit 1
+fi
+shift || true
+
+if [[ -z "${AUTONOMOUS_HOOKS_BASE:-}" && -f /home/autonomous/shared/.autonomous/host-api.env ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  # shellcheck source=/dev/null
+  . /home/autonomous/shared/.autonomous/host-api.env
+  set +a
+fi
+
+base="${AUTONOMOUS_HOOKS_BASE:-}"
+if [[ -z "$base" ]]; then
+  echo "autonomous-hook: AUTONOMOUS_HOOKS_BASE unset (desk needs Internet / recreate)." >&2
+  exit 2
+fi
+
+url="${base%/}/${token}"
+payload=""
+if [[ $# -gt 0 ]]; then
+  payload="$*"
+elif [[ ! -t 0 ]]; then
+  payload="$(cat || true)"
+fi
+
+if [[ -n "$payload" ]]; then
+  exec curl -sS -f -X POST "$url" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    --data-binary "$payload"
+else
+  exec curl -sS -f -X POST "$url" -H "Accept: application/json"
+fi

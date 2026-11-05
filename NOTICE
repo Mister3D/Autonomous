@@ -1,0 +1,18 @@
+Autonomous
+Copyright (C) 2026 Mister3D and Autonomous contributors
+
+This product is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0-only). See the LICENSE file.
+
+Third-party components bundled in this repository
+=================================================
+
+DejaVu fonts (autonomous/assets/fonts/)
+  Source: https://dejavu-fonts.github.io/
+  License: Bitstream Vera (see autonomous/assets/fonts/LICENSE)
+  DejaVu changes are in the public domain.
+
+External runtime dependencies (not bundled; install separately) keep their
+own licenses — notably Docker Engine, Node.js, the Pi coding agent, and any
+LLM / UI-TARS models you configure. Their terms are independent of this
+project's AGPL-3.0 license.

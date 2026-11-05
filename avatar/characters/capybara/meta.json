@@ -1,0 +1,27 @@
+{
+  "id": "capybara",
+  "title": "Capybara",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "ear-l",
+      "paw-r",
+      "ear-r",
+      "paw-l"
+    ],
+    "pivots": {
+      "ear-r": "80% 85%",
+      "ear-l": "15% 88%",
+      "paw-l": "50% 3%",
+      "paw-r": "50% 3%"
+    },
+    "tintFills": [
+      "#e49f6c",
+      "#ba7051",
+      "#c07646"
+    ],
+    "tintKeep": "[data-id^=\"Joue\"],[data-id=\"Langue\"]"
+  },
+  "hasVectorcraft": true
+}

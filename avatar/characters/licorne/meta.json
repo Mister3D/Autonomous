@@ -1,0 +1,51 @@
+{
+  "id": "licorne",
+  "title": "Licorne",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "tail",
+      "ear-l",
+      "head",
+      "leg-front-r",
+      "leg-back-l",
+      "leg-front-l"
+    ],
+    "pivots": {
+      "tail": "5% 20%",
+      "ear-l": "40% 95%",
+      "absPivots": {
+        "head": [
+          530,
+          730
+        ],
+        "mane": [
+          530,
+          730
+        ],
+        "mane-face": [
+          530,
+          730
+        ]
+      },
+      "leg-front-l": "50% 5%",
+      "leg-front-r": "50% 5%",
+      "leg-back-l": "50% 5%"
+    },
+    "mono": [
+      "mane",
+      "mane-face",
+      "forelock",
+      "tail",
+      "neck"
+    ],
+    "hoofParts": [
+      "leg-front-l",
+      "leg-front-r",
+      "leg-back-l",
+      "leg-back-r"
+    ]
+  },
+  "hasVectorcraft": true
+}

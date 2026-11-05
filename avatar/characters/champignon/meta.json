@@ -1,0 +1,55 @@
+{
+  "id": "champignon",
+  "title": "Champignon",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "cap",
+      "arm-l",
+      "arm-r",
+      "foot-r",
+      "cap",
+      "foot-l"
+    ],
+    "links": {
+      "cap": [
+        "cap-under"
+      ]
+    },
+    "pivots": {
+      "absPivots": {
+        "cap": [
+          626,
+          700
+        ],
+        "cap-under": [
+          626,
+          700
+        ],
+        "arm-r": [
+          497,
+          915
+        ],
+        "arm-l": [
+          749,
+          915
+        ],
+        "foot-r": [
+          487,
+          1140
+        ],
+        "foot-l": [
+          760,
+          1140
+        ]
+      }
+    },
+    "tintFills": [
+      "#faa6b2",
+      "#fbcfd6"
+    ],
+    "tintKeep": "[data-part=\"body\"],[data-part=\"cap-under\"]"
+  },
+  "hasVectorcraft": true
+}

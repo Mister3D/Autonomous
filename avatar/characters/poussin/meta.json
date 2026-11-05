@@ -1,0 +1,23 @@
+{
+  "id": "poussin",
+  "title": "Poussin",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "tuft",
+      "wing-l",
+      "foot-r",
+      "wing-r",
+      "foot-l"
+    ],
+    "pivots": {
+      "wing-l": "90% 12%",
+      "wing-r": "10% 12%",
+      "foot-l": "50% 15%",
+      "foot-r": "50% 15%",
+      "tuft": "45% 100%"
+    }
+  },
+  "hasVectorcraft": true
+}

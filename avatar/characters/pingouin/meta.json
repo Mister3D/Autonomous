@@ -1,0 +1,21 @@
+{
+  "id": "pingouin",
+  "title": "Pingouin",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "wing-l",
+      "foot-r",
+      "wing-r",
+      "foot-l"
+    ],
+    "pivots": {
+      "wing-l": "88% 12%",
+      "wing-r": "12% 12%",
+      "foot-l": "50% 15%",
+      "foot-r": "50% 15%"
+    }
+  },
+  "hasVectorcraft": true
+}

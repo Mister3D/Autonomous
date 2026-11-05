@@ -1,0 +1,21 @@
+{
+  "PasswordManagerEnabled": false,
+  "PasswordLeakDetectionEnabled": false,
+  "PasswordSharingEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "DownloadDirectory": "/home/autonomous/shared",
+  "PromptForDownloadLocation": false,
+  "DownloadRestrictions": 0,
+  "DefaultBrowserSettingEnabled": false,
+  "TranslateEnabled": false,
+  "WelcomePageOnOSUpgradeEnabled": false,
+  "PromotionalTabsEnabled": false,
+  "BookmarkBarEnabled": false,
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "MetricsReportingEnabled": false,
+  "PrivacySandboxPromptEnabled": false,
+  "PrivacySandboxAdTopicsEnabled": false,
+  "PrivacySandboxSiteEnabledAdsEnabled": false,
+  "PrivacySandboxAdMeasurementEnabled": false
+}

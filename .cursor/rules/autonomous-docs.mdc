@@ -1,0 +1,15 @@
+---
+description: Point d’entrée docs/README.md — lire puis documenter
+alwaysApply: true
+---
+
+# Docs Autonomous
+
+Si l’humain dit (ou équivalent) « lis le readme dans docs » :
+
+1. Ouvre **`docs/README.md` en premier** et suis ses instructions.
+2. Puis `docs/AGENT.md` + fiches `docs/features/` utiles.
+
+Si des **tâches ont déjà été données** dans le chat avant cette lecture : considère que tu as **du retard de documentation** — rattrape les fiches liées avant d’empiler du code au feeling.
+
+Après tout changement de comportement : mettre à jour `docs/features/` (voir `docs/README.md`).

@@ -1,0 +1,25 @@
+{
+  "id": "ours",
+  "title": "Ours",
+  "ready": true,
+  "defaultColor": 0,
+  "rig": {
+    "twitch": [
+      "ear-l",
+      "paw-r",
+      "ear-r",
+      "paw-l",
+      "leg-back-l",
+      "leg-back-r"
+    ],
+    "pivots": {
+      "ear-l": "25% 90%",
+      "ear-r": "75% 90%",
+      "paw-l": "80% 18%",
+      "paw-r": "20% 18%",
+      "leg-back-l": "40% 10%",
+      "leg-back-r": "60% 10%"
+    }
+  },
+  "hasVectorcraft": true
+}

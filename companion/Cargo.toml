@@ -1,0 +1,27 @@
+[package]
+name = "autonomous-companion"
+version = "0.1.0"
+edition = "2021"
+description = "Autonomous companion: pair a PC, carry bot internet, expose local MCP servers"
+license = "AGPL-3.0-only"
+
+[features]
+default = ["gui"]
+gui = ["dep:eframe", "dep:tray-icon", "dep:notify-rust"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "process", "io-util", "sync"] }
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+hickory-resolver = { version = "0.24", features = ["system-config"] }
+eframe = { version = "0.31", optional = true }
+tray-icon = { version = "0.19", optional = true }
+notify-rust = { version = "4", optional = true }
+
+[[bin]]
+name = "autonomous-companion"
+path = "src/main.rs"

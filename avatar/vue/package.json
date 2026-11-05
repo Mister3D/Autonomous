@@ -1,0 +1,25 @@
+{
+  "name": "@autonomous/companion-avatar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Animated SVG companion avatars (work / notify / await / idle + eye tracking)",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./styles.css": "./styles.css",
+    "./CompanionAvatar.vue": "./CompanionAvatar.vue",
+    "./engine.js": "./engine.js",
+    "./catalog.js": "./catalog.js",
+    "./swatches.js": "./swatches.js"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  },
+  "files": [
+    "*.js",
+    "*.vue",
+    "*.css",
+    "README.md"
+  ]
+}

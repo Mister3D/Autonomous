@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autonomous"
+version = "0.1.0"
+description = "Autonomous bot hub — Vue + Flask + SQLite + Docker desktop VMs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-only" }
+authors = [{ name = "Mister3D" }]
+keywords = ["bots", "agents", "docker", "flask", "vue"]
+classifiers = [
+  "License :: OSI Approved :: GNU Affero General Public License v3",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  "flask>=3.0",
+  "flask-cors>=4.0",
+  "flask-smorest>=0.44",
+  "marshmallow>=3.21",
+  "docker>=7.0",
+  "gunicorn>=22.0",
+  "werkzeug>=3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+autonomous = "autonomous.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["autonomous*"]
+
+[tool.setuptools.package-data]
+autonomous = [
+  "static/**/*",
+  "assets/fonts/*.ttf",
+  "locales/*.json",
+  "migrations/*.sql",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "llm: calls the real Pi model; skipped unless AUTONOMOUS_LLM_TESTS=1",
+]
