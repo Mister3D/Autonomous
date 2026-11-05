@@ -78,6 +78,42 @@ def test_client_ip_trusts_xff_when_enabled(app, monkeypatch):
         assert client_ip(request) == "9.9.9.9"
 
 
+def test_pair_poll_rate_limited(client):
+    from autonomous.services.ratelimit import PAIRING
+
+    PAIRING.clear()
+    codes = []
+    for i in range(65):
+        r = client.post(
+            "/api/v1/devices/pair-poll",
+            json={"pair_id": f"id-{i % 3}", "poll_secret": "x" * 32},
+        )
+        codes.append(r.status_code)
+    assert 429 in codes
+
+
+def test_pairing_disabled_setting(client, auth_client, home):
+    from autonomous.services import settings as settings_svc
+
+    settings_svc.set_value("companions.enabled", False, home=home)
+    r = client.post(
+        "/api/v1/devices/pair",
+        json={"name": "No", "platform": "linux"},
+    )
+    assert r.status_code == 403
+    poll = client.post(
+        "/api/v1/devices/pair-poll",
+        json={"pair_id": "x", "poll_secret": "y" * 32},
+    )
+    assert poll.status_code == 403
+    settings_svc.set_value("companions.enabled", True, home=home)
+    ok = client.post(
+        "/api/v1/devices/pair",
+        json={"name": "Yes", "platform": "linux"},
+    )
+    assert ok.status_code == 200
+
+
 def test_companion_token_ok_before_upgrade(client, auth_client, home):
     started = client.post(
         "/api/v1/devices/pair",

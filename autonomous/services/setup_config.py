@@ -239,6 +239,9 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
     base = str(body.get("base_url") or "").strip().rstrip("/")
     if not base.startswith(("http://", "https://")):
         raise ValidationError("base URL must start with http:// or https://", code="invalid_url")
+    # Same SSRF gate as runtime calls (blocks cloud metadata / link-local;
+    # localhost + RFC1918 stay allowed for self-hosted LAN LLMs).
+    assert_safe_outbound_url(base)
     model_id = str(body.get("model") or "").strip()
     if not model_id:
         raise ValidationError("model is required", code="model_required")

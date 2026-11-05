@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/auth.py`, `autonomous/app.py`, `autonomous/services/client_ip.py`, `autonomous/wsproxy.py`, `autonomous/services/grounding.py`  
-**Last updated**: 2026-11-05
+**Last updated**: 2026-11-05 (pairing limits + LLM URL gate on save)
 
 ## User behaviour
 
@@ -10,6 +10,7 @@
 - Login rate limits / webhook / pairing use the TCP peer IP by default. Behind a reverse proxy that overwrites `X-Forwarded-For`, set **`AUTONOMOUS_TRUST_PROXY=1`**.
 - Companion WebSocket upgrades are refused with **401** if the `adc_…` Bearer is missing or invalid — **before** the HTTP 101.
 - Grounding API keys come only from Settings / `grounder.env` / `AUTONOMOUS_GROUNDER_TOKEN` (not a bare `TOKEN` file).
+- Settings → Companions can disable new pairing. Saving an LLM `base_url` runs the same SSRF checks as runtime calls (metadata blocked; LAN/localhost allowed).
 
 ## Implementation
 

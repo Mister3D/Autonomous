@@ -251,6 +251,8 @@
   "chat.eventAnchor": "Voir le message ancré",
   "settings.title": "Réglages",
   "companion.title": "Compagnons",
+  "companion.pairingEnabled": "Autoriser les nouveaux appairages",
+  "companion.pairingEnabledHint": "Désactivé : un PC ne peut plus démarrer ni interroger un appairage. Les compagnons déjà liés restent utilisables.",
   "companion.needOne": "Pour faire passer la connexion par un compagnon, merci d’ajouter un compagnon.",
   "companion.hint": "Le compagnon connecte votre ordinateur à Autonomous. Chaque bot peut ensuite faire transiter son trafic Internet par le compagnon, ou accéder aux MCP qui y sont installés et configurés. Ces réglages sont propres à chaque bot et se trouvent dans sa configuration.",
   "companion.responsibility": "Vous êtes seul responsable de ce que les bots pourraient exécuter sur cette machine.",

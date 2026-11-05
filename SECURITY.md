@@ -52,7 +52,7 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 - Webhook tokens are capabilities: prefer Bearer header invokes (avoids token-in-URL proxy logs); do not paste tokens into public chats; rotate by deleting and recreating the webhook.
 - Rotate `data/token` / `data/secret` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots). Restarting a bot's Pi session rotates its `abt_…` token automatically.
 - `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
-- Companion pairing is public but rate-limited; only approve codes you initiated on your own PC.
+- Companion pairing is public but rate-limited (`pair` + `pair-poll`); disable new pairing in Settings → Companions when unused. Only approve codes you initiated on your own PC.
 
 ## Reverse proxy checklist
 

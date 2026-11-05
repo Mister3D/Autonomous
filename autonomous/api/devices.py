@@ -76,6 +76,12 @@ def _handle(exc: AutonomousError):
     abort(exc.http_status, message=exc.message)
 
 
+def _pairing_allowed() -> bool:
+    from autonomous.services import settings as settings_svc
+
+    return bool(settings_svc.get("companions.enabled", home=g.home, default=True))
+
+
 @blp.route("/pair")
 class PairStart(MethodView):
     @blp.arguments(PairStartSchema)
@@ -86,6 +92,8 @@ class PairStart(MethodView):
         from autonomous.services.client_ip import client_ip
         from autonomous.services.ratelimit import PAIRING
 
+        if not _pairing_allowed():
+            abort(403, message="Companion pairing is disabled in Settings.")
         ip = client_ip(request)
         if not PAIRING.hit(f"pair:{ip}", limit=5, window_s=60):
             abort(429, message="Too many pairing requests — try again shortly.")
@@ -102,6 +110,18 @@ class PairPoll(MethodView):
     @blp.doc(security=[])
     def post(self, data):
         """Poll until the user approves. The device token is returned once."""
+        from autonomous.services.client_ip import client_ip
+        from autonomous.services.ratelimit import PAIRING
+
+        if not _pairing_allowed():
+            abort(403, message="Companion pairing is disabled in Settings.")
+        ip = client_ip(request)
+        # Poll is chatty (companion loops): higher than /pair, still bounded.
+        if not PAIRING.hit(f"pair-poll:{ip}", limit=60, window_s=60):
+            abort(429, message="Too many pairing polls — try again shortly.")
+        pair_id = str(data.get("pair_id") or "")[:64]
+        if pair_id and not PAIRING.hit(f"pair-poll:id:{pair_id}", limit=120, window_s=60):
+            abort(429, message="Too many pairing polls — try again shortly.")
         try:
             return devices_svc.poll_pairing(
                 data["pair_id"], data["poll_secret"], home=g.home

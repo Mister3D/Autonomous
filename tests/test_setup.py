@@ -91,6 +91,19 @@ def test_mask():
     assert cfg.mask("short")["hint"] == ""
 
 
+def test_llm_save_rejects_metadata_url(auth_client, fake_home):
+    r = auth_client.put("/api/v1/setup/llm", json={
+        "provider": "mine",
+        "base_url": "http://169.254.169.254/latest/meta-data/",
+        "api_key": SECRET,
+        "model": "m1",
+    })
+    assert r.status_code == 400
+    assert (r.get_json() or {}).get("code") == "forbidden_url" or "not allowed" in (
+        (r.get_json() or {}).get("message") or ""
+    ).lower() or "forbidden" in str(r.get_json()).lower()
+
+
 def test_llm_save_preserves_and_masks(auth_client, fake_home):
     path = fake_home / ".pi" / "agent" / "models.json"
     path.parent.mkdir(parents=True)

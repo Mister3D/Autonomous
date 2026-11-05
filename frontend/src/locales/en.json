@@ -251,6 +251,8 @@
   "chat.eventAnchor": "Open anchored message",
   "settings.title": "Settings",
   "companion.title": "Companions",
+  "companion.pairingEnabled": "Allow new pairing",
+  "companion.pairingEnabledHint": "When off, PCs cannot start or poll a pairing request. Already paired companions keep working.",
   "companion.needOne": "To send the connection through a companion, please add a companion.",
   "companion.hint": "The companion connects your computer to Autonomous. Each bot can then send its internet traffic through the companion, or use the MCP servers installed and configured on it. Those settings belong to each bot and live in its configuration.",
   "companion.responsibility": "You are solely responsible for what the bots might run on this machine.",

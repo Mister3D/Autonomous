@@ -239,6 +239,19 @@
         <p v-if="needCompanion" class="companion-need">{{ t("companion.needOne") }}</p>
         <p class="hint justified">{{ t("companion.hint") }}</p>
         <p class="hint justified companion-responsibility">{{ t("companion.responsibility") }}</p>
+        <label class="settings-field companion-pairing-toggle">
+          <span class="settings-notify">
+            <span>{{ t("companion.pairingEnabled") }}</span>
+            <input
+              v-model="companionsEnabled"
+              type="checkbox"
+              role="switch"
+              :aria-label="t('companion.pairingEnabled')"
+              @change="flushCompanionsEnabled"
+            />
+          </span>
+          <small>{{ t("companion.pairingEnabledHint") }}</small>
+        </label>
         <p v-if="deviceError" class="vault-error">{{ deviceError }}</p>
         <ul v-if="devicePending.length" class="settings-list">
           <li v-for="p in devicePending" :key="p.id">
@@ -639,6 +652,26 @@ async function removeMemory(e) {
 
 const companionBuild = ref(null);
 const buildError = ref("");
+const companionsEnabled = ref(true);
+
+async function loadCompanionsEnabled() {
+  try {
+    const s = await api.settings();
+    companionsEnabled.value = s["companions.enabled"] !== false;
+  } catch {
+    companionsEnabled.value = true;
+  }
+}
+
+async function flushCompanionsEnabled() {
+  deviceError.value = "";
+  try {
+    await api.putSettings({ "companions.enabled": !!companionsEnabled.value });
+  } catch (err) {
+    deviceError.value = err.message;
+    companionsEnabled.value = !companionsEnabled.value;
+  }
+}
 
 async function loadCompanionBuild() {
   try {
@@ -805,6 +838,7 @@ onMounted(async () => {
   } catch (e) {
     deviceError.value = e.message;
   }
+  loadCompanionsEnabled().catch(() => {});
   loadCompanionBuild();
   deviceTimer = window.setInterval(() => {
     loadDevices().catch((e) => {

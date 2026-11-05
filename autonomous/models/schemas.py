@@ -356,6 +356,11 @@ class SettingsSchema(Schema):
         allow_none=True,
         metadata={"description": "Self-update git channel: main | dev"},
     )
+    companions_enabled = fields.Bool(
+        data_key="companions.enabled",
+        allow_none=True,
+        metadata={"description": "Allow public companion pairing requests"},
+    )
 
 
 class NovncInfoSchema(Schema):

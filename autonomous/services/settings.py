@@ -28,6 +28,8 @@ DEFAULTS: dict[str, Any] = {
     "first_chat_onboarding": False,
     # Self-update git channel (main = stable, dev = pre-release).
     "update.channel": "main",
+    # When false, public companion pairing (/devices/pair + pair-poll) is refused.
+    "companions.enabled": True,
 }
 
 # Removed product setting (was a Cursor test harness, not a feature).
