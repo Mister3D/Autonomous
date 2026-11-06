@@ -131,6 +131,51 @@
       </section>
 
       <section v-if="section === 'agent'" class="settings-block">
+        <h3>{{ t("settings.passwordTitle") }}</h3>
+        <p class="hint">{{ t("settings.passwordHint") }}</p>
+        <label class="settings-field">
+          <span>{{ t("settings.passwordCurrent") }}</span>
+          <SecretInput
+            v-model="pwCurrent"
+            autocomplete="current-password"
+            :disabled="pwBusy"
+            required
+          />
+        </label>
+        <label class="settings-field">
+          <span>{{ t("settings.passwordNew") }}</span>
+          <SecretInput
+            v-model="pwNew"
+            autocomplete="new-password"
+            :disabled="pwBusy"
+            required
+          />
+          <small>{{ t("settings.passwordTooShort") }}</small>
+        </label>
+        <label class="settings-field">
+          <span>{{ t("settings.passwordConfirm") }}</span>
+          <SecretInput
+            v-model="pwConfirm"
+            autocomplete="new-password"
+            :disabled="pwBusy"
+            required
+          />
+        </label>
+        <div class="setup-toolbar">
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="pwBusy || !pwCanSubmit"
+            @click="submitPasswordChange"
+          >
+            {{ pwBusy ? t("settings.passwordBusy") : t("settings.passwordSubmit") }}
+          </button>
+          <span v-if="pwOk" class="setup-ok">{{ pwOk }}</span>
+          <span v-if="pwError" class="vault-error">{{ pwError }}</span>
+        </div>
+      </section>
+
+      <section v-if="section === 'agent'" class="settings-block">
         <h3>{{ t("update.channelTitle") }}</h3>
         <p class="hint">{{ t("update.channelHint") }}</p>
         <div class="settings-field">
@@ -460,6 +505,7 @@ import { currentBotObj, state } from "../store";
 import GroundingSettings from "./GroundingSettings.vue";
 import LlmSettings from "./LlmSettings.vue";
 import LocaleFlag from "./LocaleFlag.vue";
+import SecretInput from "./SecretInput.vue";
 
 function platformLabel(raw) {
   const key = String(raw || "").trim().toLowerCase();
@@ -548,6 +594,12 @@ const tzOpen = ref(false);
 const tzActive = ref(0);
 const tzDirty = ref(false);
 const tzError = ref("");
+const pwCurrent = ref("");
+const pwNew = ref("");
+const pwConfirm = ref("");
+const pwBusy = ref(false);
+const pwError = ref("");
+const pwOk = ref("");
 const updateChannel = ref("main");
 const updateChannelBusy = ref(false);
 const updateChannelError = ref("");
@@ -563,6 +615,39 @@ const updatePreset = computed(() => {
   if (ch === "main" || ch === "dev") return ch;
   return "custom";
 });
+
+const pwCanSubmit = computed(
+  () =>
+    !!pwCurrent.value &&
+    pwNew.value.length >= 8 &&
+    pwNew.value === pwConfirm.value &&
+    pwNew.value !== pwCurrent.value,
+);
+
+async function submitPasswordChange() {
+  pwError.value = "";
+  pwOk.value = "";
+  if (pwNew.value !== pwConfirm.value) {
+    pwError.value = t("settings.passwordMismatch");
+    return;
+  }
+  if (pwNew.value.length < 8) {
+    pwError.value = t("settings.passwordTooShort");
+    return;
+  }
+  pwBusy.value = true;
+  try {
+    await api.changePassword(pwCurrent.value, pwNew.value);
+    pwCurrent.value = "";
+    pwNew.value = "";
+    pwConfirm.value = "";
+    pwOk.value = t("settings.passwordOk");
+  } catch (e) {
+    pwError.value = e.message || t("login.changeError");
+  } finally {
+    pwBusy.value = false;
+  }
+}
 
 function tzScore(zone, q) {
   const full = zone.toLowerCase();

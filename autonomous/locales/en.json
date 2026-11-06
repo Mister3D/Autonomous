@@ -11,7 +11,7 @@
   "auth.logout": "Logged out",
   "auth.rate_limited": "Too many login attempts — try again in a few minutes",
   "auth.password_too_short": "Password must be at least 8 characters",
-  "auth.password_unchanged": "Choose a password different from the generated one",
+  "auth.password_unchanged": "Choose a password different from the current one",
   "auth.password_changed": "Password updated",
   "bot.created": "Bot '{name}' created",
   "bot.deleted": "Bot '{name}' deleted",

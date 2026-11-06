@@ -11,7 +11,7 @@
   "auth.logout": "Déconnecté",
   "auth.rate_limited": "Trop de tentatives de connexion — réessayez dans quelques minutes",
   "auth.password_too_short": "Le mot de passe doit faire au moins 8 caractères",
-  "auth.password_unchanged": "Choisissez un mot de passe différent de celui généré",
+  "auth.password_unchanged": "Choisissez un mot de passe différent de l’actuel",
   "auth.password_changed": "Mot de passe mis à jour",
   "bot.created": "Bot « {name} » créé",
   "bot.deleted": "Bot « {name} » supprimé",

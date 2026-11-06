@@ -32,7 +32,7 @@ POST   /setup/update/apply
 
 GET    /auth/status                 # + must_change_password
 POST   /auth/login                  # may return must_change_password
-POST   /auth/password               # {current_password, new_password} — unlocks after generated install
+POST   /auth/password               # {current_password, new_password} — forced install unlock + voluntary change from Settings
 POST   /auth/logout
 
 GET    /bots

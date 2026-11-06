@@ -54,7 +54,7 @@ Autonomous is **AGPL-3.0-only**. Network deployment of a *modified* version requ
 - Treat desk VMs as untrusted: prefer Internet off when not needed. Pi has no host bash — only VM shells.
 - Webhook tokens are capabilities: prefer Bearer header invokes (avoids token-in-URL proxy logs); do not paste tokens into public chats; rotate by deleting and recreating the webhook.
 - Rotate `data/token` / `data/secret` / vault key / login password if they may have leaked (chat logs, agent handoff files, screenshots). Restarting a bot's Pi session rotates its `abt_…` token automatically.
-- Non-interactive `install.sh` writes a generated password + `password.must_change`: the first web login deletes `initial-password` and blocks the API until `POST /auth/password` sets a new one.
+- Non-interactive `install.sh` writes a generated password + `password.must_change`: the first web login deletes `initial-password` and blocks the API until `POST /auth/password` sets a new one. The same endpoint is available later from Settings → General to rotate the login password.
 - `curl \| sh` installers inherit supply-chain risk: prefer cloning the repo and reading `install.sh` when you can.
 - Companion pairing is public but rate-limited (`pair` + `pair-poll`); disable new pairing in Settings → Companions when unused. Only approve codes you initiated on your own PC.
 - Custom update repository URL: empty keeps `origin`. A wrong or hostile remote can replace the installed code on apply — same trust as cloning that repo yourself.
