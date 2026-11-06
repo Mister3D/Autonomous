@@ -2,11 +2,11 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/updates.py`, `autonomous/api/setup_routes.py` (`/setup/update*`), `frontend/src/components/SetupPanel.vue`, Settings → General  
-**Last updated**: 2026-11-06 (https/ssh-only remote; document apply = code exec)
+**Last updated**: 2026-11-06 (update UI also on incomplete setup checklist)
 
 ## User behaviour
 
-- On the ready home (`/` tagline), update status sits under the setup link: quiet “Up to date · channel · Check” when current; a compact callout with **Update** only when behind (or fetch/dirty/apply in progress). Hidden if the install is not a git checkout.
+- Update status is shown on the ready home (`/` tagline, under the setup link) **and** at the bottom of the incomplete setup checklist (`/setup` or home while required items are missing), so you can apply an update before finishing config. Quiet “Up to date · channel · Check” when current; a compact callout with **Update** only when behind (or fetch/dirty/apply in progress). Hidden if the install is not a git checkout.
 - **Check** forces a remote check (otherwise results are cached **24 h** under `$AUTONOMOUS_HOME/update-check.json`).
 - **Update** fast-forwards to `<remote>/<branch>`, runs `npm ci` + `npm run build` in `frontend/`, `pip install -e .` in the venv, then **restarts** `autonomous.service` via `systemctl` when a unit is active (delayed ~2 s). Manual restart if no unit.
 - Settings → General → **Updates**:
@@ -22,6 +22,7 @@
 
 ## Pitfalls / non-regressions
 
+- Do not hide the update UI behind `setup.ready` — operators on a fresh install must be able to pull before LLM/desk are configured.
 - Dirty tree → apply returns 400 `dirty`; banner explains it.
 - Non-git installs (no `.git`) → UI shows unavailable; no fake update path.
 - Do not allow channel / remote_url flips through `set_many` without the migration / confirm guards.

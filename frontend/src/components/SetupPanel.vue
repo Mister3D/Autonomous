@@ -58,56 +58,58 @@
       <p v-if="error" class="vault-error">{{ error }}</p>
       <div class="setup-home-foot">
         <router-link class="setup-link" to="/setup">{{ t("setup.link") }}</router-link>
-        <div
-          v-if="showUpdateUi"
-          class="setup-update"
-          :class="{
-            'is-action': updateNeedsAction,
-            'is-busy': updateApplying,
-          }"
-          role="status"
-        >
-          <template v-if="updateNeedsAction">
-            <p class="setup-update-msg">{{ updateSummary }}</p>
-            <div class="setup-update-actions">
-              <button
-                v-if="canApplyUpdate || updateApplying"
-                class="btn primary"
-                type="button"
-                :disabled="!canApplyUpdate || updateBusy"
-                @click="runApplyUpdate"
-              >
-                {{ updateApplying ? t("update.applying") : t("update.apply") }}
-              </button>
-              <button
-                class="btn ghost"
-                type="button"
-                :disabled="updateBusy"
-                @click="forceCheckUpdate"
-              >
-                {{ updateBusy && !updateApplying ? t("update.checking") : t("update.check") }}
-              </button>
-            </div>
-            <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
-            <p v-if="updateError" class="vault-error">{{ updateError }}</p>
-          </template>
-          <template v-else>
-            <span class="setup-update-quiet">
-              <span>{{ updateSummary }}</span>
-              <button
-                type="button"
-                class="setup-update-check"
-                :disabled="updateBusy"
-                @click="forceCheckUpdate"
-              >
-                {{ updateBusy ? t("update.checking") : t("update.checkShort") }}
-              </button>
-            </span>
-            <p v-if="updateError" class="vault-error">{{ updateError }}</p>
-          </template>
-        </div>
       </div>
     </template>
+    <!-- Updates must stay reachable during incomplete setup (checklist), not only on the ready home. -->
+    <div
+      v-if="setup && showUpdateUi"
+      class="setup-update"
+      :class="{
+        'is-action': updateNeedsAction,
+        'is-busy': updateApplying,
+        'is-checklist': showChecklist,
+      }"
+      role="status"
+    >
+      <template v-if="updateNeedsAction">
+        <p class="setup-update-msg">{{ updateSummary }}</p>
+        <div class="setup-update-actions">
+          <button
+            v-if="canApplyUpdate || updateApplying"
+            class="btn primary"
+            type="button"
+            :disabled="!canApplyUpdate || updateBusy"
+            @click="runApplyUpdate"
+          >
+            {{ updateApplying ? t("update.applying") : t("update.apply") }}
+          </button>
+          <button
+            class="btn ghost"
+            type="button"
+            :disabled="updateBusy"
+            @click="forceCheckUpdate"
+          >
+            {{ updateBusy && !updateApplying ? t("update.checking") : t("update.check") }}
+          </button>
+        </div>
+        <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
+        <p v-if="updateError" class="vault-error">{{ updateError }}</p>
+      </template>
+      <template v-else>
+        <span class="setup-update-quiet">
+          <span>{{ updateSummary }}</span>
+          <button
+            type="button"
+            class="setup-update-check"
+            :disabled="updateBusy"
+            @click="forceCheckUpdate"
+          >
+            {{ updateBusy ? t("update.checking") : t("update.checkShort") }}
+          </button>
+        </span>
+        <p v-if="updateError" class="vault-error">{{ updateError }}</p>
+      </template>
+    </div>
   </div>
 </template>
 

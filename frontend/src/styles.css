@@ -5760,6 +5760,12 @@ a.bot-mention:hover,
 .setup-update {
   width: min(22rem, 100%);
   text-align: center;
+  margin: 0.55rem auto 0;
+}
+.setup-update.is-checklist {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
 }
 .setup-update.is-action {
   margin-top: 0.25rem;
