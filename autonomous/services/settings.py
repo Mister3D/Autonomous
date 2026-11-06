@@ -116,6 +116,14 @@ def set_many(values: dict[str, Any], home: Path | None = None) -> dict[str, Any]
                 from autonomous.services.cronutil import normalize_tz_setting
 
                 value = normalize_tz_setting(value)
+            if key == "locale":
+                code = str(value or "").strip().lower()
+                if code not in ("en", "fr"):
+                    raise ValidationError(
+                        "locale must be en or fr",
+                        code="invalid_locale",
+                    )
+                value = code
             conn.execute(
                 "INSERT INTO settings(key, value_json) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",

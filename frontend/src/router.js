@@ -3,8 +3,12 @@ import LoginView from "./views/LoginView.vue";
 import HubView from "./views/HubView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
 import { api } from "./api";
+import { loadLocaleFromServer } from "./i18n";
 import { state } from "./store";
 import { connectEvents, disconnectEvents, refreshBots } from "./sync";
+
+/** One server locale pull per authenticated session (reset on logout). */
+let localeSynced = false;
 
 export const TABS = ["discussion", "terminal", "screen"];
 
@@ -67,6 +71,14 @@ router.beforeEach(async (to) => {
     return next || "/";
   }
   if (state.authenticated && !state.mustChangePassword) {
+    if (!localeSynced) {
+      localeSynced = true;
+      try {
+        await loadLocaleFromServer();
+      } catch {
+        /* keep localStorage locale */
+      }
+    }
     connectEvents();
     try {
       await refreshBots();
@@ -74,6 +86,7 @@ router.beforeEach(async (to) => {
       /* ignore */
     }
   } else {
+    localeSynced = false;
     disconnectEvents();
   }
 

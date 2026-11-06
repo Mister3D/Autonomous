@@ -2,13 +2,13 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup.py`, `autonomous/api/setup_routes.py`, `frontend/src/components/SetupPanel.vue`, `frontend/src/components/SetupItem.vue`, `frontend/src/store.js` (`setupReady`, `refreshSetup`)  
-**Last updated**: 2026-11-06 (companion build shows live CLI log on checklist)
+**Last updated**: 2026-11-06 (optional web search via `pi install npm:pi-web-access`)
 
 ## User behaviour
 
 - After login, the home page (`/` or `/setup`) lists what is left to install or configure.
 - **Required**: Pi agent, language model (vision), Docker, desktop image. Creating a bot stays locked until these are OK (`setup.ready`).
-- **Optional**: grounding (UI-TARS), companion app binary.
+- **Optional**: grounding (UI-TARS), companion app binary, **web search** (`pi install npm:pi-web-access` → tools `web_search` / `fetch_content`).
 - Each row has Configure / Install / Build as needed; jobs stream a live log (same dark CLI panel as updates). Companion builds started in the background by `serve` also stream via `GET /companion/build` → `log`.
 - Checklist toolbar (**Recheck** / **Back to home**) is centered under the intro.
 - At the **bottom** of the checklist: **Start the setup conversation** / **Lancer la conversation d’initialisation** (centered with its hint). Greyed out until every required item is ready; then primary and clickable.

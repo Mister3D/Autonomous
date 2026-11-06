@@ -92,6 +92,36 @@ def test_save_llm_models_list_merge_safe(fake_home):
     assert "docs" in out
 
 
+def test_save_llm_provider_credentials_only(fake_home):
+    out = cfg.save_llm(
+        {
+            "provider": "solo",
+            "base_url": "http://llm.test/v1",
+            "api_key": "sk-test",
+        }
+    )
+    raw = json.loads((fake_home / ".pi" / "agent" / "models.json").read_text())
+    conf = raw["providers"]["solo"]
+    assert conf["baseUrl"] == "http://llm.test/v1"
+    assert conf["apiKey"] == "sk-test"
+    assert conf.get("models") == []
+    assert out["providers"][0]["provider"] == "solo"
+
+    # Later model upsert keeps credentials.
+    cfg.save_llm(
+        {
+            "provider": "solo",
+            "base_url": "http://llm.test/v1",
+            "model": "m1",
+            "model_name": "One",
+            "images": True,
+        }
+    )
+    raw2 = json.loads((fake_home / ".pi" / "agent" / "models.json").read_text())
+    assert [m["id"] for m in raw2["providers"]["solo"]["models"]] == ["m1"]
+    assert raw2["providers"]["solo"]["apiKey"] == "sk-test"
+
+
 def test_resolve_and_enforce_max_images(fake_home, home):
     _write_models(
         fake_home,

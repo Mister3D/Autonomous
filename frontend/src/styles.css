@@ -5846,17 +5846,12 @@ a.bot-mention:hover,
 .setup-ok { color: var(--ok); }
 .main > .empty.brand-empty:has(.setup-panel) { font-size: 1rem; font-weight: 400; letter-spacing: normal; padding: 0; width: 100%; height: 100%; display: flex; }
 
-/* LLM settings — per-model cards */
-.llm-models-head { margin-top: 0.75rem; }
-.llm-remote-pick {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin: 0.35rem 0 0.85rem;
-  max-width: 36rem;
+/* LLM settings — providers + models */
+.llm-subhead {
+  margin: 1.4rem 0 0.35rem;
+  font-size: 1.05rem;
 }
-.llm-remote-pick .model-combo,
-.llm-remote-pick input { flex: 1; min-width: 0; }
+.llm-provider-list,
 .llm-model-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -5865,12 +5860,41 @@ a.bot-mention:hover,
   flex-direction: column;
   gap: 0.75rem;
 }
+.llm-provider-card,
 .llm-model-card {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.75rem 0.85rem;
   background: #fafafa;
 }
+.llm-add-model {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+}
+.llm-provider-badge {
+  display: inline-block;
+  margin-right: 0.45rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-2);
+  vertical-align: middle;
+}
+.llm-remote-pick {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.35rem 0 0.85rem;
+  width: 100%;
+  max-width: none;
+}
+.llm-remote-pick .settings-tz,
+.llm-remote-pick input { flex: 1; min-width: 0; width: 100%; }
 .llm-model-card-top {
   display: flex;
   align-items: center;

@@ -72,7 +72,7 @@ The installer checks the prerequisites (Python ≥ 3.11 with venv, git, curl, No
 Everything else is configured in the web UI. Open <http://127.0.0.1:8787/> and log in: the home page lists what is left to do, with a **Configure** link or an **Install / Build** button (with a live log) for each item:
 
 - **Required:** the Pi agent, a language model (base URL, API key, a model that accepts images, with a **Test** button), Docker and the desktop image.
-- **Optional:** grounding with UI-TARS (clicks are verified by the configured LLM) and the companion app.
+- **Optional:** grounding with UI-TARS (clicks are verified by the configured LLM), the companion app, and web search (`pi install npm:pi-web-access`).
 
 Creating a bot stays locked until every required item is ready. The page stays available at `/setup`. At the bottom of the checklist, **Start my first conversation** stays greyed out until the required items are ready; then it creates a bot if needed and opens an onboarding chat (product tour + shared memory).
 

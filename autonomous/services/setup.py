@@ -10,6 +10,7 @@ table (``bot = "_setup"``) so the UI can poll ``/jobs/<id>``.
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -26,6 +27,8 @@ SETUP_BOT = "_setup"
 CACHE_TTL = 10.0
 DOCKER_INSTALL_CMD = "curl -fsSL https://get.docker.com | sh"
 PI_PACKAGE = "@earendil-works/pi-coding-agent"
+WEB_ACCESS_SOURCE = "npm:pi-web-access"
+WEB_ACCESS_PKG = "pi-web-access"
 
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _cache_lock = threading.Lock()
@@ -252,6 +255,64 @@ def check_companion(home: Path | None) -> dict[str, Any]:
                   action=_job_action("companion"))
 
 
+def web_access_installed() -> bool:
+    """True when Pi has the ``npm:pi-web-access`` package (settings or node_modules)."""
+    agent = Path.home() / ".pi" / "agent"
+    settings = agent / "settings.json"
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        pkgs = data.get("packages") or []
+        if isinstance(pkgs, list) and (
+            WEB_ACCESS_SOURCE in pkgs
+            or WEB_ACCESS_PKG in pkgs
+            or any(str(p).endswith("/" + WEB_ACCESS_PKG) or str(p).endswith(":" + WEB_ACCESS_PKG) for p in pkgs)
+        ):
+            return True
+    except (OSError, ValueError, TypeError):
+        pass
+    return (agent / "npm" / "node_modules" / WEB_ACCESS_PKG).is_dir()
+
+
+def check_web_access() -> dict[str, Any]:
+    """Optional Pi package: web_search / fetch_content via ``pi install npm:pi-web-access``."""
+    from autonomous.services import pi_status
+
+    if "web_access" in _running:
+        return _check(
+            "web_access",
+            required=False,
+            status="running",
+            details="installing…",
+            action=_job_action("web_access"),
+        )
+    if web_access_installed():
+        return _check(
+            "web_access",
+            required=False,
+            status="ok",
+            details="pi-web-access (web_search / fetch_content)",
+            action=_job_action("web_access") | {"rebuild": True},
+        )
+    if not pi_status.resolve_pi_bin():
+        return _check(
+            "web_access",
+            required=False,
+            status="optional",
+            details="Install the Pi agent first, then: pi install " + WEB_ACCESS_SOURCE,
+            action=_job_action("pi_install") if shutil.which("npm") else {
+                "type": "command",
+                "command": "pi install " + WEB_ACCESS_SOURCE,
+            },
+        )
+    return _check(
+        "web_access",
+        required=False,
+        status="optional",
+        details="Not installed (pi install " + WEB_ACCESS_SOURCE + ")",
+        action=_job_action("web_access"),
+    )
+
+
 # ── aggregate ─────────────────────────────────────────────────────────────
 
 
@@ -264,7 +325,11 @@ def compute(home: Path | None = None) -> dict[str, Any]:
             checks.append(_check(fn.__name__[6:], required=True, status="error", details=str(exc)[:300]))
     docker_ok = checks[-1]["status"] == "ok"
     checks.append(check_desk_image(home, docker_ok))
-    for fn in (lambda: check_grounding(home), lambda: [check_companion(home)]):
+    for fn in (
+        lambda: check_grounding(home),
+        lambda: [check_companion(home)],
+        lambda: [check_web_access()],
+    ):
         try:
             checks.extend(fn())
         except Exception as exc:  # noqa: BLE001
@@ -319,18 +384,30 @@ def _desk_build_argv(home: Path | None) -> list[str]:
     return ["docker", "build", "-t", image, str(_repo_root() / "docker" / "desktop")]
 
 
+def _web_access_argv(home: Path | None) -> list[str]:
+    del home  # global Pi user install under ~/.pi
+    from autonomous.services import pi_status
+
+    binary = pi_status.resolve_pi_bin()
+    if not binary:
+        raise ValidationError("pi CLI not found — install the Pi agent first", code="pi_missing")
+    return [binary, "install", WEB_ACCESS_SOURCE]
+
+
 JOB_COMMANDS: dict[str, Callable[[Path | None], list[str] | None]] = {
     "pi_install": lambda home: ["npm", "install", "-g", "--ignore-scripts", PI_PACKAGE],
     "desk_image": _desk_build_argv,
     "docker_install": lambda home: ["sh", "-c", DOCKER_INSTALL_CMD],
     "companion": lambda home: None,  # in-process builder (companion_build)
+    "web_access": _web_access_argv,
 }
 
 
 def _stream(job_id: str, argv: list[str], home: Path | None) -> int:
     from autonomous.services import jobs as jobs_svc
+    from autonomous.services import pi_status
 
-    env = os.environ.copy()
+    env = pi_status.pi_env()
     env.setdefault("DEBIAN_FRONTEND", "noninteractive")
     proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1, env=env, cwd=str(_repo_root()))

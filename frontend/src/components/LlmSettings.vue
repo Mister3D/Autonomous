@@ -10,67 +10,194 @@
     </p>
     <p v-if="loadError" class="vault-error">{{ loadError }}</p>
 
-    <label v-if="providers.length > 1" class="settings-field">
-      <span>{{ t("llm.provider") }}</span>
-      <select v-model="form.provider" @change="fillFrom(form.provider)">
-        <option v-for="p in providers" :key="p.provider" :value="p.provider">{{ p.provider }}</option>
-        <option value="">{{ t("llm.newProvider") }}</option>
-      </select>
-    </label>
-    <label v-if="!providers.length || !existing" class="settings-field">
-      <span>{{ t("llm.providerId") }}</span>
-      <input v-model.trim="form.newProvider" type="text" placeholder="autonomous" spellcheck="false" />
-    </label>
-    <label class="settings-field">
-      <span>{{ t("llm.baseUrl") }}</span>
-      <input v-model.trim="form.base_url" type="url" placeholder="https://api.example.com/v1" spellcheck="false" />
-      <small>{{ t("llm.baseUrlHint") }}</small>
-    </label>
-    <label class="settings-field">
-      <span>{{ t("llm.apiKey") }}</span>
-      <SecretInput v-model="form.api_key" :placeholder="keyPlaceholder" autocomplete="new-password" />
-      <small>{{ keyHint }}</small>
-    </label>
+    <h3 class="llm-subhead">{{ t("llm.providersTitle") }}</h3>
+    <p class="hint">{{ t("llm.providersHint") }}</p>
+
+    <ul v-if="providerDrafts.length" class="llm-provider-list">
+      <li v-for="p in providerDrafts" :key="p._key" class="llm-provider-card">
+        <div class="llm-model-card-top">
+          <strong>{{ p._isNew ? t("llm.newProviderCard") : p.provider }}</strong>
+          <button
+            v-if="p._isNew"
+            class="btn danger-ghost"
+            type="button"
+            @click="cancelNewProvider(p)"
+          >
+            {{ t("llm.cancel") }}
+          </button>
+        </div>
+        <label v-if="p._isNew" class="settings-field">
+          <span>{{ t("llm.providerId") }}</span>
+          <input v-model.trim="p.provider" type="text" placeholder="autonomous" spellcheck="false" />
+        </label>
+        <label class="settings-field">
+          <span>{{ t("llm.baseUrl") }}</span>
+          <input
+            v-model.trim="p.base_url"
+            type="url"
+            placeholder="https://api.example.com/v1"
+            spellcheck="false"
+          />
+          <small>{{ t("llm.baseUrlHint") }}</small>
+        </label>
+        <label class="settings-field">
+          <span>{{ t("llm.apiKey") }}</span>
+          <SecretInput
+            v-model="p.api_key"
+            :placeholder="providerKeyPlaceholder(p)"
+            autocomplete="new-password"
+          />
+          <small>{{ providerKeyHint(p) }}</small>
+        </label>
+        <div class="setup-toolbar">
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="!isProviderDirty(p) || p._saving || !canSaveProvider(p)"
+            @click="saveProvider(p)"
+          >
+            {{ p._saving ? "…" : t("llm.saveProvider") }}
+          </button>
+          <span v-if="p._ok" class="setup-ok">{{ p._ok }}</span>
+          <span v-if="p._error" class="vault-error">{{ p._error }}</span>
+        </div>
+      </li>
+    </ul>
+    <p v-else class="hint">{{ t("llm.providersEmpty") }}</p>
     <div class="setup-toolbar">
-      <button
-        class="btn primary"
-        type="button"
-        :disabled="!providerDirty || providerSaving || !canSaveProvider"
-        @click="saveProvider"
-      >
-        {{ providerSaving ? "…" : t("llm.saveProvider") }}
+      <button class="btn" type="button" :disabled="addingProvider" @click="startAddProvider">
+        {{ t("llm.addProvider") }}
       </button>
-      <span v-if="providerError" class="vault-error">{{ providerError }}</span>
     </div>
 
-    <div class="settings-field llm-models-head">
-      <span>{{ t("llm.modelsList") }}</span>
+    <h3 class="llm-subhead">{{ t("llm.modelsTitle") }}</h3>
+    <p class="hint">{{ t("llm.modelsHint") }}</p>
+
+    <div class="llm-add-model">
+      <label class="settings-field">
+        <span>{{ t("llm.provider") }}</span>
+        <select v-model="add.provider" :disabled="!savedProviders.length" @change="onAddProviderChange">
+          <option disabled value="">{{ t("llm.pickProvider") }}</option>
+          <option v-for="p in savedProviders" :key="p.provider" :value="p.provider">
+            {{ p.provider }}
+          </option>
+        </select>
+      </label>
       <div class="settings-field-row">
-        <button class="btn" type="button" :disabled="fetching || !form.base_url" @click="fetchModels">
+        <button
+          class="btn"
+          type="button"
+          :disabled="!add.provider || fetching"
+          @click="fetchModels"
+        >
           {{ fetching ? t("llm.fetching") : t("llm.fetchModels") }}
         </button>
-        <button class="btn" type="button" @click="addBlankModel">{{ t("llm.addModel") }}</button>
       </div>
       <small v-if="fetchError" class="vault-error">{{ fetchError }}</small>
       <small v-else-if="fetched">{{ t("llm.modelsFound", { count: remoteModels.length }) }}</small>
-      <small v-else>{{ t("llm.modelsListHint") }}</small>
+      <div v-if="remoteModels.length" class="llm-remote-pick">
+        <ModelCombo
+          v-model.trim="add.id"
+          :options="remoteModels"
+          :placeholder="t('llm.modelPlaceholder')"
+        />
+      </div>
+      <label v-else class="settings-field">
+        <span>{{ t("llm.model") }}</span>
+        <input
+          v-model.trim="add.id"
+          type="text"
+          :placeholder="t('llm.modelPlaceholder')"
+          spellcheck="false"
+          :disabled="!add.provider"
+        />
+      </label>
+      <label class="settings-field">
+        <span>{{ t("llm.modelName") }}</span>
+        <input
+          v-model.trim="add.name"
+          type="text"
+          :placeholder="add.id || t('llm.modelNamePlaceholder')"
+          :disabled="!add.provider"
+        />
+        <small>{{ t("llm.modelNameHint") }}</small>
+      </label>
+      <label class="toggle-row">
+        <span>
+          <strong>{{ t("llm.images") }}</strong>
+          <small>{{ t("llm.imagesHint") }}</small>
+        </span>
+        <input
+          v-model="add.images"
+          type="checkbox"
+          role="switch"
+          :aria-label="t('llm.images')"
+          :disabled="!add.provider"
+        />
+      </label>
+      <div class="llm-limits-grid">
+        <label class="settings-field">
+          <span>{{ t("llm.maxImages") }}</span>
+          <input
+            v-model.number="add.max_images"
+            type="number"
+            min="1"
+            max="32"
+            step="1"
+            placeholder="—"
+            :disabled="!add.provider"
+          />
+          <small>{{ t("llm.maxImagesHint") }}</small>
+        </label>
+        <label class="settings-field">
+          <span>{{ t("llm.contextWindow") }}</span>
+          <input
+            v-model.number="add.context_window"
+            type="number"
+            min="1024"
+            step="1024"
+            placeholder="128000"
+            :disabled="!add.provider"
+          />
+          <small>{{ t("llm.contextWindowHint") }}</small>
+        </label>
+        <label class="settings-field">
+          <span>{{ t("llm.maxTokens") }}</span>
+          <input
+            v-model.number="add.max_tokens"
+            type="number"
+            min="256"
+            step="256"
+            placeholder="16384"
+            :disabled="!add.provider"
+          />
+          <small>{{ t("llm.maxTokensHint") }}</small>
+        </label>
+      </div>
+      <div class="setup-toolbar">
+        <button
+          class="btn primary"
+          type="button"
+          :disabled="!canAddModel || addSaving"
+          @click="saveNewModel"
+        >
+          {{ addSaving ? "…" : t("llm.saveModel") }}
+        </button>
+        <span v-if="addError" class="vault-error">{{ addError }}</span>
+      </div>
     </div>
 
-    <div v-if="remoteModels.length" class="llm-remote-pick">
-      <ModelCombo v-model.trim="pickRemote" :options="remoteModels" :placeholder="t('llm.modelPlaceholder')" />
-      <button class="btn" type="button" :disabled="!pickRemote" @click="addRemoteModel">
-        {{ t("llm.addFromList") }}
-      </button>
-    </div>
-
-    <ul v-if="form.models.length" class="llm-model-list">
-      <li v-for="(m, idx) in form.models" :key="m._key" class="llm-model-card">
+    <ul v-if="modelRows.length" class="llm-model-list">
+      <li v-for="(m, idx) in modelRows" :key="m._key" class="llm-model-card">
         <div class="llm-model-card-top">
-          <strong>{{ m.name || m.id || t("llm.newModel") }}</strong>
+          <strong>
+            <span class="llm-provider-badge">{{ m.provider }}</span>
+            {{ m.name || m.id || t("llm.newModel") }}
+          </strong>
           <button
             class="btn danger-ghost"
             type="button"
-            :disabled="form.models.length <= 1 || m._saving"
+            :disabled="m._saving"
             @click="removeModel(idx)"
           >
             {{ t("llm.removeModel") }}
@@ -100,12 +227,24 @@
           </label>
           <label class="settings-field">
             <span>{{ t("llm.contextWindow") }}</span>
-            <input v-model.number="m.context_window" type="number" min="1024" step="1024" placeholder="128000" />
+            <input
+              v-model.number="m.context_window"
+              type="number"
+              min="1024"
+              step="1024"
+              placeholder="128000"
+            />
             <small>{{ t("llm.contextWindowHint") }}</small>
           </label>
           <label class="settings-field">
             <span>{{ t("llm.maxTokens") }}</span>
-            <input v-model.number="m.max_tokens" type="number" min="256" step="256" placeholder="16384" />
+            <input
+              v-model.number="m.max_tokens"
+              type="number"
+              min="256"
+              step="256"
+              placeholder="16384"
+            />
             <small>{{ t("llm.maxTokensHint") }}</small>
           </label>
         </div>
@@ -122,7 +261,7 @@
         </div>
       </li>
     </ul>
-    <p v-else class="hint">{{ t("llm.noModels") }}</p>
+    <p v-else class="hint">{{ t("llm.modelsEmpty") }}</p>
 
     <p class="hint">{{ t("llm.fileNote", { path: view?.path || "~/.pi/agent/models.json" }) }}</p>
   </section>
@@ -145,6 +284,7 @@ function normNum(v) {
 
 function modelFingerprint(m) {
   return JSON.stringify({
+    provider: String(m.provider || "").trim(),
     id: String(m.id || "").trim(),
     name: String(m.name || "").trim(),
     images: !!m.images,
@@ -154,10 +294,19 @@ function modelFingerprint(m) {
   });
 }
 
+function providerFingerprint(p) {
+  return JSON.stringify({
+    provider: String(p.provider || "").trim(),
+    base_url: String(p.base_url || "").trim(),
+    // typed key always dirties via isProviderDirty
+  });
+}
+
 function blankModel(partial = {}) {
   keySeq += 1;
   const row = {
     _key: `m-${keySeq}`,
+    provider: "",
     id: "",
     name: "",
     images: true,
@@ -173,199 +322,206 @@ function blankModel(partial = {}) {
   return row;
 }
 
-function markClean(m) {
+function blankProvider(partial = {}) {
+  keySeq += 1;
+  const row = {
+    _key: `p-${keySeq}`,
+    provider: "",
+    base_url: "",
+    api_key: "",
+    _isNew: false,
+    _saving: false,
+    _error: "",
+    _ok: "",
+    _saved: "",
+    _keyInfo: { set: false, hint: "", source: "none" },
+    ...partial,
+  };
+  if (!row._saved) row._saved = providerFingerprint(row);
+  return row;
+}
+
+function markModelClean(m) {
   m._saved = modelFingerprint(m);
   m._error = "";
+}
+
+function markProviderClean(p) {
+  p._saved = providerFingerprint(p);
+  p.api_key = "";
+  p._error = "";
 }
 
 function isModelDirty(m) {
   return modelFingerprint(m) !== m._saved;
 }
 
+function isProviderDirty(p) {
+  if (p.api_key) return true;
+  return providerFingerprint(p) !== p._saved;
+}
+
 const { t } = useI18n();
 const view = ref(null);
 const loadError = ref("");
-const form = reactive({
-  provider: "",
-  newProvider: "",
-  base_url: "",
-  api_key: "",
-  models: [blankModel()],
-});
-const providerSaved = ref({ provider: "", base_url: "", api_key: "" });
-const providerSaving = ref(false);
-const providerError = ref("");
+const providerDrafts = ref([]);
+const modelRows = ref([]);
 const remoteModels = ref([]);
-const pickRemote = ref("");
 const fetching = ref(false);
 const fetched = ref(false);
 const fetchError = ref("");
-
-const providers = computed(() => view.value?.providers || []);
-const existing = computed(() => providers.value.find((p) => p.provider === form.provider) || null);
-const keyInfo = computed(() => existing.value?.api_key || { set: false, hint: "", source: "none" });
-const keyPlaceholder = computed(() =>
-  keyInfo.value.set ? t("secret.keepCurrent", { hint: keyInfo.value.hint || "" }) : t("llm.apiKeyPlaceholder"),
-);
-const keyHint = computed(() => {
-  const src = keyInfo.value.source || "";
-  if (src.startsWith("env:")) return t("llm.keyFromEnv", { name: src.slice(4) });
-  if (src === "command") return t("llm.keyFromCommand");
-  return t("llm.apiKeyHint");
+const addSaving = ref(false);
+const addError = ref("");
+const add = reactive({
+  provider: "",
+  id: "",
+  name: "",
+  images: true,
+  max_images: null,
+  context_window: null,
+  max_tokens: null,
 });
+
+const savedProviders = computed(() => (view.value?.providers || []).filter((p) => p.provider));
+const addingProvider = computed(() => providerDrafts.value.some((p) => p._isNew));
 const docsModels = computed(
   () => view.value?.docs?.models || "https://pi.dev/docs/latest/models",
 );
 const docsConfig = computed(
   () => view.value?.docs?.configuration || "https://pi.dev/docs/latest/models-configuration",
 );
-
-const providerId = computed(() =>
-  existing.value ? form.provider : form.newProvider || (!providers.value.length ? "autonomous" : ""),
+const canAddModel = computed(
+  () => !!add.provider && !!String(add.id || "").trim() && savedProviders.value.some((p) => p.provider === add.provider),
 );
 
-const providerDirty = computed(() => {
-  const cur = {
-    provider: providerId.value,
-    base_url: String(form.base_url || "").trim(),
-    api_key: String(form.api_key || ""),
-  };
-  const saved = providerSaved.value;
-  if (cur.base_url !== saved.base_url) return true;
-  if (cur.provider !== saved.provider) return true;
-  if (cur.api_key) return true; // typed key always counts as a change
-  return false;
-});
+function providerBaseUrl(name) {
+  const draft = providerDrafts.value.find((p) => !p._isNew && p.provider === name);
+  if (draft?.base_url) return draft.base_url;
+  const saved = savedProviders.value.find((p) => p.provider === name);
+  return saved?.base_url || "";
+}
 
-const canSaveProvider = computed(
-  () => !!form.base_url && !!providerId.value,
-);
+function providerKeyPlaceholder(p) {
+  const info = p._keyInfo || {};
+  return info.set ? t("secret.keepCurrent", { hint: info.hint || "" }) : t("llm.apiKeyPlaceholder");
+}
+
+function providerKeyHint(p) {
+  const src = p._keyInfo?.source || "";
+  if (src.startsWith("env:")) return t("llm.keyFromEnv", { name: src.slice(4) });
+  if (src === "command") return t("llm.keyFromCommand");
+  return t("llm.apiKeyHint");
+}
+
+function canSaveProvider(p) {
+  return !!String(p.provider || "").trim() && !!String(p.base_url || "").trim();
+}
 
 function canSaveModel(m) {
-  return !!form.base_url && !!providerId.value && !!String(m.id || "").trim();
+  return !!m.provider && !!providerBaseUrl(m.provider) && !!String(m.id || "").trim();
 }
 
-function rememberProviderClean() {
-  providerSaved.value = {
-    provider: providerId.value,
-    base_url: String(form.base_url || "").trim(),
-    api_key: "",
-  };
-  form.api_key = "";
-  providerError.value = "";
-}
-
-function fillFrom(name) {
-  const p = providers.value.find((x) => x.provider === name);
-  form.api_key = "";
-  remoteModels.value = [];
-  pickRemote.value = "";
-  fetched.value = false;
-  fetchError.value = "";
-  providerError.value = "";
-  if (!p) {
-    form.base_url = "";
-    form.models = [blankModel()];
-    rememberProviderClean();
-    return;
-  }
-  form.base_url = p.base_url || "";
-  const rows = (p.models || []).map((m) => {
-    const row = blankModel({
-      id: m.id || "",
-      name: m.name || "",
-      images: m.images !== false,
-      max_images: m.max_images ?? null,
-      context_window: m.context_window ?? null,
-      max_tokens: m.max_tokens ?? null,
+function applyView(data) {
+  view.value = data;
+  const providers = data?.providers || [];
+  providerDrafts.value = providers.map((p) => {
+    const row = blankProvider({
+      provider: p.provider,
+      base_url: p.base_url || "",
+      _isNew: false,
+      _keyInfo: p.api_key || { set: false, hint: "", source: "none" },
     });
-    markClean(row);
+    markProviderClean(row);
     return row;
   });
-  form.models = rows.length ? rows : [blankModel()];
-  rememberProviderClean();
-}
-
-function addBlankModel() {
-  const row = blankModel();
-  // New empty card starts clean until the user edits (no id yet → save stays disabled).
-  markClean(row);
-  form.models.push(row);
-}
-
-function addRemoteModel() {
-  const id = String(pickRemote.value || "").trim();
-  if (!id) return;
-  if (form.models.some((m) => m.id === id)) {
-    pickRemote.value = "";
-    return;
+  const rows = [];
+  for (const p of providers) {
+    for (const m of p.models || []) {
+      const row = blankModel({
+        provider: p.provider,
+        id: m.id || "",
+        name: m.name || "",
+        images: m.images !== false,
+        max_images: m.max_images ?? null,
+        context_window: m.context_window ?? null,
+        max_tokens: m.max_tokens ?? null,
+      });
+      markModelClean(row);
+      rows.push(row);
+    }
   }
-  const empty = form.models.find((m) => !String(m.id || "").trim());
-  if (empty) {
-    empty.id = id;
-  } else {
-    const row = blankModel({ id, images: true });
-    // Fresh from server list → dirty so the user can save limits/name.
-    row._saved = "";
-    form.models.push(row);
-  }
-  pickRemote.value = "";
-}
-
-async function removeModel(idx) {
-  const m = form.models[idx];
-  if (!m || form.models.length <= 1) return;
-  const id = String(m.id || "").trim();
-  const wasSaved = id && m._saved && JSON.parse(m._saved || "{}").id === id;
-  form.models.splice(idx, 1);
-  if (!wasSaved || !providerId.value || !form.base_url) return;
-  // Persist removal: rewrite provider models list without this id.
-  try {
-    const models = form.models
-      .map((row) => ({
-        id: String(row.id || "").trim(),
-        name: String(row.name || "").trim(),
-        images: !!row.images,
-        max_images: normNum(row.max_images),
-        context_window: normNum(row.context_window),
-        max_tokens: normNum(row.max_tokens),
-      }))
-      .filter((row) => !!row.id);
-    if (!models.length) return;
-    view.value = await api.saveSetupLlm({
-      provider: providerId.value,
-      base_url: form.base_url,
-      api_key: form.api_key,
-      models,
-    });
-    form.provider = view.value.providers[0]?.provider || form.provider;
-    fillFrom(form.provider);
-    refreshSetup(true);
-  } catch (e) {
-    loadError.value = e.message;
+  modelRows.value = rows;
+  if (!add.provider && providers[0]) add.provider = providers[0].provider;
+  if (add.provider && !providers.some((p) => p.provider === add.provider)) {
+    add.provider = providers[0]?.provider || "";
   }
 }
 
 async function load() {
   try {
-    view.value = await api.setupLlm();
-    const first = providers.value[0];
-    form.provider = first ? first.provider : "";
-    fillFrom(form.provider);
+    applyView(await api.setupLlm());
   } catch (e) {
     loadError.value = e.message;
   }
 }
 
+function startAddProvider() {
+  if (addingProvider.value) return;
+  const row = blankProvider({
+    _isNew: true,
+    provider: providerDrafts.value.length ? "" : "autonomous",
+  });
+  // New card starts dirty only once id+url are filled.
+  row._saved = providerFingerprint(row);
+  providerDrafts.value = [...providerDrafts.value, row];
+}
+
+function cancelNewProvider(p) {
+  providerDrafts.value = providerDrafts.value.filter((x) => x._key !== p._key);
+}
+
+function onAddProviderChange() {
+  remoteModels.value = [];
+  fetched.value = false;
+  fetchError.value = "";
+  add.id = "";
+  addError.value = "";
+}
+
+async function saveProvider(p) {
+  if (!isProviderDirty(p) || !canSaveProvider(p)) return;
+  p._saving = true;
+  p._error = "";
+  p._ok = "";
+  try {
+    // Credentials only — no models key → server keeps existing models.
+    const data = await api.saveSetupLlm({
+      provider: String(p.provider || "").trim(),
+      base_url: String(p.base_url || "").trim(),
+      api_key: p.api_key,
+    });
+    applyView(data);
+    refreshSetup(true);
+    const saved = providerDrafts.value.find((x) => x.provider === String(p.provider || "").trim());
+    if (saved) saved._ok = t("llm.saved");
+  } catch (e) {
+    p._error = e.message;
+  } finally {
+    p._saving = false;
+  }
+}
+
 async function fetchModels() {
+  if (!add.provider) return;
   fetching.value = true;
   fetched.value = false;
   fetchError.value = "";
   try {
+    const draft = providerDrafts.value.find((p) => p.provider === add.provider);
     const r = await api.setupLlmModels({
-      provider: existing.value ? form.provider : form.newProvider,
-      base_url: form.base_url,
-      api_key: form.api_key,
+      provider: add.provider,
+      base_url: providerBaseUrl(add.provider),
+      api_key: draft?.api_key || "",
     });
     remoteModels.value = r.models || [];
     fetched.value = true;
@@ -377,39 +533,35 @@ async function fetchModels() {
   }
 }
 
-async function saveProvider() {
-  if (!providerDirty.value || !canSaveProvider.value) return;
-  providerSaving.value = true;
-  providerError.value = "";
+async function saveNewModel() {
+  if (!canAddModel.value) return;
+  addSaving.value = true;
+  addError.value = "";
   try {
-    // Keep existing models; upsert first model as no-op anchor if list empty.
-    const models = form.models
-      .map((row) => ({
-        id: String(row.id || "").trim(),
-        name: String(row.name || "").trim(),
-        images: !!row.images,
-        max_images: normNum(row.max_images),
-        context_window: normNum(row.context_window),
-        max_tokens: normNum(row.max_tokens),
-      }))
-      .filter((row) => !!row.id);
-    if (!models.length) {
-      providerError.value = t("llm.noModels");
-      return;
-    }
-    view.value = await api.saveSetupLlm({
-      provider: providerId.value,
-      base_url: form.base_url,
-      api_key: form.api_key,
-      models,
+    const data = await api.saveSetupLlm({
+      provider: add.provider,
+      base_url: providerBaseUrl(add.provider),
+      model: String(add.id || "").trim(),
+      model_name: String(add.name || "").trim(),
+      images: !!add.images,
+      max_images: normNum(add.max_images),
+      context_window: normNum(add.context_window),
+      max_tokens: normNum(add.max_tokens),
     });
-    form.provider = view.value.providers[0]?.provider || form.provider;
-    fillFrom(form.provider);
+    applyView(data);
+    add.id = "";
+    add.name = "";
+    add.images = true;
+    add.max_images = null;
+    add.context_window = null;
+    add.max_tokens = null;
+    remoteModels.value = [];
+    fetched.value = false;
     refreshSetup(true);
   } catch (e) {
-    providerError.value = e.message;
+    addError.value = e.message;
   } finally {
-    providerSaving.value = false;
+    addSaving.value = false;
   }
 }
 
@@ -418,10 +570,9 @@ async function saveModel(m) {
   m._saving = true;
   m._error = "";
   try {
-    view.value = await api.saveSetupLlm({
-      provider: providerId.value,
-      base_url: form.base_url,
-      api_key: form.api_key,
+    const data = await api.saveSetupLlm({
+      provider: m.provider,
+      base_url: providerBaseUrl(m.provider),
       model: String(m.id || "").trim(),
       model_name: String(m.name || "").trim(),
       images: !!m.images,
@@ -429,26 +580,47 @@ async function saveModel(m) {
       context_window: normNum(m.context_window),
       max_tokens: normNum(m.max_tokens),
     });
-    form.provider = view.value.providers[0]?.provider || form.provider;
-    form.api_key = "";
-    rememberProviderClean();
-    // Refresh this card from server payload so fingerprint matches.
-    const prov = (view.value.providers || []).find((p) => p.provider === form.provider);
-    const saved = (prov?.models || []).find((x) => x.id === String(m.id || "").trim());
-    if (saved) {
-      m.id = saved.id || m.id;
-      m.name = saved.name || "";
-      m.images = saved.images !== false;
-      m.max_images = saved.max_images ?? null;
-      m.context_window = saved.context_window ?? null;
-      m.max_tokens = saved.max_tokens ?? null;
-    }
-    markClean(m);
+    applyView(data);
     refreshSetup(true);
   } catch (e) {
     m._error = e.message;
   } finally {
     m._saving = false;
+  }
+}
+
+async function removeModel(idx) {
+  const m = modelRows.value[idx];
+  if (!m) return;
+  const provider = m.provider;
+  const id = String(m.id || "").trim();
+  const base_url = providerBaseUrl(provider);
+  const remaining = modelRows.value
+    .filter((row, i) => i !== idx && row.provider === provider)
+    .map((row) => ({
+      id: String(row.id || "").trim(),
+      name: String(row.name || "").trim(),
+      images: !!row.images,
+      max_images: normNum(row.max_images),
+      context_window: normNum(row.context_window),
+      max_tokens: normNum(row.max_tokens),
+    }))
+    .filter((row) => !!row.id);
+  // Unsaved draft card — drop locally.
+  if (!id || !base_url) {
+    modelRows.value.splice(idx, 1);
+    return;
+  }
+  try {
+    const data = await api.saveSetupLlm({
+      provider,
+      base_url,
+      models: remaining,
+    });
+    applyView(data);
+    refreshSetup(true);
+  } catch (e) {
+    loadError.value = e.message;
   }
 }
 

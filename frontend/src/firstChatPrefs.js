@@ -121,7 +121,7 @@ export async function maybeContinueFirstChatPrefs(bot, answer) {
   } catch {
     /* continue — message still useful */
   }
-  setLocale(resolved.ui);
+  setLocale(resolved.ui, { persist: false }); // already written in putSettings above
 
   const { visible, script } = prefsPayload(resolved);
   if (!script || script.length < 200) {

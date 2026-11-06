@@ -72,7 +72,7 @@ L'installeur vérifie les prérequis (Python ≥ 3.11 avec venv, git, curl, Node
 Tout le reste se configure dans l'interface web. Ouvrez <http://127.0.0.1:8787/> et connectez-vous : la page d'accueil liste ce qu'il reste à faire, avec pour chaque point un lien **Configurer** ou un bouton **Installer / Construire** (avec journal en direct) :
 
 - **Requis :** l'agent Pi, un modèle de langage (URL de base, clé d'API, un modèle qui accepte les images, avec un bouton **Tester**), Docker et l'image du bureau.
-- **Optionnel :** le grounding avec UI-TARS, (clics vérifiés par le LLM configuré) et l'application companion.
+- **Optionnel :** le grounding avec UI-TARS (clics vérifiés par le LLM configuré), l'application companion, et la recherche web (`pi install npm:pi-web-access`).
 
 La création de bot reste bloquée tant que tous les points requis ne sont pas prêts. La page reste accessible sur `/setup`. En bas de la checklist, **Lancer ma première conversation** reste grisé tant que le requis n’est pas prêt ; ensuite le bouton crée un bot si besoin et ouvre une conversation d’accueil (tour du produit + mémoire partagée).
 

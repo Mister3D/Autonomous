@@ -465,7 +465,8 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
     by_id = {str(m["id"]): dict(m) for m in existing_models}
 
     raw_models = body.get("models")
-    if isinstance(raw_models, list):
+    if "models" in body and isinstance(raw_models, list):
+        # Full list replace for that provider (may be empty — credentials-only create).
         ordered: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in raw_models:
@@ -493,13 +494,9 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
             if patch:
                 _patch_model_entry(entry, patch)
             ordered.append(entry)
-        if not ordered:
-            raise ValidationError("at least one model is required", code="model_required")
         conf["models"] = ordered
-    else:
+    elif str(body.get("model") or "").strip():
         model_id = str(body.get("model") or "").strip()
-        if not model_id:
-            raise ValidationError("model is required", code="model_required")
         entry = by_id.get(model_id) or {"id": model_id}
         entry["id"] = model_id
         patch = {
@@ -516,6 +513,9 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
         _patch_model_entry(entry, patch)
         rest = [m for m in existing_models if str(m.get("id")) != model_id]
         conf["models"] = [entry, *rest]
+    else:
+        # Provider credentials only — keep existing models (or start empty).
+        conf.setdefault("models", existing_models)
 
     rest = {k: v for k, v in providers.items() if k != provider}
     data["providers"] = {provider: conf, **rest}
