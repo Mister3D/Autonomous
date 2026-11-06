@@ -8,15 +8,16 @@
 set -eu
 
 REPO_URL="${AUTONOMOUS_REPO_URL:-https://github.com/Mister3D/Autonomous}"
-VERSION="${AUTONOMOUS_VERSION:-main}"
+# Default ref installed by this script. On ``main`` keep ``main``; feature branches
+# that ship installer fixes should default to themselves so ``curl …/branch/install.sh``
+# also checks out that branch (override with AUTONOMOUS_VERSION / --version).
+VERSION="${AUTONOMOUS_VERSION:-dev_peter}"
 PREFIX="${AUTONOMOUS_PREFIX:-$HOME/autonomous}"
 DATA_HOME="${AUTONOMOUS_HOME:-}"
 PORT="${AUTONOMOUS_PORT:-8787}"
 ASSUME_YES=0
 NO_DESK=0
 NO_SERVICE=0
-DESK_BUILDING=0
-DESK_BUILD_LOG=""
 SERVICE_INSTALLED=0
 PKG=""
 SUDO=""
@@ -37,7 +38,7 @@ Usage: install.sh [options]
   --home DIR       data directory, AUTONOMOUS_HOME (default: PREFIX/data)
   --version REF    git branch or tag to install (default: main)
   --port N         port for the systemd service (default: 8787)
-  --no-desk        skip the background desktop Docker image build
+  --no-desk        ignored (desk image builds when Autonomous starts if needed)
   --no-service     do not offer to install a systemd service
   -h, --help       show this help
 
@@ -352,25 +353,6 @@ UNIT
 	SERVICE_INSTALLED=1
 }
 
-# Background build so the installer can print the login URL immediately.
-build_desk() {
-	[ "$NO_DESK" = 0 ] || return 0
-	check_docker || { warn "skipping the desktop image: Docker is not available"; return 0; }
-	DESK_BUILD_LOG="$DATA_HOME/desk-build.log"
-	umask 077
-	mkdir -p "$DATA_HOME"
-	: >"$DESK_BUILD_LOG"
-	info "Starting desktop image build in the background (~10 min, log: $DESK_BUILD_LOG)"
-	(
-		if docker build -t autonomous-desktop:latest "$PREFIX/docker/desktop" >>"$DESK_BUILD_LOG" 2>&1; then
-			printf '\n==> desktop image ready: autonomous-desktop:latest\n' >>"$DESK_BUILD_LOG"
-		else
-			printf '\n==> desktop image build FAILED (see log above)\n' >>"$DESK_BUILD_LOG"
-		fi
-	) >/dev/null 2>&1 &
-	DESK_BUILDING=1
-}
-
 next_steps() {
 	cat <<EOT
 
@@ -384,12 +366,9 @@ EOT
 		echo "    Start it first:"
 		echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
 	fi
-	if [ "${DESK_BUILDING:-0}" = 1 ]; then
-		echo ""
-		echo "The desktop Docker image is building in the background (~10 min)."
-		echo "  Log: ${DESK_BUILD_LOG:-$DATA_HOME/desk-build.log}"
-		echo "  You can use the UI meanwhile; desks unlock when the image is ready."
-	fi
+	echo ""
+	echo "The desktop Docker image builds automatically when Autonomous starts"
+	echo "(if missing or docker/desktop changed, ~10 min). Log: \$AUTONOMOUS_HOME/desk-image/build.log"
 	if [ -n "${GENERATED_PASSWORD:-}" ]; then
 		echo ""
 		echo "Temporary login password (you will be forced to change it on first login):"
@@ -414,7 +393,6 @@ main() {
 	setup_env
 	init_app
 	install_service
-	build_desk
 	next_steps
 }
 

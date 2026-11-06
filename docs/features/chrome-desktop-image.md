@@ -9,7 +9,7 @@
 - `docker/desktop/chrome-policy.json`
 - `docker/desktop/webgl-spoof-cdp.py` / `webgl-spoof.js`
 
-**Last updated**: 2026-10-29 (no more `--disable-blink-features=AutomationControlled`: "unsupported flag" banner removed)
+**Last updated**: 2026-11-06 (auto-build on serve when missing / sources changed)
 
 ## Expected behaviour in the VM
 
@@ -31,12 +31,14 @@ Chrome isolates each tab in an OS **sandbox** (namespaces / seccomp). In "tight"
 
 ## Rebuild
 
+`autonomous serve` builds the image in the background when it is missing or when files under `docker/desktop/` change (hash in `$AUTONOMOUS_HOME/desk-image/status.json`). Manual:
+
 ```bash
 cd docker/desktop
 docker build -t autonomous-desktop:latest .
 ```
 
-**New** desks pull this image. An already created container keeps its filesystem until recreate/reset.
+**New** desks use this image. An already created container keeps its filesystem until recreate/reset.
 
 ## Hot-patch (debug)
 

@@ -171,6 +171,8 @@ def check_docker() -> dict[str, Any]:
 
 
 def check_desk_image(home: Path | None, docker_ok: bool) -> dict[str, Any]:
+    from autonomous.services import desk_image_build as desk_build
+
     image = str(settings_svc.get("desktop_image", home=home) or "autonomous-desktop:latest")
     if "desk_image" in _running:
         return _check("desk_image", required=True, status="running", details=image,
@@ -178,11 +180,28 @@ def check_desk_image(home: Path | None, docker_ok: bool) -> dict[str, Any]:
     if not docker_ok:
         return _check("desk_image", required=True, status="missing",
                       details=f"{image} (Docker first)", action=None)
-    rc, _ = _run(["docker", "image", "inspect", "--format", "{{.Id}}", image], timeout=10)
-    if rc != 0:
+    st = desk_build.status(home)
+    if st.get("state") == "building":
+        return _check(
+            "desk_image",
+            required=True,
+            status="running",
+            details=f"{image} building (~10 min)",
+            action=_job_action("desk_image"),
+        )
+    if st.get("state") == "failed" or st.get("error"):
+        return _check(
+            "desk_image",
+            required=True,
+            status="error",
+            details=str(st.get("error") or "build failed")[:300],
+            action=_job_action("desk_image"),
+        )
+    if not st.get("present"):
         return _check("desk_image", required=True, status="missing",
                       details=f"{image} not built", action=_job_action("desk_image"))
-    return _check("desk_image", required=True, status="ok", details=image,
+    detail = image + (" (update available)" if st.get("stale") else "")
+    return _check("desk_image", required=True, status="ok", details=detail,
                   action=_job_action("desk_image") | {"rebuild": True})
 
 

@@ -257,6 +257,12 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
         companion_build_svc.start_background(home)
     except Exception as exc:  # never block serve
         print(f"[companion] build not started: {exc}", file=sys.stderr)
+    try:  # desk image missing or docker/desktop sources changed
+        from autonomous.services import desk_image_build as desk_image_build_svc
+
+        desk_image_build_svc.start_background(home)
+    except Exception as exc:  # never block serve
+        print(f"[desk-image] build not started: {exc}", file=sys.stderr)
     print(t("serve.starting", host=host, port=port))
 
     def resolve_bot_port(bot: str) -> int | None:

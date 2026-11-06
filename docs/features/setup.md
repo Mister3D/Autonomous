@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup.py`, `autonomous/api/setup_routes.py`, `frontend/src/components/SetupPanel.vue`, `frontend/src/components/SetupItem.vue`, `frontend/src/store.js` (`setupReady`, `refreshSetup`)  
-**Last updated**: 2026-11-06 (`install.sh` prints login URL then builds desk image in background)
+**Last updated**: 2026-11-06 (desk image builds on serve start, not during install.sh)
 
 ## User behaviour
 
@@ -28,13 +28,13 @@
 
 ## Installer (`install.sh`)
 
-- After init + optional systemd unit, starts `docker build … autonomous-desktop:latest` **in the background** (unless `--no-desk` / no Docker), log `$AUTONOMOUS_HOME/desk-build.log`.
-- Final message leads with **http://127.0.0.1:$PORT/** and states the desk image is building (~10 min). Do not block the shell on the build.
+- Does **not** build the desk image (no prompt). Final message leads with **http://127.0.0.1:$PORT/**.
+- Desk image: on `autonomous serve` startup, `desk_image_build.start_background` builds `autonomous-desktop:latest` if missing or if `docker/desktop/` source hash changed (~10 min). Log `$AUTONOMOUS_HOME/desk-image/build.log`. Disable with `AUTONOMOUS_DESK_IMAGE_BUILD=0`. Setup UI can still force a rebuild via the `desk_image` job.
 
 ## Pitfalls / non-regressions
 
 - Don’t enable the button on optional-only gaps: only `setup.ready` (required).
-- Don’t wait for the desk image build before printing the login URL.
+- Don’t prompt for a desk image build in `install.sh` — serve owns that.
 - Don’t hide the CTA for any reason other than « memory has ≥ 1 entry ».
 - Don’t skip `memory_access` on the auto-created Assistant bot.
 - First bot profile: `is_manager=true`, `avatar=renard`, `avatar_color=0` (Original). Don’t pick a random unused character.
