@@ -325,27 +325,70 @@ init_app() {
 	PASSWORD=""
 }
 
-# Prefer the LAN IPv4 used to reach the internet (e.g. 192.168.0.127), not 127.0.0.1.
+_ip_cmd() {
+	if have ip; then command -v ip
+	elif [ -x /sbin/ip ]; then echo /sbin/ip
+	elif [ -x /usr/sbin/ip ]; then echo /usr/sbin/ip
+	else echo ""
+	fi
+}
+
+# True for docker/bridge/link-local/loopback — not a useful LAN URL.
+_is_bad_lan_ip() {
+	case "$1" in
+		""|127.*|0.*|169.254.*) return 0 ;;
+		172.17.*|172.18.*|172.19.*) return 0 ;; # docker0 / libvirt-ish bridges
+		*) return 1 ;;
+	esac
+}
+
+# Prefer a real LAN IPv4 (e.g. 192.168.0.127), never 127.0.0.1 / docker0.
 detect_public_ip() {
 	PUBLIC_IP=""
-	if have ip; then
-		PUBLIC_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')" || true
+	IPC="$(_ip_cmd)"
+
+	# 1) Source address for the default route (works even without internet).
+	if [ -n "$IPC" ]; then
+		gw="$("$IPC" -4 route show default 2>/dev/null | awk '/default/ {print $3; exit}')" || true
+		if [ -n "${gw:-}" ]; then
+			PUBLIC_IP="$("$IPC" -4 route get "$gw" 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')" || true
+		fi
+		if _is_bad_lan_ip "$PUBLIC_IP"; then
+			PUBLIC_IP="$("$IPC" -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')" || true
+		fi
+		# 2) First global IPv4 that is not docker/loopback (eth0/en* first).
+		if _is_bad_lan_ip "$PUBLIC_IP"; then
+			PUBLIC_IP="$("$IPC" -4 -o addr show scope global 2>/dev/null | awk '
+				$0 ~ /docker|br-|veth|virbr|cni/ { next }
+				{
+					split($4, a, "/")
+					ip = a[1]
+					if (ip ~ /^127\./ || ip ~ /^169\.254\./) next
+					if (ip ~ /^172\.1[7-9]\./ || ip ~ /^172\.2[0-9]\./ || ip ~ /^172\.3[0-1]\./) next
+					print ip
+					exit
+				}')" || true
+		fi
 	fi
-	case "$PUBLIC_IP" in
-		""|127.*|0.*|169.254.*) PUBLIC_IP="" ;;
-	esac
-	if [ -z "$PUBLIC_IP" ] && have hostname; then
-		PUBLIC_IP="$(hostname -I 2>/dev/null | awk '{print $1}')" || true
-		case "$PUBLIC_IP" in
-			""|127.*|0.*|169.254.*) PUBLIC_IP="" ;;
-		esac
+
+	# 3) hostname -I: skip docker-ish addresses.
+	if _is_bad_lan_ip "$PUBLIC_IP" && have hostname; then
+		PUBLIC_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '
+			/^127\./ || /^169\.254\./ { next }
+			/^172\.1[7-9]\./ || /^172\.2[0-9]\./ || /^172\.3[0-1]\./ { next }
+			/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }
+		')" || true
 	fi
-	if [ -n "$PUBLIC_IP" ]; then
-		LISTEN_HOST="0.0.0.0"
-		PUBLIC_URL="http://${PUBLIC_IP}:${PORT}"
-	else
+
+	if _is_bad_lan_ip "$PUBLIC_IP"; then
+		PUBLIC_IP=""
 		LISTEN_HOST="127.0.0.1"
 		PUBLIC_URL="http://127.0.0.1:${PORT}"
+		warn "no LAN IPv4 detected — UI URL will be http://127.0.0.1:${PORT}/"
+	else
+		LISTEN_HOST="0.0.0.0"
+		PUBLIC_URL="http://${PUBLIC_IP}:${PORT}"
+		info "LAN address detected: $PUBLIC_IP (UI will listen on all interfaces)"
 	fi
 }
 
