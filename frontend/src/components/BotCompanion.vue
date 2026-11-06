@@ -204,8 +204,11 @@ async function loadDevices() {
     const data = await api.listDevices();
     devices.value = data.devices || [];
     devicesReady.value = true;
+    error.value = "";
   } catch (e) {
-    error.value = e.message;
+    // Browser TypeError ("Failed to fetch") = network blip / server restart,
+    // not an API error body. Keep showing it until the next successful poll.
+    error.value = e.message || String(e);
   }
 }
 

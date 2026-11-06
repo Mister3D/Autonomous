@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-06 (SOCKS/DNS allowlist scoped per companion)
+**Last updated**: 2026-11-06 (clear sticky companion fetch error on success)
 
 ## User behaviour
 
@@ -34,6 +34,7 @@
 - The kill switch only concerns bots that ticked it, and only while their companion is offline. Don't apply it to all desktops.
 - Don't hand the whole MCP catalogue to a bot: without a grant, the list is empty.
 - `notify_user` remains a tool `event` message in the database: the UI takes it out of the tool group and shows it as a card. Don't put it back into `ToolGroup`.
+- Details → companion transfer polls `GET /devices/` every 5 s. A browser `Failed to fetch` (restart / blip) must be cleared on the next successful poll — do not leave `error` sticky after success.
 
 ## Quick check
 
