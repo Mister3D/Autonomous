@@ -19,6 +19,9 @@ ASSUME_YES=0
 NO_DESK=0
 NO_SERVICE=0
 SERVICE_INSTALLED=0
+LISTEN_HOST="127.0.0.1"
+PUBLIC_IP=""
+PUBLIC_URL=""
 PKG=""
 SUDO=""
 OS_ID=""
@@ -322,12 +325,42 @@ init_app() {
 	PASSWORD=""
 }
 
+# Prefer the LAN IPv4 used to reach the internet (e.g. 192.168.0.127), not 127.0.0.1.
+detect_public_ip() {
+	PUBLIC_IP=""
+	if have ip; then
+		PUBLIC_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')" || true
+	fi
+	case "$PUBLIC_IP" in
+		""|127.*|0.*|169.254.*) PUBLIC_IP="" ;;
+	esac
+	if [ -z "$PUBLIC_IP" ] && have hostname; then
+		PUBLIC_IP="$(hostname -I 2>/dev/null | awk '{print $1}')" || true
+		case "$PUBLIC_IP" in
+			""|127.*|0.*|169.254.*) PUBLIC_IP="" ;;
+		esac
+	fi
+	if [ -n "$PUBLIC_IP" ]; then
+		LISTEN_HOST="0.0.0.0"
+		PUBLIC_URL="http://${PUBLIC_IP}:${PORT}"
+	else
+		LISTEN_HOST="127.0.0.1"
+		PUBLIC_URL="http://127.0.0.1:${PORT}"
+	fi
+}
+
 install_service() {
 	[ "$NO_SERVICE" = 0 ] || return 0
 	have systemctl && [ -d /run/systemd/system ] || { info "no systemd: skipping the service"; return 0; }
 	confirm "Install a systemd service (autonomous.service, port $PORT)?" || return 0
 	unit=/etc/systemd/system/autonomous.service
 	tmp="$(mktemp)"
+	# LAN IP → bind all interfaces + BIND_PUBLIC so http://<lan>:PORT works from other devices.
+	bind_env=""
+	if [ "$LISTEN_HOST" != "127.0.0.1" ]; then
+		bind_env="Environment=AUTONOMOUS_BIND_PUBLIC=1
+Environment=AUTONOMOUS_PUBLIC_URL=$PUBLIC_URL"
+	fi
 	cat >"$tmp" <<UNIT
 [Unit]
 Description=Autonomous bot hub
@@ -339,8 +372,9 @@ User=$(id -un)
 WorkingDirectory=$PREFIX
 Environment=AUTONOMOUS_HOME=$DATA_HOME
 Environment=PATH=$HOME/.local/bin:$HOME/.pi/agent/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+$bind_env
 EnvironmentFile=-$PREFIX/.env
-ExecStart=$PREFIX/.venv/bin/autonomous serve --host 127.0.0.1 --port $PORT
+ExecStart=$PREFIX/.venv/bin/autonomous serve --host $LISTEN_HOST --port $PORT
 Restart=on-failure
 
 [Install]
@@ -358,13 +392,21 @@ next_steps() {
 
 Autonomous is installed in $PREFIX (data: $DATA_HOME).
 
->>> Open http://127.0.0.1:$PORT/ and log in.
+>>> Open ${PUBLIC_URL}/ and log in.
 EOT
+	if [ -n "$PUBLIC_IP" ]; then
+		echo "    (also http://127.0.0.1:$PORT/ on this machine)"
+	fi
 	if [ "${SERVICE_INSTALLED:-0}" = 1 ]; then
 		echo "    (service: systemctl status autonomous)"
 	else
 		echo "    Start it first:"
-		echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
+		if [ "$LISTEN_HOST" != "127.0.0.1" ]; then
+			echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME AUTONOMOUS_BIND_PUBLIC=1 \\"
+			echo "        .venv/bin/autonomous serve --host $LISTEN_HOST --port $PORT"
+		else
+			echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
+		fi
 	fi
 	echo ""
 	echo "The desktop Docker image builds automatically when Autonomous starts"
@@ -387,6 +429,7 @@ EOT
 main() {
 	parse_args "$@"
 	detect_os
+	detect_public_ip
 	check_prereqs
 	fetch_source
 	install_app

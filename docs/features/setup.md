@@ -28,7 +28,7 @@
 
 ## Installer (`install.sh`)
 
-- Does **not** build the desk image (no prompt). Final message leads with **http://127.0.0.1:$PORT/**.
+- Does **not** build the desk image (no prompt). Final message leads with the LAN URL when a non-loopback IPv4 is detected (e.g. `http://192.168.0.127:8787/`), otherwise `http://127.0.0.1:$PORT/`. With a LAN IP the systemd unit binds `0.0.0.0` and sets `AUTONOMOUS_BIND_PUBLIC=1`.
 - Desk image: on `autonomous serve` startup, `desk_image_build.start_background` builds `autonomous-desktop:latest` if missing or if `docker/desktop/` source hash changed (~10 min). Log `$AUTONOMOUS_HOME/desk-image/build.log`. Disable with `AUTONOMOUS_DESK_IMAGE_BUILD=0`. Setup UI can still force a rebuild via the `desk_image` job.
 
 ## Pitfalls / non-regressions
