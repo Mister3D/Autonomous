@@ -5732,6 +5732,7 @@ a.bot-mention:hover,
 .setup-panel .tagline { text-align: center; color: var(--muted); }
 .setup-title { margin: 8px 0 4px; font-size: 1.3rem; }
 .setup-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.setup-panel > .setup-toolbar { justify-content: center; }
 .setup-section { margin: 20px 0 8px; font-size: 0.95rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .setup-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .setup-item { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-elev); }
@@ -5818,7 +5819,8 @@ a.bot-mention:hover,
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   gap: 0.45rem;
 }
 .setup-first-chat .btn {
@@ -5827,6 +5829,7 @@ a.bot-mention:hover,
 .setup-first-chat .hint {
   max-width: 38rem;
   line-height: 1.45;
+  text-align: center;
 }
 .setup-first-chat-home {
   align-items: center;

@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup.py`, `autonomous/api/setup_routes.py`, `frontend/src/components/SetupPanel.vue`, `frontend/src/components/SetupItem.vue`, `frontend/src/store.js` (`setupReady`, `refreshSetup`)  
-**Last updated**: 2026-11-06 (desk image builds on serve start, not during install.sh)
+**Last updated**: 2026-11-06 (checklist toolbar + first-chat CTA centered)
 
 ## User behaviour
 
@@ -10,7 +10,8 @@
 - **Required**: Pi agent, language model (vision), Docker, desktop image. Creating a bot stays locked until these are OK (`setup.ready`).
 - **Optional**: grounding (UI-TARS), companion app binary.
 - Each row has Configure / Install / Build as needed; jobs stream a live log.
-- At the **bottom** of the checklist: **Start the setup conversation** / **Lancer la conversation d’initialisation**. Greyed out until every required item is ready; then primary and clickable.
+- Checklist toolbar (**Recheck** / **Back to home**) is centered under the intro.
+- At the **bottom** of the checklist: **Start the setup conversation** / **Lancer la conversation d’initialisation** (centered with its hint). Greyed out until every required item is ready; then primary and clickable.
 - The CTA is visible **if and only if** shared memory has **0 entries**. No other flag hides it (`first_chat_done` / `first_chat_prefs_pending` are cleared when memory is empty).
 - When the last required item flips to OK, the checklist stays open (so the button remains visible if still relevant).
 - Clicking the button: creates/opens **Assistant**, navigates immediately, sends a short bubble + language-only prompt (`ask_clarify` Français | English, plus free text for other languages), sets `first_chat_prefs_pending`. After the user picks a language, the UI **sends a second message** (prefs script in that language — FR/EN templates, or a translate-into-{lang} script for others like German) and sets `first_chat_done`. First bot is always **Manager**, avatar **renard**, colour swatch **0**. If another Manager already exists, it is demoted.
