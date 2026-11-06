@@ -330,6 +330,7 @@
   "update.checking": "Checking…",
   "update.apply": "Update",
   "update.applying": "Updating…",
+  "update.restarting": "Update applied — waiting for the service to come back, then reloading…",
   "update.failed": "Update failed — see the log.",
   "update.noGit": "This install is not a git checkout — self-update is unavailable.",
   "update.fetchFailed": "Could not reach the update remote: {detail}",

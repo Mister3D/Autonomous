@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/updates.py`, `autonomous/api/setup_routes.py` (`/setup/update*`), `frontend/src/components/SetupPanel.vue`, Settings → General  
-**Last updated**: 2026-11-06 (update UI also on incomplete setup checklist)
+**Last updated**: 2026-11-06 (auto-reload after apply; no NetworkError flash)
 
 ## User behaviour
 
@@ -26,7 +26,7 @@
 - Dirty tree → apply returns 400 `dirty`; banner explains it.
 - Non-git installs (no `.git`) → UI shows unavailable; no fake update path.
 - Do not allow channel / remote_url flips through `set_many` without the migration / confirm guards.
-- After apply, expect the HTTP process to die if systemd restart succeeds — the job log may truncate.
+- After apply, expect the HTTP process to die if systemd restart succeeds — the job log may truncate. The UI must **not** show `NetworkError`: on job `done` (or a fetch drop while applying), poll `/api/v1/health` then `location.reload()`.
 - Branch names are validated (`[A-Za-z0-9._/-]`, no `..`); remote URLs must be `https://` / `ssh://` / `git@…` (`http://` and `git://` rejected).
 - Do not point `update.remote_url` at a repo you do not control.
 

@@ -330,6 +330,7 @@
   "update.checking": "Vérification…",
   "update.apply": "Mettre à jour",
   "update.applying": "Mise à jour…",
+  "update.restarting": "Mise à jour appliquée — attente du redémarrage du service, puis rechargement…",
   "update.failed": "Échec de la mise à jour — voir le journal.",
   "update.noGit": "Cette installation n’est pas un dépôt git — la mise à jour depuis l’UI est indisponible.",
   "update.fetchFailed": "Impossible de joindre le dépôt distant : {detail}",

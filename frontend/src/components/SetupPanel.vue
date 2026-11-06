@@ -225,10 +225,56 @@ async function runApplyUpdate() {
     updateLog.value = job.log || [];
     pollUpdateJob();
   } catch (e) {
+    // Apply may return just as the process dies for restart — treat as success path.
+    if (isNetworkDrop(e)) {
+      scheduleReloadAfterUpdate();
+      return;
+    }
     updateError.value = e.message || String(e);
     updateBusy.value = false;
     updateApplying.value = false;
   }
+}
+
+function isNetworkDrop(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return (
+    err?.name === "TypeError" ||
+    msg.includes("networkerror") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("load failed") ||
+    msg.includes("network request failed")
+  );
+}
+
+function scheduleReloadAfterUpdate() {
+  updateError.value = "";
+  updateBusy.value = true;
+  updateApplying.value = true;
+  const note = t("update.restarting");
+  if (!updateLog.value.includes(note)) updateLog.value = [...updateLog.value, note];
+  const started = Date.now();
+  const tick = async () => {
+    if (Date.now() - started > 90000) {
+      window.location.reload();
+      return;
+    }
+    try {
+      const res = await fetch("/api/v1/health", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      // Any response means the hub is back (health is open).
+      if (res.ok || res.status === 401 || res.status === 403) {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      /* still restarting */
+    }
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 2000);
 }
 
 async function pollUpdateJob() {
@@ -240,13 +286,20 @@ async function pollUpdateJob() {
       setTimeout(pollUpdateJob, 1200);
       return;
     }
-    updateApplying.value = false;
-    updateBusy.value = false;
     if (job.state === "failed") {
+      updateApplying.value = false;
+      updateBusy.value = false;
       updateError.value = job.error || t("update.failed");
+      await loadUpdate(true);
+      return;
     }
-    await loadUpdate(true);
-  } catch {
+    // done → systemd restart drops the socket; reload when /health answers again.
+    scheduleReloadAfterUpdate();
+  } catch (e) {
+    if (updateApplying.value || isNetworkDrop(e)) {
+      scheduleReloadAfterUpdate();
+      return;
+    }
     setTimeout(pollUpdateJob, 2000);
   }
 }
