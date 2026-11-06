@@ -306,12 +306,15 @@ init_app() {
 	GENERATED_PASSWORD=""
 	read_password
 	info "Initialising $DATA_HOME"
-	init_args=(init --password "$PASSWORD")
-	# Generated password → force change on first web login and drop plaintext ASAP.
+	# POSIX sh (Debian dash) — no bash arrays. Generated password → force change
+	# on first web login and drop plaintext ASAP.
 	if [ -n "${GENERATED_PASSWORD_FILE:-}" ]; then
-		init_args+=(--must-change-password)
+		AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" \
+			init --password "$PASSWORD" --must-change-password >/dev/null
+	else
+		AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" \
+			init --password "$PASSWORD" >/dev/null
 	fi
-	AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" "${init_args[@]}" >/dev/null
 	PASSWORD=""
 }
 
