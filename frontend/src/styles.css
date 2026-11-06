@@ -5719,6 +5719,7 @@ a.bot-mention:hover,
 
 .companion-download { margin-top: 1.5rem; }
 .companion-download .settings-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.companion-build-log { max-height: 220px; margin: 10px 0 12px; text-align: left; }
 .companion-cmd { white-space: pre-wrap; word-break: break-all; padding: .5rem; border-radius: 6px; background: rgba(127,127,127,.12); user-select: all; }
 
 /* ── First-run setup (/, /setup) ─────────────────────────────── */

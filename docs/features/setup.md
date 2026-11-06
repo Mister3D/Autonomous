@@ -2,14 +2,14 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup.py`, `autonomous/api/setup_routes.py`, `frontend/src/components/SetupPanel.vue`, `frontend/src/components/SetupItem.vue`, `frontend/src/store.js` (`setupReady`, `refreshSetup`)  
-**Last updated**: 2026-11-06 (checklist toolbar + first-chat CTA centered)
+**Last updated**: 2026-11-06 (companion build shows live CLI log on checklist)
 
 ## User behaviour
 
 - After login, the home page (`/` or `/setup`) lists what is left to install or configure.
 - **Required**: Pi agent, language model (vision), Docker, desktop image. Creating a bot stays locked until these are OK (`setup.ready`).
 - **Optional**: grounding (UI-TARS), companion app binary.
-- Each row has Configure / Install / Build as needed; jobs stream a live log.
+- Each row has Configure / Install / Build as needed; jobs stream a live log (same dark CLI panel as updates). Companion builds started in the background by `serve` also stream via `GET /companion/build` → `log`.
 - Checklist toolbar (**Recheck** / **Back to home**) is centered under the intro.
 - At the **bottom** of the checklist: **Start the setup conversation** / **Lancer la conversation d’initialisation** (centered with its hint). Greyed out until every required item is ready; then primary and clickable.
 - The CTA is visible **if and only if** shared memory has **0 entries**. No other flag hides it (`first_chat_done` / `first_chat_prefs_pending` are cleared when memory is empty).

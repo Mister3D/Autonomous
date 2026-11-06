@@ -18,11 +18,11 @@
 
       <h3 class="setup-section">{{ t("setup.required") }}</h3>
       <ul class="setup-list">
-        <SetupItem v-for="c in required" :key="c.id" :check="c" :log="logs[c.action?.job]" @job="runJob" />
+        <SetupItem v-for="c in required" :key="c.id" :check="c" :log="itemLog(c)" @job="runJob" />
       </ul>
       <h3 class="setup-section">{{ t("setup.optional") }}</h3>
       <ul class="setup-list">
-        <SetupItem v-for="c in optional" :key="c.id" :check="c" :log="logs[c.action?.job]" @job="runJob" />
+        <SetupItem v-for="c in optional" :key="c.id" :check="c" :log="itemLog(c)" @job="runJob" />
       </ul>
       <div v-if="showFirstChatCta" class="setup-first-chat">
         <button
@@ -500,6 +500,10 @@ async function startFirstChat() {
   }
 }
 
+function itemLog(check) {
+  return logs[check?.action?.job] || logs[check?.id] || null;
+}
+
 async function runJob(kind) {
   error.value = "";
   try {
@@ -518,11 +522,41 @@ function attachRunning() {
   }
 }
 
+const COMPANION_BG_ID = "companion-bg";
+
+/** Background companion builds (serve startup) have no setup.jobs row — tail build.log via API. */
+async function pollCompanionBuildLog() {
+  const row = (setup.value?.checks || []).find((c) => c.id === "companion");
+  const tracked = logs.companion;
+  const need =
+    row?.status === "running" ||
+    tracked?.state === "pending" ||
+    tracked?.state === "running" ||
+    (tracked?.log?.length && tracked?.state === "failed");
+  if (!need) return;
+  // Real setup job (UUID) already polled via getJob — don't overwrite.
+  if (tracked && tracked.id && tracked.id !== COMPANION_BG_ID) return;
+  try {
+    const st = await api.companionBuild();
+    const building = st.state === "building";
+    logs.companion = {
+      id: COMPANION_BG_ID,
+      state: building ? "running" : st.state === "failed" || st.error ? "failed" : "done",
+      log: st.log || [],
+      error: st.error || "",
+    };
+    if (!building && row?.status === "running") await refreshSetup(true);
+  } catch {
+    /* retry next tick */
+  }
+}
+
 async function poll() {
   clearTimeout(timer);
   attachRunning();
   const active = Object.entries(logs).filter(([, j]) => j.state === "pending" || j.state === "running");
   for (const [kind, j] of active) {
+    if (j.id === COMPANION_BG_ID) continue;
     try {
       const job = await api.getJob(j.id);
       logs[kind] = { id: job.id, state: job.state, log: job.log || [], error: job.error };
@@ -531,7 +565,10 @@ async function poll() {
       /* retry next tick */
     }
   }
-  const still = Object.values(logs).some((j) => j.state === "pending" || j.state === "running");
+  await pollCompanionBuildLog();
+  const still =
+    Object.values(logs).some((j) => j.state === "pending" || j.state === "running") ||
+    (setup.value?.checks || []).some((c) => c.id === "companion" && c.status === "running");
   timer = setTimeout(poll, still ? 1200 : 10000);
   if (!still && showChecklist.value) refreshSetup();
 }

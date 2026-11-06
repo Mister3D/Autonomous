@@ -231,8 +231,10 @@ def check_companion(home: Path | None) -> dict[str, Any]:
     state = st.get("state")
     plats = ", ".join(sorted({a.get("platform", a.get("target", "")) for a in st["artifacts"]}))
     if state == "building":
+        # Keep a job action so the checklist can attach / show the live CLI log
+        # (background serve builds have no setup.jobs entry otherwise).
         return _check("companion", required=False, status="running", details="building…",
-                      action=_link("companions"))
+                      action=_job_action("companion") | {"to": "/settings/companions"})
     if st["artifacts"]:
         return _check("companion", required=False, status="ok",
                       details=f"v{st.get('version')} · {plats}" + (" (stale)" if st.get("stale") else "")

@@ -427,6 +427,11 @@
             </template>
             <p v-for="n in companionBuild.notes" :key="n" class="hint">{{ n }}</p>
             <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
+            <pre
+              v-if="companionBuild.log?.length"
+              ref="companionLogEl"
+              class="setup-log companion-build-log"
+            >{{ companionBuild.log.join("\n") }}</pre>
             <button
               v-if="companionBuild.toolchain"
               class="btn"
@@ -434,7 +439,7 @@
               :disabled="companionBuild.state === 'building'"
               @click="rebuildCompanion"
             >
-              {{ t("companion.rebuild") }}
+              {{ companionBuild.state === "building" ? t("setup.running") : t("companion.rebuild") }}
             </button>
           </template>
         </div>
@@ -445,7 +450,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../api";
@@ -755,8 +760,18 @@ async function removeMemory(e) {
 }
 
 const companionBuild = ref(null);
+const companionLogEl = ref(null);
 const buildError = ref("");
 const companionsEnabled = ref(true);
+let companionBuildTimer = 0;
+
+watch(
+  () => companionBuild.value?.log?.length,
+  async () => {
+    await nextTick();
+    if (companionLogEl.value) companionLogEl.value.scrollTop = companionLogEl.value.scrollHeight;
+  },
+);
 
 async function loadCompanionsEnabled() {
   try {
@@ -777,6 +792,18 @@ async function flushCompanionsEnabled() {
   }
 }
 
+function scheduleCompanionBuildPoll() {
+  clearTimeout(companionBuildTimer);
+  const building = companionBuild.value?.state === "building";
+  if (section.value !== "companions" && !building) return;
+  companionBuildTimer = window.setTimeout(async () => {
+    if (section.value === "companions" || companionBuild.value?.state === "building") {
+      await loadCompanionBuild();
+    }
+    scheduleCompanionBuildPoll();
+  }, building ? 1200 : 4000);
+}
+
 async function loadCompanionBuild() {
   try {
     companionBuild.value = await api.companionBuild();
@@ -787,8 +814,10 @@ async function loadCompanionBuild() {
 }
 
 async function rebuildCompanion() {
+  buildError.value = "";
   try {
     companionBuild.value = await api.rebuildCompanion();
+    scheduleCompanionBuildPoll();
   } catch (e) {
     buildError.value = e.message;
   }
@@ -951,6 +980,7 @@ async function saveUpdateRemote() {
 
 onUnmounted(() => {
   window.clearTimeout(guardTimer);
+  window.clearTimeout(companionBuildTimer);
   window.clearInterval(deviceTimer);
 });
 
@@ -989,14 +1019,21 @@ onMounted(async () => {
     deviceError.value = e.message;
   }
   loadCompanionsEnabled().catch(() => {});
-  loadCompanionBuild();
+  await loadCompanionBuild();
+  scheduleCompanionBuildPoll();
   deviceTimer = window.setInterval(() => {
     loadDevices().catch((e) => {
       deviceError.value = e.message;
     });
-    if (section.value === "companions" && companionBuild.value?.state === "building") {
-      loadCompanionBuild();
-    }
   }, 3000);
 });
+
+watch(
+  () => section.value,
+  (id) => {
+    if (id === "companions") {
+      loadCompanionBuild().then(() => scheduleCompanionBuildPoll());
+    }
+  },
+);
 </script>

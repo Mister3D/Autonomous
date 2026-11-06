@@ -128,8 +128,9 @@ def builder_image(src: Path | None = None) -> str:
 def docker_run_argv(src: Path, wd: Path, triple: str, image: str) -> list[str]:
     """Throwaway container: sources read-only, caches under AUTONOMOUS_HOME, no privileges."""
     uid, gid = (os.getuid(), os.getgid()) if hasattr(os, "getuid") else (0, 0)
+    # stdbuf keeps cargo lines flowing into build.log for the UI tail.
     script = (
-        f"cargo build --release --locked --target {triple}; rc=$?; "
+        f"stdbuf -oL -eL cargo build --release --locked --target {triple}; rc=$?; "
         f"chown -R {uid}:{gid} /target /usr/local/cargo/registry 2>/dev/null; exit $rc"
     )
     return [
@@ -259,6 +260,19 @@ def artifact_path(triple: str, home: Path | None = None) -> Path | None:
     return None
 
 
+def read_log(home: Path | None = None, *, max_lines: int = 250) -> list[str]:
+    """Tail of ``build.log`` for the setup / settings CLI panel."""
+    path = work_dir(home) / "build.log"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = text.splitlines()
+    if len(lines) > max_lines:
+        lines = lines[-max_lines:]
+    return [ln[:500] for ln in lines]
+
+
 def status(home: Path | None = None) -> dict[str, Any]:
     src = source_dir()
     st = _read_status(home)
@@ -275,6 +289,7 @@ def status(home: Path | None = None) -> dict[str, Any]:
         "builder": builder(),
         "rustup_hint": RUSTUP_HINT,
         "enabled": os.environ.get("AUTONOMOUS_COMPANION_BUILD", "1") != "0",
+        "log": read_log(home),
     }
     if not (src / "Cargo.toml").is_file():
         out["state"] = "no_source"
@@ -342,13 +357,16 @@ def _build(home: Path, force: bool = False) -> None:
         env.setdefault("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", linker)
     artifacts: list[dict[str, Any]] = []
     errors: list[str] = []
-    with log_path.open("w", encoding="utf-8") as log:
+    with log_path.open("w", encoding="utf-8", buffering=1) as log:
         for triple in targets:
             log.write(f"=== cargo build --release --target {triple}\n")
             log.flush()
+            argv = [cargo, "build", "--release", "--locked", "--target", triple]
+            if shutil.which("stdbuf"):
+                argv = ["stdbuf", "-oL", "-eL", *argv]
             try:
                 proc = subprocess.run(
-                    [cargo, "build", "--release", "--locked", "--target", triple],
+                    argv,
                     cwd=src, env=env, stdout=log, stderr=subprocess.STDOUT,
                     timeout=3600,
                 )
@@ -410,7 +428,7 @@ def _build_docker(home: Path, src: Path, wd: Path, digest: str) -> None:
     artifacts: list[dict[str, Any]] = []
     errors: list[str] = []
     log_path = wd / "build.log"
-    with log_path.open("w", encoding="utf-8") as log:
+    with log_path.open("w", encoding="utf-8", buffering=1) as log:
         have = subprocess.run(["docker", "image", "inspect", image],
                               capture_output=True).returncode == 0
         if not have:
@@ -420,6 +438,7 @@ def _build_docker(home: Path, src: Path, wd: Path, digest: str) -> None:
                 targets = []
         for triple in targets:
             log.write(f"=== cargo build --release --target {triple} (docker)\n")
+            log.flush()
             rc = _logged(docker_run_argv(src, wd, triple, image), log)
             built = wd / "docker-target" / triple / "release" / _exe_name(triple)
             if rc == 0 and built.is_file():

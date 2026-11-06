@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-06 (track companion/build/Dockerfile — was ignored by root `build/`)
+**Last updated**: 2026-11-06 (live build.log CLI on setup checklist + Settings → Companions)
 
 ## User behaviour
 
@@ -48,7 +48,7 @@ Window: `cargo build --release` then launch the binary, pair from Settings. Inte
 
 ## Build
 
-`companion_build.py` builds in Docker when it works: image `autonomous-companion-builder:<Dockerfile hash>` from `companion/build/Dockerfile`, one `docker run --rm` per target (`x86_64-unknown-linux-gnu`, `x86_64-pc-windows-gnu`), sources mounted read-only, no privileged mode, no Docker socket. Caches: `$AUTONOMOUS_HOME/companion/docker-target` and `docker-cargo`. Without Docker (or with `AUTONOMOUS_COMPANION_DOCKER=0`) the host `cargo` is used. macOS is not built by the server. Logs stream to the setup job `companion`.
+`companion_build.py` builds in Docker when it works: image `autonomous-companion-builder:<Dockerfile hash>` from `companion/build/Dockerfile`, one `docker run --rm` per target (`x86_64-unknown-linux-gnu`, `x86_64-pc-windows-gnu`), sources mounted read-only, no privileged mode, no Docker socket. Caches: `$AUTONOMOUS_HOME/companion/docker-target` and `docker-cargo`. Without Docker (or with `AUTONOMOUS_COMPANION_DOCKER=0`) the host `cargo` is used. macOS is not built by the server. Output goes to `$AUTONOMOUS_HOME/companion/build.log`; `GET /api/v1/companion/build` returns a `log` tail (last ~250 lines). The setup checklist and Settings → Companions show that tail in a `setup-log` panel (same style as self-update), including background builds started by `serve`. Setup job `companion` still pumps the same file into `/jobs/<id>`.
 
 ## Persistent notifications
 
