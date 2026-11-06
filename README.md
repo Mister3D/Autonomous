@@ -61,6 +61,7 @@ Example bots (**Atlas**, **Nova**, **Pixel**, **Harbor**) in the English UI:
 One command (Debian/Ubuntu; Fedora best effort):
 
 ```bash
+sudo apt-get update && sudo apt-get install -y curl
 curl -fsSL https://raw.githubusercontent.com/Mister3D/Autonomous/main/install.sh | sh
 ```
 

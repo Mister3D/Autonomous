@@ -61,6 +61,7 @@ Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface
 Une seule commande (Debian/Ubuntu ; Fedora au mieux) :
 
 ```bash
+sudo apt-get update && sudo apt-get install -y curl
 curl -fsSL https://raw.githubusercontent.com/Mister3D/Autonomous/main/install.sh | sh
 ```
 
