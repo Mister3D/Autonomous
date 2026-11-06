@@ -15,6 +15,9 @@ PORT="${AUTONOMOUS_PORT:-8787}"
 ASSUME_YES=0
 NO_DESK=0
 NO_SERVICE=0
+DESK_BUILDING=0
+DESK_BUILD_LOG=""
+SERVICE_INSTALLED=0
 PKG=""
 SUDO=""
 OS_ID=""
@@ -34,7 +37,7 @@ Usage: install.sh [options]
   --home DIR       data directory, AUTONOMOUS_HOME (default: PREFIX/data)
   --version REF    git branch or tag to install (default: main)
   --port N         port for the systemd service (default: 8787)
-  --no-desk        do not offer to build the desktop Docker image
+  --no-desk        skip the background desktop Docker image build
   --no-service     do not offer to install a systemd service
   -h, --help       show this help
 
@@ -318,14 +321,6 @@ init_app() {
 	PASSWORD=""
 }
 
-build_desk() {
-	[ "$NO_DESK" = 0 ] || return 0
-	check_docker || { warn "skipping the desktop image: Docker is not available"; return 0; }
-	if confirm "Build the desktop image now (autonomous-desktop:latest, several GB, ~10 min)?"; then
-		docker build -t autonomous-desktop:latest "$PREFIX/docker/desktop"
-	fi
-}
-
 install_service() {
 	[ "$NO_SERVICE" = 0 ] || return 0
 	have systemctl && [ -d /run/systemd/system ] || { info "no systemd: skipping the service"; return 0; }
@@ -357,30 +352,57 @@ UNIT
 	SERVICE_INSTALLED=1
 }
 
+# Background build so the installer can print the login URL immediately.
+build_desk() {
+	[ "$NO_DESK" = 0 ] || return 0
+	check_docker || { warn "skipping the desktop image: Docker is not available"; return 0; }
+	DESK_BUILD_LOG="$DATA_HOME/desk-build.log"
+	umask 077
+	mkdir -p "$DATA_HOME"
+	: >"$DESK_BUILD_LOG"
+	info "Starting desktop image build in the background (~10 min, log: $DESK_BUILD_LOG)"
+	(
+		if docker build -t autonomous-desktop:latest "$PREFIX/docker/desktop" >>"$DESK_BUILD_LOG" 2>&1; then
+			printf '\n==> desktop image ready: autonomous-desktop:latest\n' >>"$DESK_BUILD_LOG"
+		else
+			printf '\n==> desktop image build FAILED (see log above)\n' >>"$DESK_BUILD_LOG"
+		fi
+	) >/dev/null 2>&1 &
+	DESK_BUILDING=1
+}
+
 next_steps() {
 	cat <<EOT
 
 Autonomous is installed in $PREFIX (data: $DATA_HOME).
 
-Next steps:
+>>> Open http://127.0.0.1:$PORT/ and log in.
 EOT
 	if [ "${SERVICE_INSTALLED:-0}" = 1 ]; then
-		echo "  1. Open http://127.0.0.1:$PORT/ and log in  (service: systemctl status autonomous)"
+		echo "    (service: systemctl status autonomous)"
 	else
-		echo "  1. Start it:  cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
-		echo "     then open http://127.0.0.1:$PORT/"
+		echo "    Start it first:"
+		echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
+	fi
+	if [ "${DESK_BUILDING:-0}" = 1 ]; then
+		echo ""
+		echo "The desktop Docker image is building in the background (~10 min)."
+		echo "  Log: ${DESK_BUILD_LOG:-$DATA_HOME/desk-build.log}"
+		echo "  You can use the UI meanwhile; desks unlock when the image is ready."
 	fi
 	if [ -n "${GENERATED_PASSWORD:-}" ]; then
-		echo "  2. Temporary login password (you will be forced to change it on first login):"
-		echo "       $GENERATED_PASSWORD"
-		echo "     Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
+		echo ""
+		echo "Temporary login password (you will be forced to change it on first login):"
+		echo "  $GENERATED_PASSWORD"
+		echo "  Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
 	elif [ -n "${GENERATED_PASSWORD_FILE:-}" ] && [ -r "$GENERATED_PASSWORD_FILE" ]; then
-		echo "  2. Temporary login password (you will be forced to change it on first login):"
-		echo "       $(cat "$GENERATED_PASSWORD_FILE")"
-		echo "     Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
+		echo ""
+		echo "Temporary login password (you will be forced to change it on first login):"
+		echo "  $(cat "$GENERATED_PASSWORD_FILE")"
+		echo "  Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
 	fi
-	echo "  Then follow the setup page: it lists what is left (LLM, desktop image, optional"
-	echo "  grounding and companion) with Configure links and Install/Build buttons."
+	echo ""
+	echo "Then follow the setup page (LLM, optional grounding and companion)."
 }
 
 main() {
@@ -391,8 +413,8 @@ main() {
 	install_app
 	setup_env
 	init_app
-	build_desk
 	install_service
+	build_desk
 	next_steps
 }
 

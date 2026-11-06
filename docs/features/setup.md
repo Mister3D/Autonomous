@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup.py`, `autonomous/api/setup_routes.py`, `frontend/src/components/SetupPanel.vue`, `frontend/src/components/SetupItem.vue`, `frontend/src/store.js` (`setupReady`, `refreshSetup`)  
-**Last updated**: 2026-11-05 (ready home tagline + self-update banner; see [updates.md](./updates.md))
+**Last updated**: 2026-11-06 (`install.sh` prints login URL then builds desk image in background)
 
 ## User behaviour
 
@@ -26,9 +26,15 @@
 - Prefs script: product tour then fixed `ask_clarify` (name, control, notifications, done) with `memory_propose` after each answer. During setup (`first_chat_onboarding=true`), `memory_propose` **saves immediately** with no Confirm card so the flow stays fluid; the flag clears once `preferred_name` and `work_style`/`notify_preference` exist (or memory is emptied).
 - Optimistic local message + navigate before HTTP; merge-safe `loadMessages` so a concurrent fetch cannot wipe the bubble.
 
+## Installer (`install.sh`)
+
+- After init + optional systemd unit, starts `docker build … autonomous-desktop:latest` **in the background** (unless `--no-desk` / no Docker), log `$AUTONOMOUS_HOME/desk-build.log`.
+- Final message leads with **http://127.0.0.1:$PORT/** and states the desk image is building (~10 min). Do not block the shell on the build.
+
 ## Pitfalls / non-regressions
 
 - Don’t enable the button on optional-only gaps: only `setup.ready` (required).
+- Don’t wait for the desk image build before printing the login URL.
 - Don’t hide the CTA for any reason other than « memory has ≥ 1 entry ».
 - Don’t skip `memory_access` on the auto-created Assistant bot.
 - First bot profile: `is_manager=true`, `avatar=renard`, `avatar_color=0` (Original). Don’t pick a random unused character.
