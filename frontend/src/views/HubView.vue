@@ -5,11 +5,18 @@
       'is-mobile-list': mobileListMode,
       'is-mobile-chat': mobileChatMode,
       'is-mobile-setup': mobileSetupMode,
+      'is-mobile-home': mobileHomeMode,
     }"
   >
     <aside class="sidebar">
       <div class="rail-top">
-        <router-link class="rail-logo" to="/" :title="t('brand')" :aria-label="t('brand')">
+        <router-link
+          class="rail-logo"
+          to="/"
+          :title="t('brand')"
+          :aria-label="t('brand')"
+          @click="onRailLogoClick"
+        >
           <img src="/favicon-192.png" alt="" />
         </router-link>
         <button
@@ -276,6 +283,18 @@
           />
         </template>
         <div v-else class="empty brand-empty">
+          <button
+            v-if="mobileHomeMode"
+            type="button"
+            class="icon-btn mobile-back mobile-home-back"
+            :aria-label="t('nav.back')"
+            :title="t('nav.back')"
+            @click="backToBotList"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 6 9 12l6 6" />
+            </svg>
+          </button>
           <SetupPanel />
         </div>
       </section>
@@ -506,13 +525,25 @@ let mobileMq = null;
 const piBanner = computed(() => state.piStatus);
 const canCreate = computed(() => setupReady());
 
-/** Mobile master–detail: list XOR conversation (setup keeps the home pane). */
+/** Mobile master–detail: list XOR conversation XOR home (logo) / setup. */
+const mobileShowHome = ref(false);
 const mobileChatMode = computed(() => mobileLayout.value && !!bot.value);
 const mobileSetupMode = computed(
   () => mobileLayout.value && !bot.value && !canCreate.value
 );
+const mobileHomeMode = computed(
+  () =>
+    mobileLayout.value &&
+    !bot.value &&
+    canCreate.value &&
+    mobileShowHome.value
+);
 const mobileListMode = computed(
-  () => mobileLayout.value && !bot.value && canCreate.value
+  () =>
+    mobileLayout.value &&
+    !bot.value &&
+    canCreate.value &&
+    !mobileShowHome.value
 );
 
 /** Bot creation stays locked until the setup checklist on / is complete. */
@@ -799,6 +830,7 @@ function previewOf(b) {
 }
 
 function selectBot(name) {
+  mobileShowHome.value = false;
   state.currentBot = name;
   markBotRead(name);
   const layout = splitLayouts.value[name];
@@ -812,6 +844,20 @@ function selectBot(name) {
 function backToBotList() {
   state.currentBot = null;
   state.inspectorOpen = false;
+  mobileShowHome.value = false;
+  if (route.fullPath !== "/") router.push("/");
+}
+
+/** Mobile: logo opens the brand/home pane (updates, tagline) — unreachable via the list alone. */
+function onRailLogoClick(ev) {
+  if (!mobileLayout.value) {
+    mobileShowHome.value = false;
+    return;
+  }
+  ev.preventDefault();
+  state.currentBot = null;
+  state.inspectorOpen = false;
+  mobileShowHome.value = true;
   if (route.fullPath !== "/") router.push("/");
 }
 

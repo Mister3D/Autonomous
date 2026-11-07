@@ -6,7 +6,7 @@
 - `frontend/src/views/HubView.vue` (`selectTab`, `applyRoute`, `goBot`)
 - `frontend/src/store.js` (`state.tab`)
 
-**Last updated**: 2026-11-07 (mobile master–detail: bot list ↔ conversation)
+**Last updated**: 2026-11-07 (mobile logo → home pane; Back → list)
 
 ## User behaviour
 
@@ -31,6 +31,7 @@ The URL reflects the active tab:
 - **Mobile (≤720px)**: master–detail, one screen at a time.
   - Setup incomplete + no bot → checklist only (`is-mobile-setup`).
   - Setup ready + no bot (e.g. `/`) → **full-screen bot list** (`is-mobile-list`); the stage is hidden.
+  - **Logo** on the list (or from chat) → brand **home** pane (`is-mobile-home`: tagline, setup link, update card). **Back** returns to the list.
   - Bot selected (`/b/…`) → **full-screen conversation** (`is-mobile-chat`); the rail is hidden. A **Back** control in the toolbar returns to `/` (list). Split view is forced off.
 
 ## Implementation
@@ -49,4 +50,4 @@ The URL reflects the active tab:
 ## Quick check
 
 Clicks Conversation → Terminal → Screen: the address bar follows. Reloading on `/b/x/terminal` reopens the terminal. Login or logo → `/` with bots present → brand home (no bot pane). Click a rail bot → `/b/…/discussion`.
-Mobile ≤720px: `/` = list only; open a bot = chat + Back → list.
+Mobile ≤720px: `/` = list only; logo → home + Back → list; open a bot = chat + Back → list.

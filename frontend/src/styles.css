@@ -5677,13 +5677,27 @@ a.bot-mention:hover,
   }
 
   .app-shell.is-mobile-chat .sidebar,
-  .app-shell.is-mobile-setup .sidebar {
+  .app-shell.is-mobile-setup .sidebar,
+  .app-shell.is-mobile-home .sidebar {
     display: none;
   }
 
   .app-shell.is-mobile-chat .stage,
-  .app-shell.is-mobile-setup .stage {
+  .app-shell.is-mobile-setup .stage,
+  .app-shell.is-mobile-home .stage {
     min-height: 0;
+  }
+
+  .app-shell.is-mobile-home .brand-empty {
+    position: relative;
+    padding-top: 3.2rem;
+  }
+
+  .mobile-home-back {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.55rem;
+    z-index: 5;
   }
 
   .app-shell.is-mobile-chat .stage-toolbar {
