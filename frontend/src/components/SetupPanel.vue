@@ -72,24 +72,28 @@
       role="status"
     >
       <template v-if="updateNeedsAction">
-        <p class="setup-update-msg">{{ updateSummary }}</p>
-        <div class="setup-update-actions">
+        <div class="setup-update-card">
+          <div class="setup-update-head">
+            <span class="setup-update-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4v10" />
+                <path d="m8 10 4 4 4-4" />
+                <path d="M5 18h14" />
+              </svg>
+            </span>
+            <div class="setup-update-copy">
+              <p class="setup-update-title">{{ updateTitle }}</p>
+              <p v-if="updateMeta" class="setup-update-meta">{{ updateMeta }}</p>
+            </div>
+          </div>
           <button
             v-if="canApplyUpdate || updateApplying"
-            class="btn primary"
+            class="btn primary setup-update-apply"
             type="button"
             :disabled="!canApplyUpdate || updateBusy"
             @click="runApplyUpdate"
           >
             {{ updateApplying ? t("update.applying") : t("update.apply") }}
-          </button>
-          <button
-            class="btn ghost"
-            type="button"
-            :disabled="updateBusy"
-            @click="forceCheckUpdate"
-          >
-            {{ updateBusy && !updateApplying ? t("update.checking") : t("update.check") }}
           </button>
         </div>
         <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
@@ -191,6 +195,28 @@ const updateSummary = computed(() => {
     });
   }
   return t("update.upToDate", { channel: u.channel });
+});
+
+const updateTitle = computed(() => {
+  const u = updateInfo.value;
+  if (!u) return "";
+  if (u.code === "fetch_failed") return t("update.fetchFailedTitle");
+  if (u.dirty && u.available) return t("update.dirtyTitle");
+  if (u.available) return t("update.availableTitle");
+  return updateSummary.value;
+});
+
+const updateMeta = computed(() => {
+  const u = updateInfo.value;
+  if (!u) return "";
+  if (u.code === "fetch_failed") return (u.message || "").trim();
+  if (u.dirty && u.available) {
+    return t("update.dirtyMeta", { channel: u.channel });
+  }
+  if (u.available) {
+    return t("update.availableMeta", { channel: u.channel });
+  }
+  return "";
 });
 
 async function loadUpdate(force = false) {
