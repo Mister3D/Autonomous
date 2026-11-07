@@ -247,6 +247,8 @@ class PiAgent:
             "last_shot_id": None,
             "tool_base_shot": {},  # toolCallId -> screenshot id at call start
             "pending_images_md": [],  # markdown from files_share_image to embed
+            # Successful bot_tell / bot_ask / bot_delegate this run → {tool, to}.
+            "mail_sent": [],
             "settled": settled,
             "aborted": False,
             "error": None,
@@ -478,6 +480,15 @@ class PiAgent:
                         # before the model writes surrounding text.
                         ensure_assistant()
                         flush_pending_images(persist=True)
+                if (
+                    tool_name in ("bot_tell", "bot_ask", "bot_delegate")
+                    and not is_error
+                ):
+                    to = str(args.get("to") or "").strip().lstrip("@")
+                    if to:
+                        state.setdefault("mail_sent", []).append(
+                            {"tool": tool_name, "to": to}
+                        )
                 if tool_name not in _HIDDEN_TOOL_CARDS:
                     result_text = _tool_result_text(record.get("result"))
                     details = _tool_result_details(record.get("result"))
@@ -744,6 +755,7 @@ class PiAgent:
                         botmail_svc.on_run_finished(
                             bot,
                             assistant_content=final_assistant,
+                            mail_sent=list(state.get("mail_sent") or []),
                             home=home,
                         )
                     except Exception:

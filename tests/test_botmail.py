@@ -252,6 +252,137 @@ def test_bot_has_stable_uuid(home):
     assert bots_svc.bot_uuid("alice", home=home) == a["id"]
 
 
+def test_rescue_mentions_sends_ask_when_no_mail_tool(home):
+    """Assistant names @bob and awaits a reply, but never called bot_ask → rescue."""
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message(
+        "alice",
+        "Demande à bob si on peut y aller",
+        role="user",
+        home=home,
+    )
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "alice",
+        "J’ai transmis à @bob, je te fais suivre dès que je reçois sa réponse.",
+        mail_sent=[],
+        home=home,
+    )
+    assert len(rescued) == 1
+    assert rescued[0]["to"] == "bob"
+    assert rescued[0]["mode"] == "ask"
+    bob = chat_svc.list_messages("bob", home=home)
+    assert any(
+        m["role"] == "system"
+        and m["meta"].get("mail_kind") == "ask"
+        and "y aller" in (m.get("content") or "")
+        for m in bob
+    )
+
+
+def test_rescue_mentions_skips_when_already_mailed(home):
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message("alice", "ping bob", role="user", home=home)
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "alice",
+        "Message envoyé à @bob.",
+        mail_sent=[{"tool": "bot_tell", "to": "bob"}],
+        home=home,
+    )
+    assert rescued == []
+    assert not any(
+        m["meta"].get("kind") == "botmail"
+        for m in chat_svc.list_messages("bob", home=home)
+        if isinstance(m.get("meta"), dict)
+    )
+
+
+def test_rescue_via_on_run_finished(home):
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message(
+        "alice", "Dis à bob bonjour de ma part", role="user", home=home
+    )
+    botmail_svc.on_run_finished(
+        "alice",
+        assistant_content="Ok, j’écris à @bob tout de suite.",
+        mail_sent=[],
+        home=home,
+    )
+    assert any(
+        m["role"] == "system"
+        and m["meta"].get("mail_kind") == "tell"
+        and "bonjour" in (m.get("content") or "").lower()
+        for m in chat_svc.list_messages("bob", home=home)
+    )
+
+
+def test_rescue_skipped_when_answering_ask(home):
+    """Answering an ask with @asker in the text must not re-mail the asker."""
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    ask = botmail_svc.ask("alice", "bob", "quelle heure ?", home=home, origin="test")
+    before = len(chat_svc.list_messages("alice", home=home))
+    botmail_svc.on_run_finished(
+        "bob",
+        assistant_content="@alice, il est 15h.",
+        mail_sent=[],
+        home=home,
+    )
+    ask2 = botmail_svc.get_ask(ask["id"], home=home)
+    assert ask2["state"] == "answered"
+    # One ask_answered card, no extra tell/ask from rescue.
+    alice = chat_svc.list_messages("alice", home=home)
+    mail = [
+        m
+        for m in alice[before:]
+        if (m.get("meta") or {}).get("kind") == "botmail"
+    ]
+    assert len(mail) == 1
+    assert mail[0]["meta"].get("mail_kind") == "ask_answered"
+
+
+def test_orphan_tell_relay_when_asker_awaits(home):
+    """bot_tell + « je te fais suivre » → peer answer is mirrored back."""
+    bots_svc.create_bot("trump", home=home)
+    bots_svc.create_bot("etat-major", home=home)
+    chat_svc.create_message(
+        "trump",
+        "Demande à l'état-major si on peut bombarder",
+        role="user",
+        home=home,
+    )
+    botmail_svc.tell(
+        "trump",
+        "etat-major",
+        "Peut-on bombarder ?",
+        home=home,
+        origin="test",
+    )
+    chat_svc.create_message(
+        "trump",
+        "J’ai transmis à @etat-major. Je te ferai suivre dès que je reçois sa réponse.",
+        role="assistant",
+        home=home,
+    )
+    botmail_svc.on_run_finished(
+        "etat-major",
+        assistant_content="Non, ce n’est pas envisageable.",
+        home=home,
+    )
+    trump_msgs = chat_svc.list_messages("trump", home=home)
+    answered = [
+        m
+        for m in trump_msgs
+        if m["role"] == "system"
+        and (m.get("meta") or {}).get("mail_kind") == "ask_answered"
+    ]
+    assert answered, trump_msgs
+    assert "pas envisageable" in answered[-1]["content"]
+    assert answered[-1]["meta"].get("from_bot") == "etat-major"
+
+
 def test_drain_cancels_orphan_queued_without_purge(home):
     """Defense in depth: cancel queued rows whose from_bot vanished mid-flight."""
     from autonomous.db import get_db

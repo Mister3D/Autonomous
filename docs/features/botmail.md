@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/botmail.py`, `autonomous/migrations/001_schema.sql`, `autonomous/api/bots.py` (`/mail/*` routes), `autonomous/pi_extensions/botmail.ts`, `autonomous/services/{chat,agent,pi_rpc}.py`, `frontend/src/{mentions.js,components/ChatPane.vue}`  
-**Last updated**: 2026-11-02 (received card: text only, without "m'a envoyé un message")
+**Last updated**: 2026-11-07 (invisible post-response @ mention safety net)
 
 ## User behaviour
 
@@ -28,6 +28,10 @@ Pi agent side: tools `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (*
 - `chat.send_message`: if the text matches Tell/Ask → `botmail.maybe_route_from_composer` and **no** local `start_run`.
 - Delivery: `user` message at the recipient with `meta.kind=botmail` (`tell` | `ask` | `reply`) + `start_run`.
 - End of run (`agent.PiAgent` `finally` → idle): `botmail.on_run_finished` — if the run was answering an `ask`, marks it `answered`, enqueues a `reply` at the asker, then drains one item from the local queue.
+- **Invisible post-response net** (no second LLM turn, nothing added to the asker's history about the rescue):
+  1. `PiAgent` records successful `bot_tell` / `bot_ask` / `bot_delegate` in `state["mail_sent"]` and passes them to `on_run_finished`.
+  2. If the assistant text contains `@peer`, the peer resolves, this run was **not** answering inbound mail, and no mail tool targeted that peer → `maybe_rescue_mentions` sends **Ask** (await-reply language / question intent) or **Tell** with `origin=rescue`. Body = last user message (route prefix stripped) when available.
+  3. **Orphan Tell relay**: peer finishes answering a `tell` while the asker's last assistant bubble promises to forward the reply (`je te fais suivre`, `dès que je reçois…`) and names `@peer` → mirror the answer as `ask_answered` on the asker (covers Tell-used-instead-of-Ask).
 - API: `POST /bots/:name/mail/tell`, `POST /bots/:name/mail/ask`, `GET /bots/:name/mail/asks/:id`.
 
 ## Pitfalls / non-regressions
@@ -39,6 +43,8 @@ Pi agent side: tools `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (*
 - `bot_ask` (tool): polling `GET .../asks/:id` puts the asker in `waiting` while the ask is `open`, then `busy` on reply (UI "waiting for the user").
 - `null` backend (tests): no `start_run`; call `on_run_finished` to simulate the end of the reply.
 - Agent pitfall: capture `state["content"]` **before** `close_assistant()` (which empties it) otherwise the inter-bot reply goes out empty.
+- Rescue must **not** fire when the run answers inbound mail (would re-mail `@asker` from the answer text). Gate: `reply_inbox_id` set **or** `_run_looks_mail_triggered` (latest delivered inbox, no newer real user bubble).
+- Rescue is deterministic — never a free second model turn, never a “rescue” chat bubble on the asker.
 - Message cross-ref: `meta.link_bot` + `meta.link_message_id` (set on delivery / reply) for the deep-link.
 - `bot_list` / `bot_tell` / `bot_ask`: excluded from tool cards (`agent._HIDDEN_TOOL_CARDS` + UI filter).
 - The "Sent" card only marks the assistant bubble that served as the reply (`mail_kind=outgoing`). Don't set `ask_sent` on the asker, and don't style every bubble containing an `@`.
@@ -51,6 +57,7 @@ Pi agent side: tools `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (*
 
 ```bash
 pytest tests/test_botmail.py -q
+# Includes rescue_mentions + orphan_tell_relay cases
 # UI: horloge "@robert, il est 16h30" = centred blue card, Sent icon
 # UI: robert "@horloge m'a envoyé…" = same card, Received icon
 ```

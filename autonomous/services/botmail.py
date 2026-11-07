@@ -37,6 +37,28 @@ _RECEIVED_PREAMBLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Mentions in assistant text (same charset as composer / bots.name).
+_MENTION_RE = re.compile(r"@([a-zA-Z0-9_-]+)")
+
+# Assistant claims it will wait for / forward a peer reply → must have been Ask.
+_AWAIT_REPLY_RE = re.compile(
+    r"(?i)("
+    r"d[eè]s\s+que\s+je\s+(re[cç]ois|aurai)|"
+    r"je\s+te\s+(?:fais|ferai)\s+suivre|"
+    r"je\s+t['\u2019]informe|"
+    r"je\s+reviens\s+(vers\s+toi|avec)|"
+    r"en\s+attendant\s+(sa|leur|la)\s+r[eé]ponse|"
+    r"j['\u2019]attends\s+(sa|leur|la|une)\s+r[eé]ponse|"
+    r"waiting\s+for\s+(a\s+)?(reply|answer|response)|"
+    r"as\s+soon\s+as\s+i\s+(get|hear|receive)"
+    r")"
+)
+
+_ROUTE_PREFIX_RE = re.compile(
+    r"^\s*(?:demande|demandez|dis|dit|dites)\s+à\s+@[a-zA-Z0-9_-]+\s*[:\-]?\s*",
+    re.IGNORECASE,
+)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -462,9 +484,15 @@ def on_run_finished(
     bot: str,
     *,
     assistant_content: str = "",
+    mail_sent: list[dict[str, Any]] | None = None,
     home: Path | None = None,
 ) -> None:
-    """Called when a bot's agent run settles to idle — complete ask + drain queue."""
+    """Called when a bot's agent run settles to idle — complete ask + drain queue.
+
+    ``mail_sent``: successful ``bot_tell`` / ``bot_ask`` / ``bot_delegate`` calls
+    during this run (``{tool, to}``). Used by the invisible post-response net so
+    we don't re-mail a peer the agent already contacted.
+    """
     reply_inbox_id: str | None = None
     with _lock_for(bot):
         try:
@@ -483,6 +511,27 @@ def on_run_finished(
             _try_deliver_inbox_item(reply_inbox_id, home=home)
         except Exception:
             log.exception("botmail reply deliver failed for inbox %s", reply_inbox_id)
+    # Invisible net: @mention without a mail tool → deterministic Tell/Ask.
+    # Skip when this run is answering inbound mail (ask reply / tell answer).
+    if reply_inbox_id is None and not _run_looks_mail_triggered(
+        bot, home=home
+    ):
+        try:
+            maybe_rescue_mentions(
+                bot,
+                assistant_content or "",
+                mail_sent or [],
+                home=home,
+            )
+        except Exception:
+            log.exception("botmail rescue_mentions failed for %s", bot)
+    # Tell used but asker promised a reply → mirror our answer back.
+    try:
+        maybe_relay_orphaned_tell_reply(
+            bot, assistant_content or "", home=home
+        )
+    except Exception:
+        log.exception("botmail orphan tell relay failed for %s", bot)
 
 
 def _decode_ask(row, *, home: Path | None = None) -> dict[str, Any]:
@@ -857,6 +906,339 @@ def _start_agent(bot: str, prompt: str, *, home: Path | None) -> None:
     from autonomous.services.agent import get_agent
 
     get_agent(backend, home=home).start_run(bot, prompt, home=home)
+
+
+def maybe_rescue_mentions(
+    bot: str,
+    assistant_content: str,
+    mail_sent: list[dict[str, Any]],
+    *,
+    home: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Invisible post-response net: @peer in assistant text but no mail tool → send.
+
+    Deterministic (no second LLM turn, nothing appended to the thread about the
+    rescue). Mode is Ask when the assistant awaits a reply / user intent is a
+    question; otherwise Tell. Returns the list of rescues performed.
+    """
+    text = (assistant_content or "").strip()
+    if not text or "@" not in text:
+        return []
+
+    mailed = {
+        str(item.get("to") or "").strip().lstrip("@").lower()
+        for item in (mail_sent or [])
+        if str(item.get("to") or "").strip()
+    }
+    targets = _mentioned_bots(text, home=home, exclude=bot)
+    if not targets:
+        return []
+
+    user_text = _last_user_text(bot, home=home)
+    mode = _infer_rescue_mode(text, user_text)
+    rescued: list[dict[str, Any]] = []
+    for target in targets:
+        if target.lower() in mailed:
+            continue
+        body = _rescue_body(target, text, user_text, home=home)
+        if not body:
+            continue
+        try:
+            if mode == "ask":
+                row = ask(
+                    bot, target, body, home=home, origin="rescue"
+                )
+            else:
+                row = tell(
+                    bot, target, body, home=home, origin="rescue"
+                )
+            rescued.append(
+                {"to": target, "mode": mode, "id": row.get("id")}
+            )
+            log.info(
+                "botmail rescue %s %s → @%s (origin=rescue)",
+                mode,
+                bot,
+                target,
+            )
+        except AutonomousError as exc:
+            log.warning(
+                "botmail rescue skipped %s → @%s: %s",
+                bot,
+                target,
+                exc.message,
+            )
+        except Exception:
+            log.exception("botmail rescue failed %s → @%s", bot, target)
+    return rescued
+
+
+def maybe_relay_orphaned_tell_reply(
+    bot: str,
+    assistant_content: str,
+    *,
+    home: Path | None = None,
+) -> str | None:
+    """If we answered a Tell and the asker promised to wait, mirror the answer.
+
+    Covers the common LLM mix-up: ``bot_tell`` used while the assistant text
+    says it will forward the peer's reply (should have been ``bot_ask``).
+    Returns the reply inbox id when a relay was queued, else None.
+    """
+    answer = (assistant_content or "").strip()
+    if not answer:
+        return None
+    delivered = _last_delivered_tell_inbox(bot, home=home)
+    if not delivered:
+        return None
+    asker = (delivered.get("from_bot") or "").strip()
+    if not asker or asker == bot:
+        return None
+    # Don't steal an in-flight real ask for this pair.
+    if _has_open_ask_between(asker, bot, home=home):
+        return None
+    asker_assistant = _last_assistant_text(asker, home=home)
+    if not asker_assistant or not _AWAIT_REPLY_RE.search(asker_assistant):
+        return None
+    # Asker's bubble should name us (slug or label).
+    if not _text_mentions_bot(asker_assistant, bot, home=home):
+        return None
+    after = delivered.get("delivered_at") or delivered.get("created_at")
+    if _has_relay_from_since(bot, asker, after, home=home):
+        return None
+
+    _, answer_msg_id = _last_assistant_after(bot, after, home=home)
+    if answer_msg_id:
+        _patch_message_meta(
+            bot,
+            answer_msg_id,
+            {
+                "kind": "botmail",
+                "mail_kind": "outgoing",
+                "direction": "sent",
+                "to_bot": asker,
+                "link_bot": asker,
+                "origin": "orphan_tell_relay",
+            },
+            home=home,
+        )
+    item = _enqueue(
+        asker,
+        from_bot=bot,
+        kind="reply",
+        content=answer,
+        correlation_id=None,
+        home=home,
+        meta={
+            "origin": "orphan_tell_relay",
+            "link_message_id": answer_msg_id,
+        },
+        defer_deliver=True,
+    )
+    try:
+        _try_deliver_inbox_item(item["id"], home=home)
+    except Exception:
+        log.exception(
+            "botmail orphan tell relay deliver failed for inbox %s",
+            item["id"],
+        )
+    log.info(
+        "botmail orphan tell relay %s → %s (inbox=%s)",
+        bot,
+        asker,
+        item["id"],
+    )
+    return item["id"]
+
+
+def _mentioned_bots(
+    text: str, *, home: Path | None, exclude: str | None
+) -> list[str]:
+    """Unique bot slugs mentioned with @ in text (resolved; exclude self)."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _MENTION_RE.finditer(text or ""):
+        raw = match.group(1)
+        try:
+            name = resolve_bot(raw, home=home, exclude=exclude)
+        except AutonomousError:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(name)
+    return found
+
+
+def _text_mentions_bot(
+    text: str, bot: str, *, home: Path | None
+) -> bool:
+    needle = (bot or "").strip().lstrip("@").lower()
+    if not needle:
+        return False
+    for match in _MENTION_RE.finditer(text or ""):
+        raw = match.group(1)
+        try:
+            name = resolve_bot(raw, home=home)
+        except AutonomousError:
+            if raw.lower() == needle:
+                return True
+            continue
+        if name.lower() == needle:
+            return True
+    # Label without @ still counts if resolve would match — keep strict on @.
+    return False
+
+
+def _infer_rescue_mode(assistant: str, user_text: str) -> str:
+    if _AWAIT_REPLY_RE.search(assistant or ""):
+        return "ask"
+    route = parse_route(user_text or "")
+    if route and route["mode"] == "ask":
+        return "ask"
+    if re.search(
+        r"(?i)^\s*(?:demande|demandez|ask)\b", user_text or ""
+    ):
+        return "ask"
+    if "?" in (user_text or "") or "?" in (assistant or ""):
+        return "ask"
+    return "tell"
+
+
+def _rescue_body(
+    target: str,
+    assistant: str,
+    user_text: str,
+    *,
+    home: Path | None,
+) -> str:
+    route = parse_route(user_text or "")
+    if route:
+        try:
+            resolved = resolve_bot(route["target"], home=home)
+        except AutonomousError:
+            resolved = ""
+        if resolved.lower() == target.lower() and route["body"].strip():
+            return route["body"].strip()
+    cleaned = _ROUTE_PREFIX_RE.sub("", user_text or "").strip()
+    if cleaned:
+        return cleaned
+    body = _MENTION_RE.sub("", assistant or "").strip()
+    body = re.sub(r"[ \t]+", " ", body)
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
+    return body[:2000]
+
+
+def _last_user_text(bot: str, *, home: Path | None) -> str:
+    for msg in reversed(chat_svc.list_messages(bot, limit=40, home=home)):
+        if msg.get("role") != "user":
+            continue
+        meta = dict(msg.get("meta") or {})
+        if meta.get("hidden_prompt") or meta.get("kind") == "botmail":
+            continue
+        text = (msg.get("content") or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _last_assistant_text(bot: str, *, home: Path | None) -> str:
+    text, _ = _last_assistant_after(bot, None, home=home)
+    return text
+
+
+def _last_delivered_tell_inbox(
+    bot: str, *, home: Path | None
+) -> dict[str, Any] | None:
+    bot_id = bots_svc.bot_uuid(bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM bot_inbox
+            WHERE bot = ? AND kind = 'tell' AND state = 'delivered'
+            ORDER BY COALESCE(delivered_at, created_at) DESC
+            LIMIT 1
+            """,
+            (bot_id,),
+        ).fetchone()
+    return _decode_inbox(row, home=home) if row else None
+
+
+def _last_delivered_inbox(
+    bot: str, *, home: Path | None
+) -> dict[str, Any] | None:
+    bot_id = bots_svc.bot_uuid(bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM bot_inbox
+            WHERE bot = ? AND state = 'delivered'
+            ORDER BY COALESCE(delivered_at, created_at) DESC
+            LIMIT 1
+            """,
+            (bot_id,),
+        ).fetchone()
+    return _decode_inbox(row, home=home) if row else None
+
+
+def _run_looks_mail_triggered(bot: str, *, home: Path | None) -> bool:
+    """True when this settle is answering inbound mail (no newer user bubble)."""
+    delivered = _last_delivered_inbox(bot, home=home)
+    if not delivered:
+        return False
+    after = delivered.get("delivered_at") or delivered.get("created_at") or ""
+    for msg in reversed(chat_svc.list_messages(bot, limit=40, home=home)):
+        created = msg.get("created_at") or ""
+        if after and created < after:
+            break
+        if msg.get("role") != "user":
+            continue
+        meta = dict(msg.get("meta") or {})
+        if meta.get("hidden_prompt") or meta.get("kind") == "botmail":
+            continue
+        return False
+    return True
+
+
+def _has_open_ask_between(
+    from_bot: str, to_bot: str, *, home: Path | None
+) -> bool:
+    from_id = bots_svc.bot_uuid(from_bot, home=home)
+    to_id = bots_svc.bot_uuid(to_bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            """
+            SELECT 1 FROM bot_asks
+            WHERE from_bot = ? AND to_bot = ? AND state = 'open'
+            LIMIT 1
+            """,
+            (from_id, to_id),
+        ).fetchone()
+    return bool(row)
+
+
+def _has_relay_from_since(
+    from_bot: str,
+    to_bot: str,
+    after_iso: str | None,
+    *,
+    home: Path | None,
+) -> bool:
+    """Avoid double-relaying the same orphan tell answer."""
+    for msg in reversed(chat_svc.list_messages(to_bot, limit=30, home=home)):
+        created = msg.get("created_at") or ""
+        if after_iso and created < after_iso:
+            continue
+        meta = dict(msg.get("meta") or {})
+        if meta.get("kind") != "botmail":
+            continue
+        if meta.get("mail_kind") != "ask_answered":
+            continue
+        if (meta.get("from_bot") or "").lower() != from_bot.lower():
+            continue
+        return True
+    return False
 
 
 def _complete_ask_if_needed(
