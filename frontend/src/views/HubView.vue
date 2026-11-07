@@ -1,5 +1,12 @@
 <template>
-  <div class="app-shell">
+  <div
+    class="app-shell"
+    :class="{
+      'is-mobile-list': mobileListMode,
+      'is-mobile-chat': mobileChatMode,
+      'is-mobile-setup': mobileSetupMode,
+    }"
+  >
     <aside class="sidebar">
       <div class="rail-top">
         <router-link class="rail-logo" to="/" :title="t('brand')" :aria-label="t('brand')">
@@ -119,6 +126,19 @@
         <template v-if="bot">
           <div class="stage-toolbar">
             <button
+              v-if="mobileLayout"
+              type="button"
+              class="icon-btn mobile-back"
+              :aria-label="t('nav.back')"
+              :title="t('nav.back')"
+              @click="backToBotList"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 6 9 12l6 6" />
+              </svg>
+            </button>
+            <button
+              v-if="!mobileLayout"
               type="button"
               class="split-toggle"
               :class="{ active: splitWanted }"
@@ -480,9 +500,20 @@ const splitLayouts = ref(readSplitLayouts());
 const splitRatio = ref(readSplitRatio());
 const inspectorCollapsed = ref(readInspectorCollapsed());
 const narrowLayout = ref(false);
+const mobileLayout = ref(false);
 let narrowMq = null;
+let mobileMq = null;
 const piBanner = computed(() => state.piStatus);
 const canCreate = computed(() => setupReady());
+
+/** Mobile master–detail: list XOR conversation (setup keeps the home pane). */
+const mobileChatMode = computed(() => mobileLayout.value && !!bot.value);
+const mobileSetupMode = computed(
+  () => mobileLayout.value && !bot.value && !canCreate.value
+);
+const mobileListMode = computed(
+  () => mobileLayout.value && !bot.value && canCreate.value
+);
 
 /** Bot creation stays locked until the setup checklist on / is complete. */
 function openCreate() {
@@ -586,8 +617,9 @@ function layoutOf(name) {
 
 const splitWanted = computed(() => layoutOf(bot.value?.name).on);
 
-/** Opt-in. Each side is chosen independently; single-pane tabs stay the default. */
-const splitActive = computed(() => splitWanted.value);
+/** Opt-in. Each side is chosen independently; single-pane tabs stay the default.
+ *  Split is desktop-only — on mobile we always show one pane. */
+const splitActive = computed(() => splitWanted.value && !mobileLayout.value);
 
 const leftPane = computed(() => layoutOf(bot.value?.name).left);
 const rightPane = computed(() => layoutOf(bot.value?.name).right);
@@ -770,9 +802,17 @@ function selectBot(name) {
   state.currentBot = name;
   markBotRead(name);
   const layout = splitLayouts.value[name];
-  const tab = layout?.on ? layout.left : "discussion";
+  // Mobile: always open the conversation first (no split).
+  const tab =
+    mobileLayout.value || !layout?.on ? "discussion" : layout.left;
   state.tab = tab;
   goBot(name, tab);
+}
+
+function backToBotList() {
+  state.currentBot = null;
+  state.inspectorOpen = false;
+  if (route.fullPath !== "/") router.push("/");
 }
 
 function selectTab(tab) {
@@ -1117,15 +1157,24 @@ onMounted(() => {
   narrowMq = window.matchMedia("(max-width: 1080px)");
   narrowLayout.value = narrowMq.matches;
   narrowMq.addEventListener("change", onNarrowChange);
+  mobileMq = window.matchMedia("(max-width: 720px)");
+  mobileLayout.value = mobileMq.matches;
+  mobileMq.addEventListener("change", onMobileChange);
 });
 
 function onNarrowChange() {
   narrowLayout.value = !!(narrowMq && narrowMq.matches);
 }
 
+function onMobileChange() {
+  mobileLayout.value = !!(mobileMq && mobileMq.matches);
+  if (mobileLayout.value) state.inspectorOpen = false;
+}
+
 onUnmounted(() => {
   window.removeEventListener("autonomous-focus", onCompanionFocus);
   window.clearTimeout(focusTimer);
   narrowMq?.removeEventListener("change", onNarrowChange);
+  mobileMq?.removeEventListener("change", onMobileChange);
 });
 </script>

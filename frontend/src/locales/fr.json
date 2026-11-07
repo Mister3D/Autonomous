@@ -17,6 +17,7 @@
   "login.changeError": "Impossible de changer le mot de passe",
   "nav.create": "Créer",
   "nav.bots": "Bots",
+  "nav.back": "Retour à la liste",
   "tabs.discussion": "Discussion",
   "tabs.conversation": "Conversation",
   "tabs.terminal": "Terminal",

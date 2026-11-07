@@ -17,6 +17,7 @@
   "login.changeError": "Could not change the password",
   "nav.create": "Create",
   "nav.bots": "Bots",
+  "nav.back": "Back to bot list",
   "tabs.discussion": "Discussion",
   "tabs.conversation": "Conversation",
   "tabs.terminal": "Terminal",

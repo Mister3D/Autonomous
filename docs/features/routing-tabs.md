@@ -6,7 +6,7 @@
 - `frontend/src/views/HubView.vue` (`selectTab`, `applyRoute`, `goBot`)
 - `frontend/src/store.js` (`state.tab`)
 
-**Last updated**: 2026-11-07 (UI locale persisted in settings — restores across browsers)
+**Last updated**: 2026-11-07 (mobile master–detail: bot list ↔ conversation)
 
 ## User behaviour
 
@@ -28,6 +28,10 @@ The URL reflects the active tab:
 - **Settings**: page `/settings/:section` (not a modal). Tabs on the left, in this order: `agent` (label **General** — language + Pi version, time zone, updates, guard-rails), `vault`, `memory`, `companions`. `/settings/general` goes back to `agent`. Return to the current bot.
 - Sidebar gear menu (`SettingsMenu`): Settings, delete all bots, **Log out** (moved out of the per-bot Manage panel). Language lives under Settings → General (and on the login page picker). Choosing **Français** / **English** writes `settings.locale` on the server; after login on another browser the UI reloads that value (localStorage is only a cache).
 - **Setup / home**: `/` and `/setup` share the hub and **do not** auto-select a bot — the main pane shows the brand tagline ("Your bots. Your desktop.") or the setup checklist. Opening a bot is only via the rail (or a `/b/…` URL). Checklist until required items are ready; first-conversation button at the bottom (see [setup.md](./setup.md)). Logo link → `/` clears the current bot.
+- **Mobile (≤720px)**: master–detail, one screen at a time.
+  - Setup incomplete + no bot → checklist only (`is-mobile-setup`).
+  - Setup ready + no bot (e.g. `/`) → **full-screen bot list** (`is-mobile-list`); the stage is hidden.
+  - Bot selected (`/b/…`) → **full-screen conversation** (`is-mobile-chat`); the rail is hidden. A **Back** control in the toolbar returns to `/` (list). Split view is forced off.
 
 ## Implementation
 
@@ -45,3 +49,4 @@ The URL reflects the active tab:
 ## Quick check
 
 Clicks Conversation → Terminal → Screen: the address bar follows. Reloading on `/b/x/terminal` reopens the terminal. Login or logo → `/` with bots present → brand home (no bot pane). Click a rail bot → `/b/…/discussion`.
+Mobile ≤720px: `/` = list only; open a bot = chat + Back → list.
