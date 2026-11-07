@@ -195,10 +195,17 @@ export default function (pi: ExtensionAPI) {
     label: "Tell bot",
     description:
       "Send a one-way message to another bot (like « Dit à @name … »). Does not wait for a reply. "
+      + "Typing @name in your chat text is NOT enough — call this tool to deliver. "
+      + "If the user only wants a citation without delivery, do not call this. "
+      + "content must be self-contained for the peer (they lack this chat): address them as tu; "
+      + "never copy a relative clause like « si elle… ». "
       + "Managers assigning work should prefer bot_delegate (adds relaunch instructions).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name (without or with @)" }),
-      content: Type.String({ description: "Message body" }),
+      content: Type.String({
+        description:
+          "Self-contained message for the peer (tutoiement). Not a raw fragment from the user.",
+      }),
     }),
     execute: async (_id, params) => {
       const cfg = apiConfig();
@@ -227,10 +234,15 @@ export default function (pi: ExtensionAPI) {
     description:
       "Ask another bot a question and WAIT for its answer (blocks this run). "
       + "Managers MUST NOT use this for orchestration — use bot_delegate instead "
-      + "(async + peer relaunches you). Prefer bot_ask only for short sync Q&A when not a manager.",
+      + "(async + peer relaunches you). Prefer bot_ask only for short sync Q&A when not a manager. "
+      + "content must be a self-contained question the peer can answer without this chat "
+      + "(good: « Est-ce que tu fais du poney ? »; bad: « si elle fait du poney »).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name" }),
-      content: Type.String({ description: "Question" }),
+      content: Type.String({
+        description:
+          "Self-contained question for the peer (tutoiement). Not a raw user fragment.",
+      }),
       timeout_sec: Type.Optional(
         Type.Number({
           description: "Max wait seconds (default 600)",

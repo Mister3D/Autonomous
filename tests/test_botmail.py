@@ -21,6 +21,64 @@ def test_parse_route():
     assert botmail_svc.parse_route("bonjour") is None
 
 
+def test_reformulate_peer_message_ask():
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "si elle fait du poney", mode="ask"
+        )
+        == "Est-ce que tu fais du poney ?"
+    )
+    assert (
+        botmail_svc.reformulate_peer_message("si tu aimes le thé", mode="ask")
+        == "Est-ce que tu aimes le thé ?"
+    )
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "quelle heure est-il ?", mode="ask"
+        )
+        == "quelle heure est-il ?"
+    )
+    # Continuation keeps the fragment.
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "si elle fait du poney", mode="ask", continuation=True
+        )
+        == "si elle fait du poney"
+    )
+
+
+def test_reformulate_peer_message_tell():
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "qu'elle est en retard", mode="tell"
+        )
+        == "Tu es en retard"
+    )
+
+
+def test_composer_demande_reformulates_for_peer(auth_client, home):
+    """Demande à @x si elle… must become a self-contained question for @x."""
+    auth_client.post("/api/v1/bots", json={"name": "manager"})
+    auth_client.post("/api/v1/bots", json={"name": "lol"})
+    r = auth_client.post(
+        "/api/v1/bots/manager/messages",
+        json={"content": "Demande à @lol si elle fait du poney"},
+    )
+    assert r.status_code == 201
+    lol = auth_client.get("/api/v1/bots/lol/messages").json
+    ask_msgs = [
+        m
+        for m in lol
+        if m.get("role") == "system"
+        and (m.get("meta") or {}).get("mail_kind") == "ask"
+    ]
+    assert ask_msgs, lol
+    body = ask_msgs[-1]["content"]
+    assert "poney" in body.lower()
+    assert "si elle" not in body.lower()
+    assert "tu" in body.lower()
+
+
 def test_tell_delivers_when_idle(home):
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
@@ -295,6 +353,74 @@ def test_rescue_mentions_skips_when_already_mailed(home):
         m["meta"].get("kind") == "botmail"
         for m in chat_svc.list_messages("bob", home=home)
         if isinstance(m.get("meta"), dict)
+    )
+
+
+def test_rescue_skips_bare_citation(home):
+    """Citing @peer without a send claim must not mail them (Pascaline case)."""
+    bots_svc.create_bot("manager", home=home)
+    bots_svc.create_bot("pascaline", home=home)
+    chat_svc.create_message(
+        "manager",
+        "Cite @pascaline sans lui envoyer de message",
+        role="user",
+        home=home,
+    )
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "manager",
+        "Pascaline, c’est ton bot. Elle fait du poney.",
+        mail_sent=[],
+        home=home,
+    )
+    assert rescued == []
+
+
+def test_rescue_skips_cite_with_at_token(home):
+    """User said « Avec le @ » then assistant wrote @pascaline + no-send → no mail."""
+    bots_svc.create_bot("manager", home=home)
+    bots_svc.create_bot("pascaline", home=home)
+    chat_svc.create_message("manager", "Avec le @", role="user", home=home)
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "manager",
+        "Voilà : @pascaline\n\nComme tu m’as demandé de ne pas lui envoyer "
+        "de message, je me contente de la citer ici dans le chat.",
+        mail_sent=[],
+        home=home,
+    )
+    assert rescued == []
+    assert not chat_svc.list_messages("pascaline", home=home)
+
+
+def test_rescue_skips_mention_without_send_intent(home):
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message("alice", "Tu connais bob ?", role="user", home=home)
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "alice",
+        "Oui, @bob est un collègue utile pour l’heure.",
+        mail_sent=[],
+        home=home,
+    )
+    assert rescued == []
+
+
+def test_rescue_tell_when_assistant_claims_send(home):
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message(
+        "alice", "Préviens bob que je suis en retard", role="user", home=home
+    )
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "alice",
+        "Ok, j’ai transmis à @bob que tu es en retard.",
+        mail_sent=[],
+        home=home,
+    )
+    assert len(rescued) == 1
+    assert rescued[0]["mode"] == "tell"
+    assert any(
+        "retard" in (m.get("content") or "").lower()
+        for m in chat_svc.list_messages("bob", home=home)
     )
 
 

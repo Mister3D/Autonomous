@@ -621,6 +621,8 @@ const uploading = ref(false);
 const mentionOpen = ref(false);
 const mentionIndex = ref(0);
 const mentionQuery = ref(null);
+/** After Escape, keep the menu closed for this @ token (keyup would reopen it). */
+let mentionDismissedStart = null;
 const flashMsgId = ref("");
 const tokenTipOpen = ref(false);
 /** Auto-follow new messages only while the user stays near the bottom. */
@@ -728,14 +730,21 @@ function syncMirrorScroll() {
 function syncMentionQuery() {
   const el = composer.value;
   if (!el) {
+    mentionDismissedStart = null;
     closeMentions();
     return;
   }
   const q = mentionQueryAt(text.value, el.selectionStart ?? text.value.length);
   if (!q) {
+    mentionDismissedStart = null;
     closeMentions();
     return;
   }
+  // Escape closed this @ — ignore keyup/click until the user starts a new @.
+  if (mentionDismissedStart !== null && q.start === mentionDismissedStart) {
+    return;
+  }
+  mentionDismissedStart = null;
   mentionQuery.value = q;
   mentionOpen.value = true;
   mentionIndex.value = 0;
@@ -775,27 +784,37 @@ function pickMention(bot) {
 }
 
 function onComposerKey(e) {
-  if (mentionOpen.value && mentionMatches.value.length) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      mentionIndex.value = (mentionIndex.value + 1) % mentionMatches.value.length;
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const n = mentionMatches.value.length;
-      mentionIndex.value = (mentionIndex.value - 1 + n) % n;
-      return;
-    }
-    if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      pickMention(mentionMatches.value[mentionIndex.value]);
-      return;
-    }
+  if (mentionOpen.value) {
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
+      const el = composer.value;
+      const q =
+        mentionQuery.value ||
+        (el
+          ? mentionQueryAt(text.value, el.selectionStart ?? text.value.length)
+          : null);
+      mentionDismissedStart = q?.start ?? null;
       closeMentions();
       return;
+    }
+    if (mentionMatches.value.length) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        mentionIndex.value = (mentionIndex.value + 1) % mentionMatches.value.length;
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = mentionMatches.value.length;
+        mentionIndex.value = (mentionIndex.value - 1 + n) % n;
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickMention(mentionMatches.value[mentionIndex.value]);
+        return;
+      }
     }
   }
   if (e.key !== "Enter" || e.isComposing) return;

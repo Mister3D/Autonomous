@@ -54,10 +54,75 @@ _AWAIT_REPLY_RE = re.compile(
     r")"
 )
 
+# Positive claim that a message was / will be sent to the peer (not a mere @cite).
+_SEND_CLAIM_RE = re.compile(
+    r"(?i)("
+    r"j['\u2019]ai\s+(transmis|envoy[eé]|demand[eé]|[eé]crit)|"
+    r"j['\u2019][eé]cris|"
+    r"je\s+(lui\s+|leur\s+)?(transmets|envoie|demande|[eé]cris)|"
+    r"je\s+(viens\s+de\s+)?(transmettre|envoyer|demander|[eé]crire)|"
+    r"message\s+(envoy[eé]|transmis|queued|delivered)|"
+    r"bot_tell|bot_ask|bot_delegate|"
+    r"(sent|sending|asked|asking|wrote|writing)\s+(a\s+)?(message|question)\s+to|"
+    r"i\s+(sent|asked|wrote|messaged)"
+    r")"
+)
+
+# Explicit “cite only / don’t send” — never rescue.
+_NO_SEND_RE = re.compile(
+    r"(?i)("
+    r"sans\s+(lui\s+|leur\s+)?envoyer|"
+    r"ne\s+(lui\s+|leur\s+)?(pas\s+)?envoyer|"
+    r"pas\s+(lui\s+|leur\s+)?envoyer|"
+    r"ne\s+rien\s+envoyer|"
+    r"je\s+me\s+contente\s+de|"
+    r"juste\s+(la\s+|le\s+|les\s+)?citer|"
+    r"cite[r]?\s+.+\s+sans|"
+    r"without\s+sending|"
+    r"do\s+not\s+send|"
+    r"don['\u2019]?t\s+send|"
+    r"not\s+send(ing)?\s+(a\s+)?message|"
+    r"only\s+cite|"
+    r"just\s+citing"
+    r")"
+)
+
 _ROUTE_PREFIX_RE = re.compile(
     r"^\s*(?:demande|demandez|dis|dit|dites)\s+à\s+@[a-zA-Z0-9_-]+\s*[:\-]?\s*",
     re.IGNORECASE,
 )
+
+# 3rd-person verb → tutoiement for a self-contained peer message.
+_TU_VERB = {
+    "fait": "fais",
+    "font": "fais",
+    "a": "as",
+    "ont": "as",
+    "est": "es",
+    "sont": "es",
+    "peut": "peux",
+    "peuvent": "peux",
+    "veut": "veux",
+    "veulent": "veux",
+    "doit": "dois",
+    "doivent": "dois",
+    "va": "vas",
+    "vont": "vas",
+    "sait": "sais",
+    "savent": "sais",
+    "aime": "aimes",
+    "aiment": "aimes",
+    "habite": "habites",
+    "habitent": "habites",
+    "travaille": "travailles",
+    "travaillent": "travailles",
+    "pense": "penses",
+    "pensent": "penses",
+    "prefère": "préfères",
+    "préfère": "préfères",
+    "preferent": "préfères",
+    "préfèrent": "préfères",
+}
 
 
 def _now() -> str:
@@ -135,6 +200,97 @@ def parse_route(text: str) -> dict[str, str] | None:
     return None
 
 
+def reformulate_peer_message(
+    body: str,
+    *,
+    mode: str = "ask",
+    continuation: bool = False,
+) -> str:
+    """Rewrite a Dit/Demande fragment into a self-contained peer message.
+
+    Composer text after ``@name`` is often a relative clause meant for the human
+    (« si elle fait du poney »). The peer has no that context — address them as
+    ``tu`` unless ``continuation`` (follow-up in an ongoing exchange).
+    """
+    text = (body or "").strip()
+    if not text or continuation:
+        return text
+
+    # « si elle/il … » / « si tu … »
+    m = re.match(r"(?i)^si\s+(elle|il)\s+(.+)$", text)
+    if m:
+        rest = _tu_ify_clause(m.group(2).strip())
+        if mode == "ask":
+            return _ensure_question(f"Est-ce que tu {rest}")
+        return _cap_first(f"Tu {rest}")
+
+    m = re.match(r"(?i)^si\s+tu\s+(.+)$", text)
+    if m:
+        rest = m.group(1).strip()
+        if mode == "ask":
+            return _ensure_question(f"Est-ce que tu {rest}")
+        return _cap_first(f"Tu {rest}")
+
+    # « qu'elle/qu'il … » (Dit à … qu'elle est prête) — apostrophe required
+    # so « quelle » is not eaten as qu+elle.
+    m = re.match(r"(?i)^qu['\u2019](elle|il)\s+(.+)$", text)
+    if m:
+        rest = _tu_ify_clause(m.group(2).strip())
+        return _cap_first(f"Tu {rest}")
+
+    # Bare 3rd person subject: « elle fait du poney » (whole clause).
+    m = re.match(r"(?i)^(elle|il)\s+(.+)$", text)
+    if m:
+        rest = _tu_ify_clause(m.group(2).strip())
+        if mode == "ask":
+            return _ensure_question(f"Est-ce que tu {rest}")
+        return _cap_first(f"Tu {rest}")
+
+    if mode == "ask" and "?" not in text:
+        # Indirect fragment without « si » — still make it a clear question.
+        if re.match(
+            r"(?i)^(quand|pourquoi|comment|où|combien|quel|quelle|quels|quelles)\b",
+            text,
+        ):
+            return _ensure_question(text)
+        if not re.match(
+            r"(?i)^(est-ce|peux-tu|pouvez-vous|puis-je|tu\b|vous\b)",
+            text,
+        ):
+            return _ensure_question(f"Peux-tu me dire : {text}")
+
+    return text
+
+
+def _tu_ify_clause(clause: str) -> str:
+    """Turn the start of a 3rd-person clause into tutoiement (fait → fais…)."""
+    parts = (clause or "").strip().split(None, 1)
+    if not parts:
+        return clause
+    first = parts[0]
+    key = first.lower()
+    mapped = _TU_VERB.get(key)
+    if not mapped:
+        return clause
+    # Preserve crude capitalization of the rest only.
+    rest = parts[1] if len(parts) > 1 else ""
+    return f"{mapped} {rest}".strip() if rest else mapped
+
+
+def _ensure_question(text: str) -> str:
+    t = (text or "").strip().rstrip("?.! ")
+    if not t:
+        return text
+    return t + " ?"
+
+
+def _cap_first(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return t
+    return t[0].upper() + t[1:]
+
+
 def resolve_bot(ref: str, *, home: Path | None = None, exclude: str | None = None) -> str:
     """Resolve @name or label to a bot name (case-insensitive)."""
     needle = (ref or "").strip().lstrip("@")
@@ -197,8 +353,10 @@ def maybe_route_from_composer(
         )
         return True
 
-    body = route["body"]
+    raw_body = route["body"]
     mode = route["mode"]
+    # Never forward the raw relative clause (« si elle fait… ») — peer has no context.
+    body = reformulate_peer_message(raw_body, mode=mode, continuation=False)
     _patch_message_meta(
         bot,
         message_id,
@@ -228,6 +386,7 @@ def maybe_route_from_composer(
                 "to_bot": target,
                 "link_bot": target,
                 "body": body,
+                "body_raw": raw_body,
             },
             home=home,
         )
@@ -247,6 +406,7 @@ def maybe_route_from_composer(
                 "to_bot": target,
                 "link_bot": target,
                 "body": body,
+                "body_raw": raw_body,
             },
             home=home,
         )
@@ -917,12 +1077,16 @@ def maybe_rescue_mentions(
 ) -> list[dict[str, Any]]:
     """Invisible post-response net: @peer in assistant text but no mail tool → send.
 
-    Deterministic (no second LLM turn, nothing appended to the thread about the
-    rescue). Mode is Ask when the assistant awaits a reply / user intent is a
-    question; otherwise Tell. Returns the list of rescues performed.
+    Only when the assistant (or user) shows a real send intent — not a bare
+    ``@name`` citation. Deterministic (no second LLM turn). Mode is Ask when
+    the assistant awaits a reply / user intent is a question; otherwise Tell.
     """
     text = (assistant_content or "").strip()
     if not text or "@" not in text:
+        return []
+
+    user_text = _last_user_text(bot, home=home)
+    if not _rescue_should_fire(text, user_text):
         return []
 
     mailed = {
@@ -934,14 +1098,13 @@ def maybe_rescue_mentions(
     if not targets:
         return []
 
-    user_text = _last_user_text(bot, home=home)
     mode = _infer_rescue_mode(text, user_text)
     rescued: list[dict[str, Any]] = []
     for target in targets:
         if target.lower() in mailed:
             continue
-        body = _rescue_body(target, text, user_text, home=home)
-        if not body:
+        body = _rescue_body(target, text, user_text, mode=mode, home=home)
+        if not body or not _rescue_body_usable(body):
             continue
         try:
             if mode == "ask":
@@ -971,6 +1134,41 @@ def maybe_rescue_mentions(
         except Exception:
             log.exception("botmail rescue failed %s → @%s", bot, target)
     return rescued
+
+
+def _rescue_should_fire(assistant: str, user_text: str) -> bool:
+    """True only when a missed mail tool is likely — not a bare @ citation."""
+    blob = f"{user_text or ''}\n{assistant or ''}"
+    if _NO_SEND_RE.search(blob):
+        return False
+    if _AWAIT_REPLY_RE.search(assistant or ""):
+        return True
+    if _SEND_CLAIM_RE.search(assistant or ""):
+        return True
+    # User explicitly asked to Dit/Demande and the assistant named @peer.
+    route = parse_route(user_text or "")
+    if route:
+        return True
+    if re.search(
+        r"(?i)^\s*(?:demande|demandez|dis|dit|dites|ask|tell)\b",
+        user_text or "",
+    ):
+        return True
+    return False
+
+
+def _rescue_body_usable(body: str) -> bool:
+    """Reject empty / meta-only bodies (e.g. « Avec le @ »)."""
+    cleaned = (body or "").strip()
+    if len(cleaned) < 4:
+        return False
+    # Body that is only about the @ token itself.
+    if re.fullmatch(
+        r"(?i)(avec\s+le\s+@|with\s+the\s+@|@|le\s+@|the\s+@)\s*",
+        cleaned,
+    ):
+        return False
+    return True
 
 
 def maybe_relay_orphaned_tell_reply(
@@ -1111,8 +1309,10 @@ def _rescue_body(
     assistant: str,
     user_text: str,
     *,
+    mode: str = "ask",
     home: Path | None,
 ) -> str:
+    raw = ""
     route = parse_route(user_text or "")
     if route:
         try:
@@ -1120,14 +1320,17 @@ def _rescue_body(
         except AutonomousError:
             resolved = ""
         if resolved.lower() == target.lower() and route["body"].strip():
-            return route["body"].strip()
-    cleaned = _ROUTE_PREFIX_RE.sub("", user_text or "").strip()
-    if cleaned:
-        return cleaned
-    body = _MENTION_RE.sub("", assistant or "").strip()
-    body = re.sub(r"[ \t]+", " ", body)
-    body = re.sub(r"\n{3,}", "\n\n", body).strip()
-    return body[:2000]
+            raw = route["body"].strip()
+    if not raw:
+        cleaned = _ROUTE_PREFIX_RE.sub("", user_text or "").strip()
+        if cleaned:
+            raw = cleaned
+    if not raw:
+        body = _MENTION_RE.sub("", assistant or "").strip()
+        body = re.sub(r"[ \t]+", " ", body)
+        body = re.sub(r"\n{3,}", "\n\n", body).strip()
+        raw = body[:2000]
+    return reformulate_peer_message(raw, mode=mode, continuation=False)
 
 
 def _last_user_text(bot: str, *, home: Path | None) -> str:
