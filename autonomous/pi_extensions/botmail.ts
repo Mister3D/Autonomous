@@ -200,13 +200,14 @@ export default function (pi: ExtensionAPI) {
       + "Confirming delivery is not the end of the task. "
       + "content = a self-contained brief for the peer (they lack this chat): objective, "
       + "relevant facts, constraints, expected result — not the user's raw last sentence. "
-      + "Address them as tu; never copy « si elle… ». "
+      + "Address them as tu/you. Write content in the conversation language only "
+      + "(do not mix French and English). "
       + "Managers assigning work should prefer bot_delegate (adds relaunch instructions).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name (without or with @)" }),
       content: Type.String({
         description:
-          "Self-contained brief for the peer (tutoiement). Not a raw user fragment.",
+          "Self-contained brief for the peer, in the conversation language only. Not a raw user fragment.",
       }),
     }),
     execute: async (_id, params) => {
@@ -239,13 +240,14 @@ export default function (pi: ExtensionAPI) {
       + "Managers MUST NOT use this for orchestration — use bot_delegate instead "
       + "(async + peer relaunches you with Tell @). "
       + "Mentioning @name is NOT enough; need an explicit ask. "
-      + "content = self-contained brief/question the peer can act on without this chat "
-      + "(good: « Est-ce que tu fais du poney ? »; bad: « si elle fait du poney »).",
+      + "content = self-contained brief/question the peer can act on without this chat, "
+      + "in the conversation language only (do not mix French and English). "
+      + "Structure example, not a language: « si elle fait du poney » → « Est-ce que tu fais du poney ? ».",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name" }),
       content: Type.String({
         description:
-          "Self-contained brief/question for the peer (tutoiement). Not a raw user fragment.",
+          "Self-contained brief/question for the peer, in the conversation language only. Not a raw user fragment.",
       }),
       timeout_sec: Type.Optional(
         Type.Number({

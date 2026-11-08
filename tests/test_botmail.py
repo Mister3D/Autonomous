@@ -93,6 +93,7 @@ def test_composer_ask_is_route_intent_not_auto_mail(auth_client, home):
     assert meta.get("mode") == "ask"
     assert "agent_prompt" in meta
     assert "bot_ask" in meta["agent_prompt"]
+    assert "One language only" in meta["agent_prompt"]
     lol = auth_client.get("/api/v1/bots/lol/messages").json
     assert not any(
         (m.get("meta") or {}).get("kind") == "botmail" for m in lol

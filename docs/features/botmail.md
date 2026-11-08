@@ -38,6 +38,7 @@ Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** 
 - Do **not** restore composer bypass that regex-forwards fragments without the local agent.
 - Do **not** re-enable rescue that builds the peer body from the user message.
 - Source code, tests, and agent prompts stay **English**. UI strings → `frontend/src/locales/{en,fr}.json`. Keep FR `Dit`/`Demande` only as composer parse aliases.
+- The **mail body** and the **reply to the user** stay in the conversation language (one language). Prompts say so explicitly (`_LANG_RULE` / `_INBOUND_LANG_RULE`) so the model does not mix French and English just because the instructions are English.
 - Drain only when `status` ∉ {busy, waiting}. Deliver reply outside the replying bot’s lock.
 - `null` backend (tests): route_intent is set, peer stays empty until an explicit `tell`/`ask`.
 - Capture `state["content"]` before `close_assistant()` for ask replies.

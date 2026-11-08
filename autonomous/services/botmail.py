@@ -19,6 +19,19 @@ from autonomous.services.errors import AutonomousError, Forbidden, NotFound, Val
 
 log = logging.getLogger("autonomous.botmail")
 
+# Instructions stay English. The mail body and the reply to the user must not.
+_LANG_RULE = (
+    "LANGUAGE: write the peer message (the tool content) and your reply to "
+    "the user entirely in the language of this conversation — the language "
+    "the user is writing in. One language only. Do not mix French and English. "
+    "Do not switch to English because these instructions are in English. "
+    "Tool results may be English; do not paste them. Keep names unchanged."
+)
+_INBOUND_LANG_RULE = (
+    "Answer in the same language as the message below. One language only. "
+    "Do not mix languages. Do not switch to English because this note is in English."
+)
+
 # English primary; French Dit/Demande kept as composer aliases.
 _TELL_RE = re.compile(
     r"^\s*(?:"
@@ -375,14 +388,17 @@ def maybe_route_from_composer(
         f"You MUST:\n"
         f"1. Write a self-contained, coherent message for @{target} "
         f"(they have NOT read this chat): objective, useful facts from this "
-        f"thread, constraints, expected result. Address them as « you ». "
-        f"Never forward a relative clause about « she/he » "
-        f"(bad: « if she rides horses »; good: « Do you ride horses? »).\n"
+        f"thread, constraints, expected result. Address them as « you » / « tu ». "
+        f"Never forward a relative clause about a third person "
+        f"(structure only — keep the conversation language: "
+        f"« if she rides horses » → « Do you ride horses? », "
+        f"« si elle fait du poney » → « Est-ce que tu fais du poney ? »).\n"
         f"2. Call {tool}(to=\"{target}\", content=<your authored message>).\n"
         f"3. Briefly confirm transmission to the user "
         f"(this is NOT the end of the task). If they asked you to bring the "
         f"reply back here, prefer bot_ask (or ensure follow-up).\n"
-        f"Do not merely cite @{target}."
+        f"Do not merely cite @{target}.\n"
+        f"{_LANG_RULE}"
     )
     _patch_message_meta(
         bot,
@@ -1078,7 +1094,8 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
             f"You do NOT have @{from_bot}'s conversation thread — act only on "
             f"what follows, under your own instructions. Answer clearly in your "
             f"next text message (not only via tools) — your reply will be "
-            f"forwarded to them.\n\n"
+            f"forwarded to them.\n"
+            f"{_INBOUND_LANG_RULE}\n\n"
             f"Question:\n{body}"
         )
         _start_agent(bot, prompt, home=home)
@@ -1106,7 +1123,9 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
         prompt = (
             f"@{from_bot} replied (async Ask return):\n{answer}\n\n"
             "Continue with this information for the user if you promised to "
-            "bring the result back here. Do not ask the same thing again."
+            "bring the result back here. Do not ask the same thing again. "
+            "Tell the user in the language of your conversation with them "
+            "(one language only; do not mix French and English)."
         )
         _start_agent(bot, prompt, home=home)
         return True
@@ -1133,7 +1152,8 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
         f"@{from_bot} wrote to you (inter-bot, one-way). "
         f"You do NOT have @{from_bot}'s conversation thread — act only on "
         f"what follows, under your own instructions "
-        f"(standing rules, memory, etc.).\n\n"
+        f"(standing rules, memory, etc.).\n"
+        f"{_INBOUND_LANG_RULE}\n\n"
         f"{body}"
     )
     _start_agent(bot, prompt, home=home)
