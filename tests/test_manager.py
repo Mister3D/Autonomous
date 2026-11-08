@@ -54,19 +54,19 @@ def test_delegate_formats_relaunch_and_delivers(home):
     bots_svc.create_bot("Worker", home=home)
     content = botmail_svc.format_delegate_content(
         manager_slug=mgr["name"],
-        task="Va chercher la météo demain.",
-        expect_reply="la météo en une phrase",
+        task="Fetch tomorrow's weather.",
+        expect_reply="the weather in one sentence",
     )
-    assert "Dit à @manager" in content
-    assert "ne reste PAS en attente" in content
-    assert "météo demain" in content
+    assert "Tell @manager" in content
+    assert "NOT waiting" in content
+    assert "tomorrow's weather" in content
 
     botmail_svc.tell(mgr["name"], "worker", content, home=home, origin="test")
     msgs = chat_svc.list_messages("worker", home=home)
     assert any(
         m["role"] == "system"
         and m["meta"].get("mail_kind") == "tell"
-        and "Dit à @manager" in m["content"]
+        and "Tell @manager" in m["content"]
         for m in msgs
     )
 
@@ -83,12 +83,12 @@ def test_api_peers_and_delegate(auth_client, home):
 
     d = auth_client.post(
         "/api/v1/bots/mgr/mail/delegate",
-        json={"to": "helper", "task": "Compte jusqu’à 3."},
+        json={"to": "helper", "task": "Count up to 3."},
     )
     assert d.status_code == 201
     helper_msgs = auth_client.get("/api/v1/bots/helper/messages").json
     assert any(
-        "Dit à @mgr" in (m.get("content") or "")
-        and "Compte jusqu" in (m.get("content") or "")
+        "Tell @mgr" in (m.get("content") or "")
+        and "Count up to 3" in (m.get("content") or "")
         for m in helper_msgs
     )

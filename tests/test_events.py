@@ -190,6 +190,11 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     assert hit[-1]["meta"].get("has_payload") is True
     assert hit[-1]["meta"].get("payload") == {"hello": "world"}
     assert "Traite" in hit[-1]["content"]
+    # Agent prompt must include the payload (UI bubble stays short).
+    agent_prompt = hit[-1]["meta"].get("agent_prompt") or ""
+    assert "Payload" in agent_prompt
+    assert "hello" in agent_prompt
+    assert "world" in agent_prompt
 
     # Token-in-path is gone
     legacy = auth_client.post(f"/api/v1/hooks/{wh['token']}", json={"legacy": True})

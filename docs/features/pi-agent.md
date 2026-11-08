@@ -35,7 +35,7 @@
 - `stop_run` also clears the in-memory `_ACTIVE_RUNS` slot (`clear_active_run`). Without that, DB went `idle` while the next `start_run` kept logging « run already in progress » and the chat looked frozen (user bubble only). `start_run` also reclaim a stale slot once when DB status is already `idle`/`waiting`.
 - **No** run duration limit in the product (any timeout stays on the Cursor / manual test side).
 - Vision: budget from the bot’s Pi model (`inputLimits.images.maxPerRequest` in `models.json`); fallback `guard.max_images_per_prompt` (**2**). Only this budget goes into `images[]`; the rest is listed as paths for later turns. If the provider returns "At most N image(s)", retry + persist N on that model (and the guard fallback). See [`llm-settings.md`](./llm-settings.md).
-- Clear history = SQLite purge + **wipe** `pi/sessions/*.jsonl` + new `pi_session_id` (`autonomous-<uuid>`).
+- Clear history = SQLite purge + **wipe** `pi/sessions/*.jsonl` + new `pi_session_id` (`autonomous-<uuid>`). The Details button also empties `state.messages[name]` (no SSE on delete, otherwise the thread and the rail keep the old bubbles until a full reload).
 - Delete a bot = stop Pi + destroy desk + **rm** `data/bots/<name>/` (otherwise orphan files).
 - Chat ↔ Pi link: **only** `bots.pi_session_id` (Autonomous chooses the id, Pi doesn't know the slug).
 - Same scheme for Docker VMs: `desk.container_name` = `autonomous-<uuid>` (see [`desk-screen.md`](./desk-screen.md)).

@@ -24,6 +24,7 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [botmail.md](./botmail.md) | Tell / Ask @bot, queue, follow-up |
 | [bots-create.md](./bots-create.md) | Slug identifier, 422, CreateBotModal |
 | [chat-files.md](./chat-files.md) | Attach files (picker + drop → ~/shared/upload) |
+| [composer-drafts.md](./composer-drafts.md) | Per-bot composer drafts (sessionStorage, per tab) |
 | [events.md](./events.md) | UTC cron + webhooks, Events inspector |
 | [chat-search.md](./chat-search.md) | FTS + NL message search, `?msg=` deep-link |
 | [chat-export-pdf.md](./chat-export-pdf.md) | Export discussion PDF (tool names, no details) |

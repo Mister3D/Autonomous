@@ -60,7 +60,10 @@ function applyBot(bot) {
 }
 
 async function clearChat() {
-  await api.clearMessages(props.bot.name);
+  const name = props.bot.name;
+  await api.clearMessages(name);
+  // Server wipe does not emit SSE; drop the thread so the pane and rail update.
+  state.messages[name] = [];
 }
 
 async function exportPdf() {

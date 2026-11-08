@@ -344,7 +344,7 @@ class BotMailDelegate(MethodView):
             me = bots_svc.get_bot(name, home=g.home)
             if not me.get("is_manager"):
                 raise Forbidden(
-                    "Seul un bot Manager peut déléguer.",
+                    "Only a Manager bot can delegate.",
                     code="manager_required",
                 )
             content = botmail_svc.format_delegate_content(

@@ -141,7 +141,7 @@ export default function (pi: ExtensionAPI) {
     label: "Delegate to bot",
     description:
       "MANAGER ONLY: assign a task to another bot WITHOUT waiting. "
-      + "The message tells them to relaunch you with « Dit à @you … » when done. "
+      + "The message tells them to relaunch you with « Tell @you … » when done. "
       + "Continue other work; when their Dit arrives, you are relaunched.",
     parameters: Type.Object({
       to: Type.String({ description: "Worker bot name (with or without @)" }),
@@ -184,7 +184,7 @@ export default function (pi: ExtensionAPI) {
       return textResult(
         `Task delegated to @${to} (async). `
           + `You are NOT waiting — keep going. `
-          + `They will relaunch you with « Dit à @${cfg.bot} … » when finished.`,
+          + `They will relaunch you with « Tell @${cfg.bot} … » when finished.`,
         { inbox_id: res.data?.message },
       );
     },
@@ -194,17 +194,19 @@ export default function (pi: ExtensionAPI) {
     name: "bot_tell",
     label: "Tell bot",
     description:
-      "Send a one-way message to another bot (like « Dit à @name … »). Does not wait for a reply. "
-      + "Typing @name in your chat text is NOT enough — call this tool to deliver. "
-      + "If the user only wants a citation without delivery, do not call this. "
-      + "content must be self-contained for the peer (they lack this chat): address them as tu; "
-      + "never copy a relative clause like « si elle… ». "
+      "Send a one-way async message to another bot (like « Tell @name … »). Does not wait. "
+      + "Mentioning @name in chat text is NOT enough — call this tool only when the user "
+      + "(or a standing instruction) explicitly asks you to contact them. "
+      + "Confirming delivery is not the end of the task. "
+      + "content = a self-contained brief for the peer (they lack this chat): objective, "
+      + "relevant facts, constraints, expected result — not the user's raw last sentence. "
+      + "Address them as tu; never copy « si elle… ». "
       + "Managers assigning work should prefer bot_delegate (adds relaunch instructions).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name (without or with @)" }),
       content: Type.String({
         description:
-          "Self-contained message for the peer (tutoiement). Not a raw fragment from the user.",
+          "Self-contained brief for the peer (tutoiement). Not a raw user fragment.",
       }),
     }),
     execute: async (_id, params) => {
@@ -232,16 +234,18 @@ export default function (pi: ExtensionAPI) {
     name: "bot_ask",
     label: "Ask bot",
     description:
-      "Ask another bot a question and WAIT for its answer (blocks this run). "
+      "Ask another bot and WAIT for its answer (blocks this run). Use when the user "
+      + "wants the peer’s reply brought back here (« rapporte-moi sa réponse »). "
       + "Managers MUST NOT use this for orchestration — use bot_delegate instead "
-      + "(async + peer relaunches you). Prefer bot_ask only for short sync Q&A when not a manager. "
-      + "content must be a self-contained question the peer can answer without this chat "
+      + "(async + peer relaunches you with Tell @). "
+      + "Mentioning @name is NOT enough; need an explicit ask. "
+      + "content = self-contained brief/question the peer can act on without this chat "
       + "(good: « Est-ce que tu fais du poney ? »; bad: « si elle fait du poney »).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name" }),
       content: Type.String({
         description:
-          "Self-contained question for the peer (tutoiement). Not a raw user fragment.",
+          "Self-contained brief/question for the peer (tutoiement). Not a raw user fragment.",
       }),
       timeout_sec: Type.Optional(
         Type.Number({
@@ -257,7 +261,7 @@ export default function (pi: ExtensionAPI) {
       if (await isManager(cfg)) {
         return textResult(
           "You are a Manager: do NOT use bot_ask (blocking). "
-            + "Call bot_delegate(to, task) so the peer relaunches you with Dit à when done.",
+            + "Call bot_delegate(to, task) so the peer relaunches you with Tell @ when done.",
         );
       }
       const to = String(params.to || "").replace(/^@/, "");

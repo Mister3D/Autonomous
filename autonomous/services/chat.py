@@ -203,10 +203,27 @@ def send_message(
     if role == "user" and trigger_agent:
         from autonomous.services import botmail as botmail_svc
 
-        if botmail_svc.maybe_route_from_composer(
+        routed = botmail_svc.maybe_route_from_composer(
             bot, content, message_id=msg_id, home=home
-        ):
-            return message
+        )
+        if routed is not None:
+            if routed.get("skip_agent"):
+                return message
+            # Dit/Demande : l’agent local rédige le message peer (pas de bypass).
+            agent_prompt = str(routed.get("agent_prompt") or agent_prompt)
+            # Keep route_intent fields if we later stamp queued=True.
+            meta = dict(meta)
+            meta.update(
+                {
+                    "kind": "botmail",
+                    "mail_kind": "route_intent",
+                    "mode": routed.get("mode"),
+                    "to_bot": routed.get("to_bot"),
+                    "link_bot": routed.get("to_bot"),
+                    "agent_prompt": agent_prompt,
+                }
+            )
+            message["meta"] = meta
 
         # Agent already working → keep the bubble, run later (FIFO).
         if bot_run_blocked(bot, home=home):
@@ -653,12 +670,12 @@ def stop_run(bot: str, home: Path | None = None) -> None:
 
 _INTERRUPT_TOOL_ERROR = "Session agent interrompue pendant l’attente d’approbation."
 _INTERRUPT_CARD = (
-    "La session agent s’est interrompue pendant l’attente d’approbation. "
-    "Cliquez Reprendre pour relancer l’agent."
+    "The agent session was interrupted while waiting for approval. "
+    "Click Resume to relaunch the agent."
 )
 _RESUME_PROMPT = (
-    "Reprends là où tu t’étais arrêté. Les autorisations de l’utilisateur déjà accordées "
-    "(coffre / bureau) restent valides — ne redemande pas inutilement."
+    "Continue from where you left off. User approvals already granted "
+    "(vault / desk) remain valid — do not ask again unnecessarily."
 )
 
 
@@ -781,7 +798,7 @@ def resume_run(bot: str, home: Path | None = None) -> dict[str, Any]:
 
     prompt = _RESUME_PROMPT
     if last_user:
-        prompt = f"{_RESUME_PROMPT}\n\nTâche d’origine :\n{last_user}"
+        prompt = f"{_RESUME_PROMPT}\n\nOriginal task:\n{last_user}"
 
     backend = str(settings_svc.get("agent_backend", home=home, default="pi") or "pi")
     get_agent(backend, home=home).start_run(bot, prompt, home=home)

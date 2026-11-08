@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/migrations/001_schema.sql`, `autonomous/services/{bot_events,cronutil,scheduler}.py`, `autonomous/api/{bots,hooks}.py`, `autonomous/pi_extensions/events.ts`, `frontend/src/components/{EventsPane,ChatPane}.vue`  
-**Last updated**: 2026-11-06 (webhook Bearer only — no token-in-path)
+**Last updated**: 2026-11-07 (webhook payload also in agent_prompt)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@
 - **User**: small switch in front of the name (pause / resume, without the word "Actif"). Task: to the right of the next run, a delete icon. Webhook: the token is not shown; copy and delete are two slightly larger icons, on the same line as the name (on the right). The copy button puts a **curl** with `Authorization: Bearer <token>` on the clipboard (token not in the URL). Deleting a webhook opens a confirmation in the list ("Oui, supprimer" / "Annuler"), not a browser dialog.
 - `recurring=false` → deleted after firing, **unless** the next slot is less than 15 minutes away (burst, e.g. every 5 min). The row then stays until the first longer gap. For an hour of reminders, the cron must set the day and the hour (`25-55/5 11 1 11 *`). An hour set to `*` repeats the burst every hour, then stops when the gap exceeds 15 minutes (e.g. `25-55/5` stops after :55).
 - Missed ticks: **catch-up** (at most **one** due execution per task if `next_run_at <= now`), no N×missed burst.
-- Firing → chat message `role=user` with `meta.kind=schedule|webhook` (FIFO queue if busy, like user messages). The bot always receives the preamble ("La tâche planifiée … dit ceci" / "Webhook déclenché"). In the thread: centred card, light orange background, dotted outline. The first line recalls the type and the name ("Tâche planifiée · …"), then "Message envoyé au bot :" followed by the instruction alone.
+- Firing → chat message `role=user` with `meta.kind=schedule|webhook` (FIFO queue if busy, like user messages). The bot always receives the preamble ("La tâche planifiée … dit ceci" / "Webhook déclenché"). In the thread: centred card, light orange background, dotted outline. The first line recalls the type and the name ("Tâche planifiée · …"), then "Message envoyé au bot :" followed by the instruction alone. Webhook JSON stays in `meta.payload` for the UI `<details>`; the same payload is copied into `meta.agent_prompt` (`Payload : …`, size-capped) so the agent can apply standing rules (e.g. forward a purchase mail to `@achat`) without relying on meta alone.
 - Public webhook: **POST only** `/api/v1/hooks` with `Authorization: Bearer <token>` (no session auth; token is the secret, not in the URL). GET / path-token URLs are rejected. Rate-limited: 30 / min / token and 60 / min / client IP. Open exact path: `/api/v1/hooks`.
 - **From a VM** (desktop with Internet): `host.docker.internal` + env `AUTONOMOUS_HOOKS_BASE` / file `~/shared/.autonomous/host-api.env`. Helper: `autonomous-hook <token> '{"ok":true}'` (sends Bearer). Without Internet (`network=none`) the VM cannot reach the host — recreate the desk with Internet, or call the webhook from outside.
 

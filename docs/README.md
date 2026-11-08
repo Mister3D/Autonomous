@@ -45,6 +45,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/botmail.md](./features/botmail.md) | Tell / Ask @bot, queue if busy, follow-up on reply |
 | [features/bots-create.md](./features/bots-create.md) | Free-form name + auto technical slug |
 | [features/chat-files.md](./features/chat-files.md) | Chat attachments → ~/shared/upload |
+| [features/composer-drafts.md](./features/composer-drafts.md) | Per-bot composer drafts (sessionStorage, per tab) |
 | [features/events.md](./features/events.md) | UTC cron + tokenized webhooks, Events tab |
 | [features/chat-search.md](./features/chat-search.md) | Message search (FTS + NL) + `?msg=` deep-link |
 | [features/chat-export-pdf.md](./features/chat-export-pdf.md) | Export discussion PDF (tools named, no details) |

@@ -26,7 +26,8 @@ Complement to [`README.md`](./README.md) (the README remains the **first** file 
 
 ## Product reminders
 
-- French.
+- Chat with the human in **French** when they ask for it (user preference).
+- **Source code, tests, agent prompts, and `docs/features/`** stay in **English** (open-source / international). UI copy → `frontend/src/locales/{en,fr}.json` (and backend `autonomous/locales/` when used).
 - No package installs (`apt`/`pip`/global npm…) without agreement.
 - No PowerShell without permission.
 

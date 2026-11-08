@@ -67,7 +67,7 @@
   "chat.placeholder": "Écrire un message…",
   "chat.placeholderTo": "Message à {name} — ou Dit/Demande à {'@'}autre …",
   "chat.placeholderQueue": "Écrire — le message sera mis en file…",
-  "chat.botmailHint": "Dit à {'@'}bot … / Demande à {'@'}bot …",
+  "chat.botmailHint": "Dit à {'@'}bot … / Demande à {'@'}bot … (Tell / Ask)",
   "chat.mentionList": "Bots à mentionner",
   "chat.mentionNone": "Aucun bot correspondant",
   "chat.newlineHint": "Entrée envoie · Maj+Entrée nouvelle ligne · {'@'} pour mentionner · Coller une image OK",

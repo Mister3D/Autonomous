@@ -602,6 +602,14 @@ import ClarifyCard from "./ClarifyCard.vue";
 import DeskRequestCard from "./DeskRequestCard.vue";
 import AgentResumeCard from "./AgentResumeCard.vue";
 import WorkingOrb from "./WorkingOrb.vue";
+import {
+  getComposerDraft,
+  setComposerDraft,
+  clearComposerDraft,
+  getComposerPending,
+  setComposerPending,
+  clearComposerPending,
+} from "../composerDrafts.js";
 
 /** Pasted vision images (LLM often caps at 2/prompt; extras deferred server-side). */
 const MAX_PENDING_IMAGES = 2;
@@ -609,8 +617,8 @@ const MAX_PENDING_IMAGES = 2;
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();
 const router = useRouter();
-const text = ref("");
-const pending = ref([]);
+const text = ref(getComposerDraft(props.bot?.name));
+const pending = ref(getComposerPending(props.bot?.name).slice());
 const scroller = ref(null);
 const composer = ref(null);
 const secretRefuseHint = ref("");
@@ -1780,12 +1788,14 @@ async function send() {
   if ((!content && !attachments.length) || uploading.value) return;
   secretRefuseHint.value = "";
   stickToBottom.value = true;
-  // Vide tout de suite : l’appel serveur peut lancer l’agent et durer.
-  text.value = "";
-  pending.value = [];
-  closeMentions();
   // Optimistic bubble — visible the instant send is pressed, before HTTP returns.
   const bot = props.bot.name;
+  // Clear right away: the server call may start the agent and take a while.
+  text.value = "";
+  pending.value = [];
+  clearComposerDraft(bot);
+  clearComposerPending(bot);
+  closeMentions();
   const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const alreadyWaiting = (state.messages[bot] || []).some(
     (m) =>
@@ -1869,11 +1879,20 @@ async function stop() {
   }
 }
 
-watch(text, async () => {
+watch(text, async (v) => {
   if (secretRefuseHint.value) secretRefuseHint.value = "";
+  setComposerDraft(props.bot.name, v);
   await nextTick();
   autosize();
 });
+
+watch(
+  pending,
+  (items) => {
+    setComposerPending(props.bot.name, items.slice());
+  },
+  { deep: true }
+);
 
 watch(
   () => state.composerRestore,
@@ -1883,6 +1902,7 @@ watch(
     state.composerRestore = null;
     if (!draft) return;
     text.value = draft;
+    setComposerDraft(props.bot.name, draft);
     secretRefuseHint.value = t("chat.secretRestoredToComposer");
     await nextTick();
     autosize();
@@ -1920,10 +1940,19 @@ watch(
 
 watch(
   () => props.bot.name,
-  async () => {
+  async (next, prev) => {
+    if (prev && prev !== next) {
+      setComposerDraft(prev, text.value);
+      setComposerPending(prev, pending.value.slice());
+      text.value = getComposerDraft(next);
+      pending.value = getComposerPending(next).slice();
+      closeMentions();
+      secretRefuseHint.value = "";
+    }
     stickToBottom.value = true;
     threadPlaced.value = false;
     await nextTick();
+    autosize();
     if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
     else threadPlaced.value = true;
   }
@@ -1931,6 +1960,7 @@ watch(
 
 onMounted(async () => {
   await nextTick();
+  autosize();
   if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
   else threadPlaced.value = true;
 });
@@ -1957,7 +1987,10 @@ watch(lightboxSrc, (src) => {
 });
 
 onBeforeUnmount(() => {
-  clearPending();
+  // Keep drafts for this tab; do not revoke pending previews still stored in the map.
+  setComposerDraft(props.bot.name, text.value);
+  setComposerPending(props.bot.name, pending.value.slice());
+  pending.value = [];
   if (flashTimer) clearTimeout(flashTimer);
   window.removeEventListener("keydown", onLightboxKey);
 });

@@ -20,21 +20,21 @@
 - **Rail**: Managers are **featured at the top** (md avatar + name below, centred); the other bots stay in the list below.
 - It can **list** the other bots (`bot_list` / `GET /bots/:name/mail/peers`): name, label, status, capability. No persona.
 - For a multi-bot task: it **delegates** with `bot_delegate` (or the `mail/delegate` API) — **without waiting**.
-- The message to the worker includes the instruction to **relaunch** it via `Dit à @manager …` when done (success or failure).
-- When the worker does `Dit à @manager`, the Manager is relaunched like a regular tell.
+- The message to the worker includes the instruction to **relaunch** it via `Tell @manager …` when done (success or failure).
+- When the worker does `Tell @manager`, the Manager is relaunched like a regular tell.
 - `bot_ask` (blocking) is **refused** on the tool side if the bot is a Manager — use `bot_delegate`.
 
 ## Implementation
 
 - Column `is_manager` (bool). Patch → restarts the Pi session (manager prompt).
 - `ensure_manager_slot` before INSERT / UPDATE that sets `is_manager=1`.
-- Manager system prompt: don't wait / don't poll; plans built around the `Dit à` callback.
+- Manager system prompt: don't wait / don't poll; plans built around the `Tell @` callback.
 - Non-manager: `bot_tell` / `bot_ask` unchanged; `bot_list` / `bot_delegate` → 403 `manager_required`.
 
 ## Pitfalls / non-regressions
 
 - Don't make the Manager wait (`status=waiting`) for a long delegation.
-- Users can still type `Dit à` / `Demande à` in the composer (not reserved to the Manager).
+- Users can still type `Tell @` / `Ask @` (or FR aliases `Dit à` / `Demande à`) in the composer (not reserved to the Manager).
 - `bot_list` reads `/mail/peers`, not `GET /bots` (the rail UI stays public).
 - If the database already has several Managers (old data): the UI locks promotion; fix manually by leaving only one with `is_manager=1`.
 

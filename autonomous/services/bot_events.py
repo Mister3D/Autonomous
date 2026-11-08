@@ -538,6 +538,24 @@ def delete_webhook(bot: str, webhook_id: str, *, home: Path | None = None) -> No
     BUS.publish("webhook.deleted", {"bot": bot, "id": webhook_id}, bot=bot)
 
 
+_WEBHOOK_PAYLOAD_PROMPT_MAX = 24_000
+
+
+def _format_webhook_payload_for_prompt(payload: Any) -> str:
+    """Pretty JSON (or string) for the agent prompt, size-capped."""
+    if isinstance(payload, str):
+        text = payload
+    else:
+        try:
+            text = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+        except (TypeError, ValueError):
+            text = str(payload)
+    text = (text or "").strip()
+    if len(text) > _WEBHOOK_PAYLOAD_PROMPT_MAX:
+        text = text[:_WEBHOOK_PAYLOAD_PROMPT_MAX] + "\n… (payload tronqué)"
+    return text
+
+
 def fire_webhook(
     token: str,
     *,
@@ -566,10 +584,18 @@ def fire_webhook(
         "name": name,
         "anchor_message_id": anchor,
     }
+    agent_prompt: str | None = None
     if has_payload:
         meta["payload"] = payload
         meta["has_payload"] = True
-    return inject_trigger_message(bot, content, meta=meta, home=home)
+        # UI keeps a short bubble + <details> payload; the agent must see the
+        # body to apply standing rules (e.g. forward purchase mails to @achat).
+        agent_prompt = (
+            f"{content}\n\nPayload :\n{_format_webhook_payload_for_prompt(payload)}"
+        )
+    return inject_trigger_message(
+        bot, content, meta=meta, home=home, agent_prompt=agent_prompt
+    )
 
 
 # --- Shared inject -------------------------------------------------------------
@@ -581,6 +607,7 @@ def inject_trigger_message(
     *,
     meta: dict[str, Any],
     home: Path | None = None,
+    agent_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Insert a user-role trigger message; queue or start_run like composer."""
     bots_svc.get_bot(bot, home=home)
@@ -588,6 +615,9 @@ def inject_trigger_message(
     if not content:
         raise ValidationError("content required")
     meta = dict(meta or {})
+    prompt = (agent_prompt or "").strip() or content
+    if prompt != content:
+        meta["agent_prompt"] = prompt
     msg_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     blocked = chat_svc.bot_run_blocked(bot, home=home)
@@ -615,5 +645,5 @@ def inject_trigger_message(
     }
     BUS.publish("message.created", {"message": message}, bot=bot)
     if not blocked:
-        chat_svc._start_agent_for_user_message(bot, content, [], home=home)
+        chat_svc._start_agent_for_user_message(bot, prompt, [], home=home)
     return message
