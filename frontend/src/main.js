@@ -3,6 +3,7 @@ import App from "./App.vue";
 import { router } from "./router";
 import { i18n } from "./i18n";
 import { startGlobalSync } from "./sync";
+import { installVisualViewport } from "./visualViewport";
 import "./styles.css";
 
 const app = createApp(App);
@@ -11,3 +12,4 @@ app.use(i18n);
 app.mount("#app");
 
 startGlobalSync();
+installVisualViewport();

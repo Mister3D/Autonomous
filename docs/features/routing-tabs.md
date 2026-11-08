@@ -6,7 +6,7 @@
 - `frontend/src/views/HubView.vue` (`selectTab`, `applyRoute`, `goBot`)
 - `frontend/src/store.js` (`state.tab`)
 
-**Last updated**: 2026-11-07 (mobile logo → home pane; Back → list)
+**Last updated**: 2026-11-08 (mobile composer stays above the keyboard)
 
 ## User behaviour
 
@@ -46,6 +46,7 @@ The URL reflects the active tab:
 - Any mutation of `state.tab` (e.g. ManageMenu) must end with a consistent URL (dedicated watch).
 - Don't navigate only with `state.tab = …` without `goBot` / watch.
 - Don't leave `state.currentBot` on a slug missing from `state.bots`: `applyRoute` redirects, and `loadMessages` is not fired.
+- **Keyboard**: on ≤720px, `#app` is pinned to `visualViewport` (`--vv-top` / `--vvh`, `frontend/src/visualViewport.js`). Do not put the composer back on `100vh` / `height: 100%` of the layout viewport — Firefox Android overlays the keyboard and leaves that height unchanged. `interactive-widget=resizes-content` only helps Chromium.
 
 ## Quick check
 

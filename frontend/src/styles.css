@@ -5672,6 +5672,19 @@ a.bot-mention:hover,
 }
 
 @media (max-width: 720px) {
+  /* Follow the visible viewport (visualViewport) so the keyboard does not cover the composer. */
+  #app {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--vv-top, 0px);
+    width: 100%;
+    height: var(--vvh, 100%);
+    overflow: hidden;
+    /* Modals and toasts are position:fixed; keep them inside this box, above the keyboard. */
+    transform: translateZ(0);
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
