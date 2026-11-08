@@ -168,17 +168,31 @@ function rigEyes(svg) {
   });
 }
 
-/** Tight square crop so the companion fills a round pastille (was 1.32 → too small). */
-function fitViewBox(svg, fill = 1.02) {
+/**
+ * Tight square crop so the companion fills the badge.
+ * fill < 1 zooms in (replaces a CSS scale on the root <svg>, which Firefox
+ * Android does not paint inside a <button>).
+ * A 0×0 bbox (getBBox before layout, common on Firefox Android) must not
+ * replace the authored viewBox with "0 0 0 0".
+ */
+function fitViewBox(svg, fill = 0.94) {
   const rig = svg.querySelector(".rig");
-  if (!rig) return;
-  const b = rig.getBBox();
+  if (!rig) return false;
+  let b;
+  try {
+    b = rig.getBBox();
+  } catch {
+    return false;
+  }
+  if (!b || !(b.width > 0) || !(b.height > 0)) return false;
   const pad = Math.max(b.width, b.height) * 0.01;
   const w = Math.max(b.width, b.height) * fill;
+  if (!(w > 0)) return false;
   svg.setAttribute(
     "viewBox",
     `${(b.x + b.width / 2 - w / 2).toFixed(0)} ${(b.y + b.height - w + pad).toFixed(0)} ${w.toFixed(0)} ${w.toFixed(0)}`
   );
+  return true;
 }
 
 export class Avatar {
@@ -213,7 +227,11 @@ export class Avatar {
     setPivots(svg, this.rig);
     host.dataset.av = key;
     rigEyes(svg);
-    fitViewBox(svg);
+    if (!fitViewBox(svg)) {
+      requestAnimationFrame(() => {
+        if (this.svg === svg) fitViewBox(svg);
+      });
+    }
     this.timer = null;
     this.setState("idle");
   }

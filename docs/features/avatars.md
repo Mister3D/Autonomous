@@ -11,7 +11,7 @@
 - `autonomous/avatars.py` — ready catalogue
 - `autonomous/migrations/001_schema.sql` — columns `avatar`, `avatar_color`
 
-**Last updated**: 2026-11-04 (dropped `web/` + `vc/`; unfinished sources → `pending/`)
+**Last updated**: 2026-11-08 (Firefox Android: no CSS scale on the root SVG, explicit px size)
 
 ## User behaviour
 
@@ -39,6 +39,7 @@ Regenerate characters + `vue/catalog.js`: `python3 avatar/tools/sync_characters.
 - Not-ready characters: SVG + `meta.json` under `characters/`; Vectorcraft stays in `pending/` until animated.
 - No `border-radius: 50%` / background on `.bot-avatar` (the character is not in a disc).
 - **Original** swatch: badge split in two (medium grey | orange).
+- **Firefox Android**: inline SVG inside a `<button>` (the bot rail) disappears when the root `<svg>` has a CSS `transform` (`scale`) or only a percentage size. Keep an explicit px width/height on `.bot-avatar.is-*` and on `svg.avatar-svg`. Zoom by tightening `fitViewBox` (`fill` 0.94), not with CSS. If `getBBox()` is still 0×0 on the first frame, leave the authored `viewBox` and retry next frame — never write `viewBox="0 0 0 0"`.
 
 ## Quick check
 

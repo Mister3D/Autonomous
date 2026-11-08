@@ -284,19 +284,31 @@ a:focus-visible {
   background: transparent;
 }
 
-.bot-avatar.is-sm {
+.bot-avatar.is-sm,
+.bot-avatar.is-sm .companion-avatar,
+.bot-avatar.is-sm svg.avatar-svg {
   width: 40px;
   height: 40px;
+  min-width: 40px;
+  min-height: 40px;
 }
 
-.bot-avatar.is-md {
+.bot-avatar.is-md,
+.bot-avatar.is-md .companion-avatar,
+.bot-avatar.is-md svg.avatar-svg {
   width: 64px;
   height: 64px;
+  min-width: 64px;
+  min-height: 64px;
 }
 
-.bot-avatar.is-lg {
+.bot-avatar.is-lg,
+.bot-avatar.is-lg .companion-avatar,
+.bot-avatar.is-lg svg.avatar-svg {
   width: 96px;
   height: 96px;
+  min-width: 96px;
+  min-height: 96px;
 }
 
 .bot-avatar.is-editable {
@@ -318,14 +330,13 @@ a:focus-visible {
   display: block;
 }
 
-/* Remplit la pastille sans découpe circulaire. */
+/* Pas de transform CSS sur le <svg> racine : Firefox Android ne le peint pas
+   dans un <button> (liste). Le cadrage est le viewBox (engine fitViewBox). */
 .bot-avatar .companion-avatar svg.avatar-svg,
 .bot-avatar .avatar-stage svg.avatar-svg {
-  width: 100%;
-  height: 100%;
-  transform: scale(1.08);
-  transform-origin: 50% 58%;
+  display: block;
   overflow: visible;
+  flex: none;
 }
 
 .avatar-pip {
