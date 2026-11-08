@@ -21,7 +21,7 @@
 - Visible timestamp: time to the **right** of assistant bubbles (left), to the **left** of user bubbles (right), vertically centred; if not today → `DD/MM` above the time. Also on the summary / tool lines (`ToolGroup`).
 - The API only returns one page of events (`limit` ≤ 200). The client (`loadThread`) pages back until it includes the **latest user message**, otherwise a tool run pushes it off the screen on refresh.
 - Input area: **textarea** — `Enter` sends, **`Shift+Enter`** new line (auto-resize). The text and attachments **leave the field immediately**, without waiting for the server response. If sending fails (or a vault secret is refused), the draft comes back. **Pasting an image** (Ctrl/Cmd+V) into the field → preview, then sent with the text; stored under `~/…/.autonomous/chat-attachments/`, passed to Pi as `images[]` (vision required on the model).
-- Model picker: custom `ModelPicker` component (no native `<select>`); short label + provider.
+- Model picker: `ModelPicker` is the shared `MenuSelect` (no native `<select>`); short label + provider.
 - Model **per bot** (creation + Details); if an RPC session is running, `set_model` mid-session.
 - During a run: the send button becomes the **Working orb** ([thinking-orbs](https://libraries.dev/orbs), canvas engine `thinking-orbs/engine` via `WorkingOrb.vue`) — click = Pi `abort`. In the Conversation thread, the same orb appears **as long as no assistant text has started** (waiting for the model / between tool turns); from the first token, it disappears in favour of the bubble.
 - If the Pi session dies while waiting for the user (vault / desktop): status `idle`, **Resume** chat card (`meta.kind=agent_interrupted`) → `POST /bots/:name/resume` relaunches the agent on the original task (without a new user bubble).
@@ -35,7 +35,7 @@
 - `stop_run` also clears the in-memory `_ACTIVE_RUNS` slot (`clear_active_run`). Without that, DB went `idle` while the next `start_run` kept logging « run already in progress » and the chat looked frozen (user bubble only). `start_run` also reclaim a stale slot once when DB status is already `idle`/`waiting`.
 - **No** run duration limit in the product (any timeout stays on the Cursor / manual test side).
 - Vision: budget from the bot’s Pi model (`inputLimits.images.maxPerRequest` in `models.json`); fallback `guard.max_images_per_prompt` (**2**). Only this budget goes into `images[]`; the rest is listed as paths for later turns. If the provider returns "At most N image(s)", retry + persist N on that model (and the guard fallback). See [`llm-settings.md`](./llm-settings.md).
-- Clear history = SQLite purge + **wipe** `pi/sessions/*.jsonl` + new `pi_session_id` (`autonomous-<uuid>`). The Details button also empties `state.messages[name]` (no SSE on delete, otherwise the thread and the rail keep the old bubbles until a full reload).
+- Clear history = SQLite purge + **wipe** `pi/sessions/*.jsonl` + new `pi_session_id` (`autonomous-<uuid>`). Details asks first: a check icon at the end of the row (no confirm card). The button also empties `state.messages[name]` (no SSE on delete, otherwise the thread and the rail keep the old bubbles until a full reload).
 - Delete a bot = stop Pi + destroy desk + **rm** `data/bots/<name>/` (otherwise orphan files).
 - Chat ↔ Pi link: **only** `bots.pi_session_id` (Autonomous chooses the id, Pi doesn't know the slug).
 - Same scheme for Docker VMs: `desk.container_name` = `autonomous-<uuid>` (see [`desk-screen.md`](./desk-screen.md)).

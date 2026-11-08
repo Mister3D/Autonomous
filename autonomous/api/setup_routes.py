@@ -59,6 +59,16 @@ class SetupLlm(MethodView):
         setup_svc.invalidate()
         return out
 
+    def delete(self):
+        """Remove a provider that has no models."""
+        provider = request.args.get("provider") or _body().get("provider")
+        try:
+            out = cfg_svc.delete_llm_provider(provider)
+        except AutonomousError as exc:
+            _handle(exc)
+        setup_svc.invalidate()
+        return out
+
 
 @blp.route("/llm/test")
 class SetupLlmTest(MethodView):

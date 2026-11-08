@@ -8,6 +8,7 @@ import pytest
 
 from autonomous.services import chat_attachments as attach_svc
 from autonomous.services import setup_config as cfg
+from autonomous.services.errors import ValidationError
 
 
 @pytest.fixture
@@ -122,6 +123,32 @@ def test_save_llm_provider_credentials_only(fake_home):
     assert raw2["providers"]["solo"]["apiKey"] == "sk-test"
 
 
+def test_delete_llm_provider_blocked_while_a_model_uses_it(fake_home):
+    _write_models(
+        fake_home,
+        {
+            "providers": {
+                "mine": {
+                    "baseUrl": "http://llm.test/v1",
+                    "apiKey": "sk",
+                    "models": [{"id": "m1"}],
+                },
+                "empty": {"baseUrl": "http://other.test/v1", "apiKey": "sk", "models": []},
+            }
+        },
+    )
+    with pytest.raises(ValidationError) as exc:
+        cfg.delete_llm_provider("mine")
+    assert exc.value.code == "provider_in_use"
+    raw = json.loads((fake_home / ".pi" / "agent" / "models.json").read_text())
+    assert "mine" in raw["providers"]
+    out = cfg.delete_llm_provider("empty")
+    raw = json.loads((fake_home / ".pi" / "agent" / "models.json").read_text())
+    assert "empty" not in raw["providers"]
+    assert "mine" in raw["providers"]
+    assert [p["provider"] for p in out["providers"]] == ["mine"]
+
+
 def test_resolve_and_enforce_max_images(fake_home, home):
     _write_models(
         fake_home,
@@ -187,3 +214,18 @@ def test_fallback_guard_when_no_pi_limit(fake_home, home):
     bots_svc.patch_bot("plainbot", {"model": "mine/plain"}, home=home)
     settings_svc.set_value("guard.max_images_per_prompt", 2, home=home)
     assert attach_svc.max_images_per_prompt(home=home, bot="plainbot") == 2
+
+
+def test_parse_pi_model_list_keeps_capabilities():
+    from autonomous.services.pi_status import parse_model_list
+
+    text = """provider  model  context  max-out  thinking  images
+openai    gpt-5.4  272K  128K  yes  yes
+Mister3D  custom/id  128K  16K  no  yes
+Use /login to add more
+"""
+    rows = parse_model_list(text)
+    assert [(r["provider"], r["id"], r["context"], r["thinking"], r["images"]) for r in rows] == [
+        ("openai", "gpt-5.4", "272K", True, True),
+        ("Mister3D", "custom/id", "128K", False, True),
+    ]

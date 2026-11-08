@@ -11,21 +11,64 @@
     <p v-if="loadError" class="vault-error">{{ loadError }}</p>
 
     <h3 class="llm-subhead">{{ t("llm.providersTitle") }}</h3>
-    <p class="hint">{{ t("llm.providersHint") }}</p>
+    <p class="hint llm-providers-hint">{{ t("llm.providersHint") }}</p>
 
     <ul v-if="providerDrafts.length" class="llm-provider-list">
-      <li v-for="p in providerDrafts" :key="p._key" class="llm-provider-card">
-        <div class="llm-model-card-top">
-          <strong>{{ p._isNew ? t("llm.newProviderCard") : p.provider }}</strong>
+      <li
+        v-for="p in providerDrafts"
+        :key="p._key"
+        class="llm-provider-card"
+        :class="{ 'is-collapsed': !p._open }"
+      >
+        <span
+          class="llm-trash-wrap"
+          @pointerenter="p._tip = true"
+          @pointerleave="p._tip = false"
+          @focusin="p._tip = true"
+          @focusout="p._tip = false"
+        >
           <button
-            v-if="p._isNew"
-            class="btn danger-ghost"
+            class="vault-trash"
             type="button"
-            @click="cancelNewProvider(p)"
+            :disabled="providerInUse(p) || p._saving"
+            :aria-label="providerTip(p)"
+            @click.stop="removeProvider(p)"
           >
-            {{ t("llm.cancel") }}
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M5 7.5h14" />
+              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+            </svg>
           </button>
-        </div>
+          <span v-if="p._tip" class="llm-provider-tip" role="tooltip">{{ providerTip(p) }}</span>
+        </span>
+        <button
+          class="llm-provider-toggle"
+          type="button"
+          :aria-expanded="p._open ? 'true' : 'false'"
+          :aria-label="t('llm.toggleProvider', { name: providerLabel(p) })"
+          @click="p._open = !p._open"
+        >
+          <svg
+            class="llm-provider-caret"
+            :class="{ open: p._open }"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+          >
+            <path
+              d="M2.5 4.2 6 7.8 9.5 4.2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <strong>{{ providerLabel(p) }}</strong>
+        </button>
+        <div v-show="p._open" class="llm-provider-body">
         <label v-if="p._isNew" class="settings-field">
           <span>{{ t("llm.providerId") }}</span>
           <input v-model.trim="p.provider" type="text" placeholder="autonomous" spellcheck="false" />
@@ -61,6 +104,7 @@
           <span v-if="p._ok" class="setup-ok">{{ p._ok }}</span>
           <span v-if="p._error" class="vault-error">{{ p._error }}</span>
         </div>
+        </div>
       </li>
     </ul>
     <p v-else class="hint">{{ t("llm.providersEmpty") }}</p>
@@ -71,208 +115,177 @@
     </div>
 
     <h3 class="llm-subhead">{{ t("llm.modelsTitle") }}</h3>
-    <p class="hint">{{ t("llm.modelsHint") }}</p>
+    <p class="hint llm-providers-hint">{{ t("llm.modelsHint") }}</p>
 
-    <div class="llm-add-model">
-      <label class="settings-field">
-        <span>{{ t("llm.provider") }}</span>
-        <select v-model="add.provider" :disabled="!savedProviders.length" @change="onAddProviderChange">
-          <option disabled value="">{{ t("llm.pickProvider") }}</option>
-          <option v-for="p in savedProviders" :key="p.provider" :value="p.provider">
-            {{ p.provider }}
-          </option>
-        </select>
-      </label>
-      <div class="settings-field-row">
-        <button
-          class="btn"
-          type="button"
-          :disabled="!add.provider || fetching"
-          @click="fetchModels"
+    <ul v-if="modelRows.length" class="llm-provider-list">
+      <li
+        v-for="m in modelRows"
+        :key="m._key"
+        class="llm-provider-card"
+        :class="{ 'is-collapsed': !m._open }"
+      >
+        <span
+          class="llm-trash-wrap"
+          @pointerenter="m._tip = true"
+          @pointerleave="m._tip = false"
+          @focusin="m._tip = true"
+          @focusout="m._tip = false"
         >
-          {{ fetching ? t("llm.fetching") : t("llm.fetchModels") }}
-        </button>
-      </div>
-      <small v-if="fetchError" class="vault-error">{{ fetchError }}</small>
-      <small v-else-if="fetched">{{ t("llm.modelsFound", { count: remoteModels.length }) }}</small>
-      <div v-if="remoteModels.length" class="llm-remote-pick">
-        <ModelCombo
-          v-model.trim="add.id"
-          :options="remoteModels"
-          :placeholder="t('llm.modelPlaceholder')"
-        />
-      </div>
-      <label v-else class="settings-field">
-        <span>{{ t("llm.model") }}</span>
-        <input
-          v-model.trim="add.id"
-          type="text"
-          :placeholder="t('llm.modelPlaceholder')"
-          spellcheck="false"
-          :disabled="!add.provider"
-        />
-      </label>
-      <label class="settings-field">
-        <span>{{ t("llm.modelName") }}</span>
-        <input
-          v-model.trim="add.name"
-          type="text"
-          :placeholder="add.id || t('llm.modelNamePlaceholder')"
-          :disabled="!add.provider"
-        />
-        <small>{{ t("llm.modelNameHint") }}</small>
-      </label>
-      <label class="toggle-row">
-        <span>
-          <strong>{{ t("llm.images") }}</strong>
-          <small>{{ t("llm.imagesHint") }}</small>
-        </span>
-        <input
-          v-model="add.images"
-          type="checkbox"
-          role="switch"
-          :aria-label="t('llm.images')"
-          :disabled="!add.provider"
-        />
-      </label>
-      <div class="llm-limits-grid">
-        <label class="settings-field">
-          <span>{{ t("llm.maxImages") }}</span>
-          <input
-            v-model.number="add.max_images"
-            type="number"
-            min="1"
-            max="32"
-            step="1"
-            placeholder="—"
-            :disabled="!add.provider"
-          />
-          <small>{{ t("llm.maxImagesHint") }}</small>
-        </label>
-        <label class="settings-field">
-          <span>{{ t("llm.contextWindow") }}</span>
-          <input
-            v-model.number="add.context_window"
-            type="number"
-            min="1024"
-            step="1024"
-            placeholder="128000"
-            :disabled="!add.provider"
-          />
-          <small>{{ t("llm.contextWindowHint") }}</small>
-        </label>
-        <label class="settings-field">
-          <span>{{ t("llm.maxTokens") }}</span>
-          <input
-            v-model.number="add.max_tokens"
-            type="number"
-            min="256"
-            step="256"
-            placeholder="16384"
-            :disabled="!add.provider"
-          />
-          <small>{{ t("llm.maxTokensHint") }}</small>
-        </label>
-      </div>
-      <div class="setup-toolbar">
-        <button
-          class="btn primary"
-          type="button"
-          :disabled="!canAddModel || addSaving"
-          @click="saveNewModel"
-        >
-          {{ addSaving ? "…" : t("llm.saveModel") }}
-        </button>
-        <span v-if="addError" class="vault-error">{{ addError }}</span>
-      </div>
-    </div>
-
-    <ul v-if="modelRows.length" class="llm-model-list">
-      <li v-for="(m, idx) in modelRows" :key="m._key" class="llm-model-card">
-        <div class="llm-model-card-top">
-          <strong>
-            <span class="llm-provider-badge">{{ m.provider }}</span>
-            {{ m.name || m.id || t("llm.newModel") }}
-          </strong>
           <button
-            class="btn danger-ghost"
+            class="vault-trash"
             type="button"
             :disabled="m._saving"
-            @click="removeModel(idx)"
+            :aria-label="t('llm.deleteModel')"
+            @click.stop="removeModel(m)"
           >
-            {{ t("llm.removeModel") }}
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M5 7.5h14" />
+              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+            </svg>
           </button>
-        </div>
-        <label class="settings-field">
-          <span>{{ t("llm.model") }}</span>
-          <input v-model.trim="m.id" type="text" :placeholder="t('llm.modelPlaceholder')" spellcheck="false" />
-        </label>
-        <label class="settings-field">
-          <span>{{ t("llm.modelName") }}</span>
-          <input v-model.trim="m.name" type="text" :placeholder="m.id || t('llm.modelNamePlaceholder')" />
-          <small>{{ t("llm.modelNameHint") }}</small>
-        </label>
-        <label class="toggle-row">
-          <span>
-            <strong>{{ t("llm.images") }}</strong>
-            <small>{{ t("llm.imagesHint") }}</small>
-          </span>
-          <input v-model="m.images" type="checkbox" role="switch" :aria-label="t('llm.images')" />
-        </label>
-        <div class="llm-limits-grid">
-          <label class="settings-field">
-            <span>{{ t("llm.maxImages") }}</span>
-            <input v-model.number="m.max_images" type="number" min="1" max="32" step="1" placeholder="—" />
-            <small>{{ t("llm.maxImagesHint") }}</small>
-          </label>
-          <label class="settings-field">
-            <span>{{ t("llm.contextWindow") }}</span>
-            <input
-              v-model.number="m.context_window"
-              type="number"
-              min="1024"
-              step="1024"
-              placeholder="128000"
-            />
-            <small>{{ t("llm.contextWindowHint") }}</small>
-          </label>
-          <label class="settings-field">
-            <span>{{ t("llm.maxTokens") }}</span>
-            <input
-              v-model.number="m.max_tokens"
-              type="number"
-              min="256"
-              step="256"
-              placeholder="16384"
-            />
-            <small>{{ t("llm.maxTokensHint") }}</small>
-          </label>
-        </div>
-        <div class="llm-model-actions">
-          <button
-            class="btn primary"
-            type="button"
-            :disabled="!isModelDirty(m) || m._saving || !canSaveModel(m)"
-            @click="saveModel(m)"
+          <span v-if="m._tip" class="llm-provider-tip" role="tooltip">{{ t("llm.deleteModel") }}</span>
+        </span>
+        <button
+          class="llm-provider-toggle"
+          type="button"
+          :aria-expanded="m._open ? 'true' : 'false'"
+          :aria-label="t('llm.toggleModel', { name: modelLabel(m) })"
+          @click="toggleModel(m)"
+        >
+          <svg
+            class="llm-provider-caret"
+            :class="{ open: m._open }"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
           >
-            {{ m._saving ? "…" : t("llm.save") }}
-          </button>
-          <span v-if="m._error" class="vault-error">{{ m._error }}</span>
+            <path
+              d="M2.5 4.2 6 7.8 9.5 4.2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <strong>{{ modelLabel(m) }}</strong>
+        </button>
+        <div v-show="m._open" class="llm-provider-body">
+          <label class="settings-field">
+            <span>{{ t("llm.modelName") }}</span>
+            <input v-model.trim="m.name" type="text" :placeholder="t('llm.modelNamePlaceholder')" />
+            <small>{{ t("llm.modelNameHint") }}</small>
+          </label>
+          <label class="settings-field">
+            <span>{{ t("llm.provider") }}</span>
+            <MenuSelect
+              :model-value="m.provider"
+              :options="providerOptions"
+              :placeholder="t('llm.pickProvider')"
+              :aria-label="t('llm.provider')"
+              :disabled="!savedProviders.length"
+              field
+              @update:model-value="(v) => onModelProvider(m, v)"
+            />
+          </label>
+          <small v-if="m._fetchError" class="vault-error">{{ m._fetchError }}</small>
+          <small v-else-if="m._fetched && !m._fetching">{{ t("llm.modelsFound", { count: m._remote.length }) }}</small>
+          <label class="settings-field">
+            <span>{{ t("llm.model") }}</span>
+            <MenuSelect
+              v-model="m.id"
+              :options="m._remote"
+              :placeholder="modelPlaceholder(m)"
+              :aria-label="t('llm.model')"
+              :disabled="!m.provider || m._fetching"
+              field
+            />
+          </label>
+          <label class="toggle-row">
+            <span>
+              <strong>{{ t("llm.images") }}</strong>
+              <small>{{ t("llm.imagesHint") }}</small>
+            </span>
+            <input v-model="m.images" type="checkbox" role="switch" :aria-label="t('llm.images')" />
+          </label>
+          <div class="llm-limits-grid">
+            <label class="settings-field">
+              <span>{{ t("llm.maxImages") }}</span>
+              <input v-model.number="m.max_images" type="number" min="1" max="32" step="1" placeholder="—" />
+              <small>{{ t("llm.maxImagesHint") }}</small>
+            </label>
+            <label class="settings-field">
+              <span>{{ t("llm.contextWindow") }}</span>
+              <input v-model.number="m.context_window" type="number" min="1024" step="1024" placeholder="128000" />
+              <small>{{ t("llm.contextWindowHint") }}</small>
+            </label>
+            <label class="settings-field">
+              <span>{{ t("llm.maxTokens") }}</span>
+              <input v-model.number="m.max_tokens" type="number" min="256" step="256" placeholder="16384" />
+              <small>{{ t("llm.maxTokensHint") }}</small>
+            </label>
+          </div>
+          <div class="setup-toolbar">
+            <button
+              class="btn primary"
+              type="button"
+              :disabled="!isModelDirty(m) || m._saving || !canSaveModel(m)"
+              @click="saveModel(m)"
+            >
+              {{ m._saving ? "…" : t("llm.saveModel") }}
+            </button>
+            <span v-if="m._ok" class="setup-ok">{{ m._ok }}</span>
+            <span v-if="m._error" class="vault-error">{{ m._error }}</span>
+          </div>
         </div>
       </li>
     </ul>
     <p v-else class="hint">{{ t("llm.modelsEmpty") }}</p>
+    <div class="setup-toolbar">
+      <button class="btn" type="button" :disabled="addingModel || !savedProviders.length" @click="startAddModel">
+        {{ t("llm.addModel") }}
+      </button>
+    </div>
+
+    <h3 class="llm-subhead">{{ t("llm.otherTitle") }}</h3>
+    <p class="hint llm-providers-hint">
+      {{ t("llm.otherHint") }}
+      <a :href="docsModels" target="_blank" rel="noopener noreferrer">{{ t("llm.docsModels") }}</a>
+      ·
+      <a :href="docsProviders" target="_blank" rel="noopener noreferrer">{{ t("llm.docsProviders") }}</a>
+    </p>
+    <div v-if="catalogModels.length" class="llm-catalog">
+      <div class="llm-catalog-head" role="row">
+        <span role="columnheader">{{ t("llm.model") }}</span>
+        <span role="columnheader">{{ t("llm.otherContext") }}</span>
+        <span role="columnheader">{{ t("llm.otherOutput") }}</span>
+        <span role="columnheader">{{ t("llm.otherThinking") }}</span>
+        <span role="columnheader">{{ t("llm.otherImages") }}</span>
+      </div>
+      <div class="llm-catalog-body">
+        <div v-for="m in catalogModels" :key="m.ref" class="llm-catalog-row" role="row">
+          <span class="llm-catalog-id" role="cell">{{ m.provider }} · {{ m.id }}</span>
+          <span role="cell">{{ m.context || "—" }}</span>
+          <span role="cell">{{ m.max_output || "—" }}</span>
+          <span role="cell">{{ m.thinking ? t("llm.yes") : t("llm.no") }}</span>
+          <span role="cell">{{ m.images ? t("llm.yes") : t("llm.no") }}</span>
+        </div>
+      </div>
+    </div>
+    <p v-else class="hint">{{ t("llm.otherEmpty") }}</p>
 
     <p class="hint">{{ t("llm.fileNote", { path: view?.path || "~/.pi/agent/models.json" }) }}</p>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { refreshSetup } from "../store";
-import ModelCombo from "./ModelCombo.vue";
+import MenuSelect from "./MenuSelect.vue";
 import SecretInput from "./SecretInput.vue";
 
 let keySeq = 0;
@@ -313,8 +326,17 @@ function blankModel(partial = {}) {
     max_images: null,
     context_window: null,
     max_tokens: null,
+    _isNew: false,
+    _open: false,
+    _originProvider: "",
+    _originId: "",
+    _remote: [],
+    _fetching: false,
+    _fetched: false,
+    _fetchError: "",
     _saving: false,
     _error: "",
+    _ok: "",
     _saved: "",
     ...partial,
   };
@@ -330,6 +352,7 @@ function blankProvider(partial = {}) {
     base_url: "",
     api_key: "",
     _isNew: false,
+    _open: false,
     _saving: false,
     _error: "",
     _ok: "",
@@ -366,33 +389,31 @@ const view = ref(null);
 const loadError = ref("");
 const providerDrafts = ref([]);
 const modelRows = ref([]);
-const remoteModels = ref([]);
-const fetching = ref(false);
-const fetched = ref(false);
-const fetchError = ref("");
-const addSaving = ref(false);
-const addError = ref("");
-const add = reactive({
-  provider: "",
-  id: "",
-  name: "",
-  images: true,
-  max_images: null,
-  context_window: null,
-  max_tokens: null,
-});
+const catalogModels = ref([]);
 
 const savedProviders = computed(() => (view.value?.providers || []).filter((p) => p.provider));
+const providerOptions = computed(() =>
+  savedProviders.value.map((p) => ({ value: p.provider, label: p.provider })),
+);
 const addingProvider = computed(() => providerDrafts.value.some((p) => p._isNew));
+const addingModel = computed(() => modelRows.value.some((m) => m._isNew));
 const docsModels = computed(
   () => view.value?.docs?.models || "https://pi.dev/docs/latest/models",
 );
 const docsConfig = computed(
   () => view.value?.docs?.configuration || "https://pi.dev/docs/latest/models-configuration",
 );
-const canAddModel = computed(
-  () => !!add.provider && !!String(add.id || "").trim() && savedProviders.value.some((p) => p.provider === add.provider),
+const docsProviders = computed(
+  () => view.value?.docs?.providers || "https://pi.dev/docs/latest/providers",
 );
+function modelPlaceholder(m) {
+  return m?._fetching ? t("llm.fetching") : t("llm.modelPlaceholder");
+}
+
+function modelLabel(m) {
+  const name = String(m?.name || "").trim();
+  return name || t("llm.newModel");
+}
 
 function providerBaseUrl(name) {
   const draft = providerDrafts.value.find((p) => !p._isNew && p.provider === name);
@@ -417,6 +438,41 @@ function canSaveProvider(p) {
   return !!String(p.provider || "").trim() && !!String(p.base_url || "").trim();
 }
 
+function providerInUse(p) {
+  if (!p || p._isNew) return false;
+  const name = String(p.provider || "").trim();
+  if (!name) return false;
+  return modelRows.value.some((m) => m.provider === name && String(m.id || "").trim());
+}
+
+function providerTip(p) {
+  return providerInUse(p) ? t("llm.providerInUse") : t("llm.deleteProvider");
+}
+
+function providerLabel(p) {
+  const name = String(p?.provider || "").trim();
+  return name || t("llm.newProviderCard");
+}
+
+async function removeProvider(p) {
+  if (!p || providerInUse(p) || p._saving) return;
+  if (p._isNew) {
+    cancelNewProvider(p);
+    return;
+  }
+  const name = String(p.provider || "").trim();
+  if (!name) return;
+  p._saving = true;
+  p._error = "";
+  try {
+    applyView(await api.deleteSetupLlm(name));
+    refreshSetup(true);
+  } catch (e) {
+    p._error = e.message;
+    p._saving = false;
+  }
+}
+
 function canSaveModel(m) {
   return !!m.provider && !!providerBaseUrl(m.provider) && !!String(m.id || "").trim();
 }
@@ -424,37 +480,53 @@ function canSaveModel(m) {
 function applyView(data) {
   view.value = data;
   const providers = data?.providers || [];
+  const keepOpen = new Set(
+    providerDrafts.value.filter((p) => p._open && p.provider).map((p) => p.provider),
+  );
   providerDrafts.value = providers.map((p) => {
     const row = blankProvider({
       provider: p.provider,
       base_url: p.base_url || "",
       _isNew: false,
+      _open: keepOpen.has(p.provider),
       _keyInfo: p.api_key || { set: false, hint: "", source: "none" },
     });
     markProviderClean(row);
     return row;
   });
+  const keepModelOpen = new Set(
+    modelRows.value
+      .filter((m) => m._open && m.provider && m.id)
+      .map((m) => `${m.provider}\n${m.id}`),
+  );
+  const pendingModels = modelRows.value.filter((m) => m._isNew);
   const rows = [];
   for (const p of providers) {
     for (const m of p.models || []) {
+      const id = m.id || "";
       const row = blankModel({
         provider: p.provider,
-        id: m.id || "",
+        id,
         name: m.name || "",
         images: m.images !== false,
         max_images: m.max_images ?? null,
         context_window: m.context_window ?? null,
         max_tokens: m.max_tokens ?? null,
+        _originProvider: p.provider,
+        _originId: id,
+        _open: keepModelOpen.has(`${p.provider}\n${id}`),
       });
       markModelClean(row);
       rows.push(row);
     }
   }
-  modelRows.value = rows;
-  if (!add.provider && providers[0]) add.provider = providers[0].provider;
-  if (add.provider && !providers.some((p) => p.provider === add.provider)) {
-    add.provider = providers[0]?.provider || "";
-  }
+  modelRows.value = [...rows, ...pendingModels];
+  catalogModels.value = (data?.catalog || [])
+    .filter((m) => m?.provider && m?.id)
+    .slice()
+    .sort((a, b) =>
+      `${a.provider} · ${a.id}`.localeCompare(`${b.provider} · ${b.id}`, undefined, { sensitivity: "base" }),
+    );
 }
 
 async function load() {
@@ -469,6 +541,7 @@ function startAddProvider() {
   if (addingProvider.value) return;
   const row = blankProvider({
     _isNew: true,
+    _open: true,
     provider: providerDrafts.value.length ? "" : "autonomous",
   });
   // New card starts dirty only once id+url are filled.
@@ -480,13 +553,29 @@ function cancelNewProvider(p) {
   providerDrafts.value = providerDrafts.value.filter((x) => x._key !== p._key);
 }
 
-function onAddProviderChange() {
-  remoteModels.value = [];
-  fetched.value = false;
-  fetchError.value = "";
-  add.id = "";
-  addError.value = "";
+function startAddModel() {
+  if (addingModel.value || !savedProviders.value.length) return;
+  const row = blankModel({ _isNew: true, _open: true, provider: "" });
+  row._saved = modelFingerprint(row);
+  modelRows.value = [...modelRows.value, row];
 }
+
+function toggleModel(m) {
+  m._open = !m._open;
+  if (m._open && m.provider && !m._fetched && !m._fetching) fetchModels(m);
+}
+
+function onModelProvider(m, name) {
+  if (name === m.provider) return;
+  m.provider = name || "";
+  m.id = "";
+  m._remote = [];
+  m._fetched = false;
+  m._fetchError = "";
+  if (m.provider) fetchModels(m);
+}
+
+let fetchGen = 0;
 
 async function saveProvider(p) {
   if (!isProviderDirty(p) || !canSaveProvider(p)) return;
@@ -511,57 +600,30 @@ async function saveProvider(p) {
   }
 }
 
-async function fetchModels() {
-  if (!add.provider) return;
-  fetching.value = true;
-  fetched.value = false;
-  fetchError.value = "";
+async function fetchModels(m) {
+  const name = m.provider;
+  if (!name) return;
+  const gen = ++fetchGen;
+  m._fetchGen = gen;
+  m._fetching = true;
+  m._fetched = false;
+  m._fetchError = "";
   try {
-    const draft = providerDrafts.value.find((p) => p.provider === add.provider);
+    const draft = providerDrafts.value.find((p) => p.provider === name);
     const r = await api.setupLlmModels({
-      provider: add.provider,
-      base_url: providerBaseUrl(add.provider),
+      provider: name,
+      base_url: providerBaseUrl(name),
       api_key: draft?.api_key || "",
     });
-    remoteModels.value = r.models || [];
-    fetched.value = true;
+    if (m._fetchGen !== gen) return;
+    m._remote = r.models || [];
+    m._fetched = true;
   } catch (e) {
-    remoteModels.value = [];
-    fetchError.value = e.message;
+    if (m._fetchGen !== gen) return;
+    m._remote = [];
+    m._fetchError = e.message;
   } finally {
-    fetching.value = false;
-  }
-}
-
-async function saveNewModel() {
-  if (!canAddModel.value) return;
-  addSaving.value = true;
-  addError.value = "";
-  try {
-    const data = await api.saveSetupLlm({
-      provider: add.provider,
-      base_url: providerBaseUrl(add.provider),
-      model: String(add.id || "").trim(),
-      model_name: String(add.name || "").trim(),
-      images: !!add.images,
-      max_images: normNum(add.max_images),
-      context_window: normNum(add.context_window),
-      max_tokens: normNum(add.max_tokens),
-    });
-    applyView(data);
-    add.id = "";
-    add.name = "";
-    add.images = true;
-    add.max_images = null;
-    add.context_window = null;
-    add.max_tokens = null;
-    remoteModels.value = [];
-    fetched.value = false;
-    refreshSetup(true);
-  } catch (e) {
-    addError.value = e.message;
-  } finally {
-    addSaving.value = false;
+    if (m._fetchGen === gen) m._fetching = false;
   }
 }
 
@@ -580,8 +642,13 @@ async function saveModel(m) {
       context_window: normNum(m.context_window),
       max_tokens: normNum(m.max_tokens),
     });
+    m._isNew = false;
     applyView(data);
     refreshSetup(true);
+    const saved = modelRows.value.find(
+      (row) => row.provider === String(m.provider || "").trim() && row.id === String(m.id || "").trim(),
+    );
+    if (saved) saved._ok = t("llm.saved");
   } catch (e) {
     m._error = e.message;
   } finally {
@@ -589,14 +656,21 @@ async function saveModel(m) {
   }
 }
 
-async function removeModel(idx) {
-  const m = modelRows.value[idx];
-  if (!m) return;
-  const provider = m.provider;
-  const id = String(m.id || "").trim();
+async function removeModel(m) {
+  if (!m || m._saving) return;
+  if (m._isNew) {
+    modelRows.value = modelRows.value.filter((row) => row._key !== m._key);
+    return;
+  }
+  const provider = m._originProvider || m.provider;
+  const id = String(m._originId || m.id || "").trim();
   const base_url = providerBaseUrl(provider);
+  if (!id || !base_url) {
+    modelRows.value = modelRows.value.filter((row) => row._key !== m._key);
+    return;
+  }
   const remaining = modelRows.value
-    .filter((row, i) => i !== idx && row.provider === provider)
+    .filter((row) => row !== m && !row._isNew && (row._originProvider || row.provider) === provider)
     .map((row) => ({
       id: String(row.id || "").trim(),
       name: String(row.name || "").trim(),
@@ -606,11 +680,6 @@ async function removeModel(idx) {
       max_tokens: normNum(row.max_tokens),
     }))
     .filter((row) => !!row.id);
-  // Unsaved draft card — drop locally.
-  if (!id || !base_url) {
-    modelRows.value.splice(idx, 1);
-    return;
-  }
   try {
     const data = await api.saveSetupLlm({
       provider,

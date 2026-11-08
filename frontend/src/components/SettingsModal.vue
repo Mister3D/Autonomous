@@ -47,22 +47,6 @@
       <div class="settings-main">
       <LlmSettings v-if="section === 'llm'" />
       <GroundingSettings v-if="section === 'grounding'" />
-      <section v-if="section === 'grounding'" class="settings-block">
-        <h3>{{ t("guard.limitsTitle") }}</h3>
-        <label class="settings-field">
-          <span>{{ t("guard.groundingLoops") }}</span>
-          <input
-            v-model.number="guard.groundingLoops"
-            type="number"
-            min="1"
-            max="8"
-            step="1"
-            @change="flushGuard"
-          />
-          <small>{{ t("guard.groundingLoopsHint") }}</small>
-        </label>
-        <p v-if="guardError" class="vault-error">{{ guardError }}</p>
-      </section>
       <section v-if="section === 'agent'" class="settings-block">
         <h3>{{ t("lang.choose") }}</h3>
         <p class="hint">{{ t("settings.languageHint") }}</p>

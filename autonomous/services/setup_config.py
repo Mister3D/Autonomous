@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomous.paths import ensure_home
-from autonomous.services.errors import ValidationError
+from autonomous.services.errors import NotFound, ValidationError
 
 PI_API = "openai-completions"
 DEFAULT_PROVIDER = "autonomous"
@@ -415,6 +415,14 @@ def llm_providers() -> list[dict[str, Any]]:
     return out
 
 
+def llm_catalog() -> list[dict[str, Any]]:
+    """Built-in Pi models that are usable now (signed-in or keyed), not the custom editor."""
+    from autonomous.services.pi_status import list_models
+
+    custom = {p["provider"] for p in llm_providers()}
+    return [m for m in list_models() if m.get("provider") not in custom]
+
+
 def llm_view() -> dict[str, Any]:
     provs = llm_providers()
     primary = provs[0] if provs else None
@@ -422,8 +430,10 @@ def llm_view() -> dict[str, Any]:
         "path": "~/.pi/agent/models.json",
         "providers": provs,
         "primary": primary,
+        "catalog": llm_catalog(),
         "docs": {
             "models": "https://pi.dev/docs/latest/models",
+            "providers": "https://pi.dev/docs/latest/providers",
             "configuration": "https://pi.dev/docs/latest/models-configuration",
         },
     }
@@ -519,6 +529,29 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
 
     rest = {k: v for k, v in providers.items() if k != provider}
     data["providers"] = {provider: conf, **rest}
+    atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return llm_view()
+
+
+def delete_llm_provider(provider: str) -> dict[str, Any]:
+    """Remove a provider that has no models. Refuses while a model still uses it."""
+    name = str(provider or "").strip()
+    if not _PROVIDER_RE.match(name):
+        raise ValidationError("invalid provider id", code="invalid_provider")
+    data = _read_models_json()
+    providers = data.get("providers")
+    if not isinstance(providers, dict) or name not in providers:
+        raise NotFound(f"unknown provider {name}", code="unknown_provider")
+    conf = providers.get(name)
+    models = []
+    if isinstance(conf, dict):
+        models = [m for m in (conf.get("models") or []) if isinstance(m, dict) and m.get("id")]
+    if models:
+        raise ValidationError(
+            "A model still uses this provider",
+            code="provider_in_use",
+        )
+    data["providers"] = {k: v for k, v in providers.items() if k != name}
     atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return llm_view()
 

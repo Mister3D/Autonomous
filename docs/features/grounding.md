@@ -2,7 +2,7 @@
 
 **Status**: in place (localisation only — no click)  
 **Key files**: `autonomous/services/grounding{,_image,_parse}.py`, `POST /bots/:name/screen/ground`, `vm_ground` (`pi_extensions/vm.ts`), `grounding.md`  
-**Last updated**: 2026-11-06 (grounder URL SSRF gate + redirect re-check)
+**Last updated**: 2026-11-09 (grounding settings save the loop limit with the grounder)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@
 
 | Key | Default | Role |
 |-----|--------|------|
-| `grounding.max_loops` | `2` | Grounder+check attempts (1–8), Settings UI. The four fields save by themselves (leaving the field or a short pause). |
+| `grounding.max_loops` | `2` | Attempts before giving up (1–8): aim, then check. On Settings → Grounding, Save sits under the whole form and writes the grounder fields and this limit together. Tester sits beside the model picker and turns green on success until the URL or token changes. |
 | `guard.review_every` | `100` | LLM review (steer) every N tools since the last user/webhook/cron message (`0` = off) |
 | `guard.max_actions` | `1000` | Hard stop after N tools (same window) |
 
