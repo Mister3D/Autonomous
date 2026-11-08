@@ -8,13 +8,15 @@
 - `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
 - `frontend/index.html` — Plus Jakarta Sans
 
-**Last updated**: 2026-11-09 (settings delete-all uses action-confirm check)
+**Last updated**: 2026-11-09 (top chrome vertical alignment)
 
 ## User behaviour
 
 - Light Soft UI: soft canvas (`--bg-canvas`), elevated white cards, orange accent, soft shadows.
 - Settings sections are card-based with icon badges (Générale, LLM, Grounding, vault, memory, companions).
-- Bot inspector rows reuse the same icon-badge pattern: Modèle, Session Pi, Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**, Bureau.
+- Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**.
+- Rail settings pop: Réglages / Supprimer tous les bots / Déconnexion each have a `UiIcon` (`settings`, `trash`, `logout`).
+- Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
 - Labels: Conversation / Terminal / Écran; inspector Files tab = « Fichiers »; settings nav keys under `settings.tab*`.
 
 ## Implementation
@@ -23,6 +25,7 @@
 2. Prefer `components/ui/*` for new chrome (buttons, cards, toggles, icons) instead of duplicating SVG / toggle markup.
 3. Existing feature CSS keeps working; Soft UI overrides polish surfaces (shell, settings, composer, bubbles).
 4. i18n: `tabs.screen` = « Écran », `tabs.discussion` aligned with Conversation, `settings.tabVault|Memory|Companions` for nav consistency.
+5. Top chrome sizes: `--chrome-top` / `--control-h-sm` in `tokens.css`; rail bottom settings orb stays `--control-h`.
 
 ## Pitfalls / non-regressions
 

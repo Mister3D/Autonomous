@@ -1,27 +1,11 @@
 <template>
   <div class="details">
-    <h3>{{ t("settings.title") }}</h3>
-    <div class="field-block">
-      <div class="ui-toggle-main field-block-label">
-        <UiIconBadge size="sm">
-          <UiIcon name="model" :size="16" />
-        </UiIconBadge>
-        <span class="ui-toggle-copy">
-          <strong>{{ t("details.model") }}</strong>
-          <small>{{ t("details.modelHint") }}</small>
-        </span>
-      </div>
-      <ModelPicker :model="bot.model || ''" @update:model="onModel" />
-    </div>
-    <div v-if="bot.pi_session_id" class="info-row">
+    <div class="field-block model-field">
       <span class="ui-toggle-main">
         <UiIconBadge size="sm">
-          <UiIcon name="terminal" :size="16" />
+          <UiIcon name="database" :size="16" />
         </UiIconBadge>
-        <span class="ui-toggle-copy">
-          <strong>{{ t("details.piSession") }}</strong>
-          <small class="mono">{{ bot.pi_session_id }}</small>
-        </span>
+        <ModelPicker field :model="bot.model || ''" @update:model="onModel" />
       </span>
     </div>
     <UiToggleRow
@@ -37,6 +21,7 @@
     <BotCompanion :bot="bot" />
     <UiToggleRow
       :title="t('details.memoryAccess')"
+      :hint="t('details.memoryAccessHint')"
       :model-value="bot.memory_access !== false"
       @change="toggleMemory"
     >
@@ -46,10 +31,11 @@
     </UiToggleRow>
     <UiToggleRow
       :title="t('details.isManager')"
-      :hint="managerHint"
+      :hint="t('details.isManagerHint')"
       :model-value="!!bot.is_manager"
       :disabled="managerLocked"
       :muted="managerLocked"
+      :disabled-reason="managerLockReason"
       @change="toggleManager"
     >
       <template #icon>
@@ -67,18 +53,6 @@
       </template>
     </UiToggleRow>
     <BotMcpGrants :bot="bot" />
-    <div class="info-row">
-      <span class="ui-toggle-main">
-        <UiIconBadge size="sm">
-          <UiIcon name="monitor" :size="16" />
-        </UiIconBadge>
-        <span class="ui-toggle-copy">
-          <strong>{{ t("details.desk") }}</strong>
-          <small>{{ deskLabel }}</small>
-        </span>
-      </span>
-    </div>
-
     <ManageMenu :bot="bot" />
   </div>
 </template>
@@ -104,22 +78,11 @@ const otherManager = computed(
 );
 /** Cannot promote this bot while another holds the Manager slot. */
 const managerLocked = computed(() => !!otherManager.value && !props.bot.is_manager);
-const managerHint = computed(() => {
-  if (managerLocked.value) {
-    return t("details.isManagerTaken", { name: otherManager.value.label || otherManager.value.name });
-  }
-  return t("details.isManagerHint");
-});
-
-const deskLabel = computed(() => {
-  const d = props.bot.desk;
-  if (!d || d.state === "absent") return t("desk.absent");
-  if (d.state === "creating") return t("desk.creating");
-  if (d.state === "running") return t("desk.running");
-  if (d.state === "sleeping") return t("desk.sleeping");
-  if (d.state === "error") return d.last_error || t("desk.createFailed");
-  return d.state || "";
-});
+const managerLockReason = computed(() =>
+  managerLocked.value
+    ? t("details.isManagerTaken", { name: otherManager.value.label || otherManager.value.name })
+    : "",
+);
 
 async function onModel(next) {
   const i = state.bots.findIndex((b) => b.name === props.bot.name);

@@ -8,11 +8,12 @@
       aria-haspopup="menu"
       @click="open = !open"
     >
-      <UiIcon name="sun" />
+      <UiIcon name="settings" :size="18" />
     </button>
     <ul v-if="open" class="settings-pop" role="menu">
       <li>
         <button type="button" role="menuitem" @click="openSettings">
+          <UiIcon name="settings" :size="16" />
           <span>{{ t("settings.title") }}</span>
         </button>
       </li>
@@ -25,6 +26,7 @@
           :disabled="deleting || !state.bots.length"
           @click.stop="toggleDeleteAll"
         >
+          <UiIcon name="trash" :size="16" />
           <span>{{ deleting ? t("settings.deletingAllBots") : t("settings.deleteAllBots") }}</span>
         </button>
         <span
@@ -59,6 +61,7 @@
       <li class="settings-sep" role="separator" />
       <li>
         <button type="button" role="menuitem" @click="logout">
+          <UiIcon name="logout" :size="16" />
           <span>{{ t("manage.logout") }}</span>
         </button>
       </li>

@@ -33,7 +33,6 @@
         </button>
       </li>
     </ul>
-    <p v-else-if="ready" class="hint">{{ t("details.mcpEmpty") }}</p>
 
     <Teleport to="body">
       <div v-if="open" class="modal-backdrop" @click.self="cancel">
@@ -100,7 +99,6 @@ const { t } = useI18n();
 
 const grants = ref([]);
 const servers = ref([]);
-const ready = ref(false);
 const error = ref("");
 const open = ref(false);
 const chosenId = ref("");
@@ -136,15 +134,12 @@ function already(server) {
 
 async function load() {
   error.value = "";
-  ready.value = false;
   try {
     const data = await api.listBotMcp(props.bot.name);
     grants.value = data.grants || [];
     servers.value = data.servers || [];
   } catch (e) {
     error.value = e.message;
-  } finally {
-    ready.value = true;
   }
 }
 

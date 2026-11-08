@@ -1,5 +1,9 @@
 <template>
-  <label class="toggle-row ui-toggle-row" :class="{ muted, 'has-icon': !!$slots.icon }">
+  <label
+    class="toggle-row ui-toggle-row"
+    :class="{ muted, 'has-icon': !!$slots.icon }"
+    :title="disabled && disabledReason ? disabledReason : undefined"
+  >
     <span class="ui-toggle-main">
       <UiIconBadge v-if="$slots.icon" size="sm">
         <slot name="icon" />
@@ -17,6 +21,7 @@
       :checked="modelValue"
       :disabled="disabled"
       :aria-label="ariaLabel || title"
+      :aria-description="disabled && disabledReason ? disabledReason : undefined"
       @change="onChange"
     />
   </label>
@@ -31,6 +36,8 @@ defineProps({
   modelValue: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
   muted: { type: Boolean, default: false },
+  /** Shown as hover tooltip when the switch is disabled. */
+  disabledReason: { type: String, default: "" },
   ariaLabel: { type: String, default: "" },
 });
 

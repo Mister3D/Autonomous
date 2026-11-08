@@ -74,14 +74,15 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 0.4rem 0.45rem 0.35rem;
+  padding: var(--chrome-top) 0.45rem 0.35rem;
 }
 
 .rail-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.2rem 0.15rem 0.15rem;
+  min-height: var(--control-h-sm);
+  padding: 0 0.15rem;
 }
 
 .icon-btn {
@@ -392,7 +393,7 @@ a:focus-visible {
   gap: 0.35rem;
   border: 0;
   background: transparent;
-  padding: 0.35rem 0.45rem;
+  padding: 0.9rem 0.55rem 0.5rem;
   border-radius: 14px;
   min-width: 4.5rem;
   max-width: 6.5rem;
@@ -427,8 +428,8 @@ a:focus-visible {
 }
 
 .settings-orb {
-  width: 40px;
-  height: 40px;
+  width: var(--control-h);
+  height: var(--control-h);
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
@@ -437,6 +438,11 @@ a:focus-visible {
   align-items: center;
   justify-content: center;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.rail-top .settings-orb {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
 }
 
 .settings-orb:hover,
@@ -495,6 +501,15 @@ a:focus-visible {
   padding: 0.45rem 0.55rem;
   text-align: left;
   white-space: nowrap;
+}
+
+.settings-pop button > .ui-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.settings-pop button.danger > .ui-icon {
+  color: currentColor;
 }
 
 .settings-pop button:hover,
@@ -1221,6 +1236,23 @@ a:focus-visible {
   margin-bottom: 0.85rem;
 }
 
+.field-block.model-field {
+  margin-bottom: 0.35rem;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.field-block.model-field .ui-toggle-main {
+  align-items: center;
+  width: 100%;
+}
+
+.field-block.model-field .model-picker,
+.field-block.model-field .menu-select {
+  flex: 1;
+  min-width: 0;
+}
+
 .field-block-label {
   margin-bottom: 0.1rem;
 }
@@ -1563,7 +1595,7 @@ a:focus-visible {
 
 .stage-toolbar {
   position: absolute;
-  top: 0.55rem;
+  top: var(--chrome-top);
   right: 0.75rem;
   z-index: 3;
   display: flex;
@@ -1572,8 +1604,9 @@ a:focus-visible {
 }
 
 .split-toggle {
-  width: 30px;
-  height: 30px;
+  /* Same height as .stage-tabs.seg / .chat-token-usage / rail chrome. */
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
   border: 1px solid rgba(231, 231, 235, 0.9);
   border-radius: 999px;
   background: rgba(243, 243, 245, 0.92);
@@ -1670,6 +1703,9 @@ a:focus-visible {
   margin: 0;
   width: auto;
   max-width: none;
+  box-sizing: border-box;
+  height: var(--control-h-sm);
+  align-items: stretch;
   gap: 0.05rem;
   padding: 0.12rem;
   background: rgba(243, 243, 245, 0.92);
@@ -1680,7 +1716,9 @@ a:focus-visible {
 
 .stage-tabs.seg button {
   flex: none;
-  padding: 0.22rem 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.62rem;
   font-size: 0.78rem;
   font-weight: 500;
   line-height: 1.2;
@@ -1794,11 +1832,11 @@ a:focus-visible {
 
 .inspector-collapse {
   position: absolute;
-  top: 0.55rem;
+  top: var(--chrome-top);
   right: 0.75rem;
   z-index: 2;
-  width: 32px;
-  height: 32px;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
   border-radius: 999px;
   color: #9a9aa0;
 }
@@ -1917,12 +1955,6 @@ a:focus-visible {
   min-height: 0;
   overflow: auto;
   padding: 0.35rem 1.15rem 1.1rem;
-}
-
-.details h3 {
-  margin: 1.15rem 0 0.35rem;
-  font-size: 0.98rem;
-  font-weight: 600;
 }
 
 .events-pane {
@@ -2365,8 +2397,8 @@ label.muted {
 .action-list {
   display: flex;
   flex-direction: column;
-  margin-top: 1.1rem;
-  padding-top: 0.35rem;
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
   border-top: 1px solid var(--line);
 }
 
@@ -2756,31 +2788,40 @@ label.muted {
 
 .chat-token-usage {
   position: absolute;
-  top: 0.55rem;
+  /* Same row as .stage-toolbar / rail chrome: --chrome-top minus .stage-body padding-top. */
+  top: calc(var(--chrome-top) - 0.35rem);
   left: 1.1rem;
   z-index: 3;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  height: var(--control-h-sm);
+  padding: 0 0.72rem;
   border-radius: 999px;
-  border: 1px solid var(--line, #e4e4e8);
-  background: color-mix(in srgb, #fff 88%, transparent);
-  backdrop-filter: blur(6px);
-  font-size: 0.72rem;
+  border: 1px solid rgba(231, 231, 235, 0.9);
+  background: rgba(243, 243, 245, 0.92);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: var(--muted, #6b6b73);
+  color: var(--text);
   cursor: help;
   user-select: none;
 }
 .chat-token-usage .tok.in {
-  color: #3d5a80;
+  color: #2f4f73;
 }
 .chat-token-usage .tok.out {
-  color: #5a7d4e;
+  color: #3f6b36;
 }
 .chat-token-usage .tok.sep {
-  opacity: 0.45;
+  color: #9a9aa0;
+  font-weight: 500;
+  opacity: 1;
 }
 .chat-token-tip {
   position: absolute;
@@ -5968,8 +6009,14 @@ a.bot-mention:hover,
 .companion-cmd { white-space: pre-wrap; word-break: break-all; padding: .5rem; border-radius: 6px; background: rgba(127,127,127,.12); user-select: all; }
 
 /* ── First-run setup (/, /setup) ─────────────────────────────── */
-.rail-logo { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; }
-.rail-logo img { width: 26px; height: 26px; }
+.rail-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+}
+.rail-logo img { width: 22px; height: 22px; }
 .rail-top .settings-orb:disabled { opacity: 0.4; cursor: not-allowed; }
 .login-brand { margin: 0 0 4px; }
 .login-logo { width: min(280px, 80%); height: auto; display: block; margin: 0 auto; }

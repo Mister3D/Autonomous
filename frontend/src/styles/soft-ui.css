@@ -217,6 +217,13 @@ body {
   box-shadow: var(--shadow-xs);
 }
 
+.chat-token-usage {
+  background: var(--bg-soft);
+  border-color: var(--line-soft);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+}
+
 .rail-search {
   border-radius: var(--radius-sm);
   background: var(--bg-elev);

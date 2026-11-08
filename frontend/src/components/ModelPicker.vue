@@ -4,6 +4,7 @@
     :options="options"
     :placeholder="t('details.modelNone')"
     :aria-label="t('details.model')"
+    :field="field"
     allow-empty
     @update:model-value="emit('update:model', $event)"
   />
@@ -17,6 +18,7 @@ import MenuSelect from "./MenuSelect.vue";
 
 const props = defineProps({
   model: { type: String, default: "" },
+  field: { type: Boolean, default: false },
 });
 const emit = defineEmits(["update:model"]);
 

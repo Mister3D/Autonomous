@@ -56,9 +56,10 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
-  /* Layout chrome */
+  /* Layout chrome — top row (logo, rail orbs, tokens, tabs, inspector) shares these */
   --rail: 300px;
   --inspector: 332px;
+  --chrome-top: 0.55rem;
   --control-h: 40px;
   --control-h-sm: 32px;
   --space-1: 0.25rem;
