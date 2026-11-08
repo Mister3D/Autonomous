@@ -1,65 +1,79 @@
 <template>
-  <section class="settings-block">
-    <h3>{{ t("groundingCfg.title") }}</h3>
-    <p class="hint">{{ t("groundingCfg.hint") }}</p>
+  <UiCard :title="t('groundingCfg.title')" :hint="t('groundingCfg.hint')">
+    <template #icon>
+      <UiIcon name="crosshair" :size="18" />
+    </template>
     <p v-if="loadError" class="vault-error">{{ loadError }}</p>
-    <label v-if="fields" class="toggle-row" :class="{ muted: fields.enabled.readonly }">
-      <span>
-        <strong>{{ t("groundingCfg.enabled") }}</strong>
-        <small v-if="fields.enabled.readonly">{{ t("setup.fromEnv", { name: "AUTONOMOUS_GROUNDING_ENABLED" }) }}</small>
-      </span>
-      <input
-        v-model="form.enabled"
-        type="checkbox"
-        role="switch"
-        :disabled="fields.enabled.readonly"
-        :aria-label="t('groundingCfg.enabled')"
-      />
-    </label>
-  </section>
+    <UiToggleRow
+      v-if="fields"
+      v-model="form.enabled"
+      :title="t('groundingCfg.enabled')"
+      :hint="fields.enabled.readonly ? t('setup.fromEnv', { name: 'AUTONOMOUS_GROUNDING_ENABLED' }) : ''"
+      :disabled="fields.enabled.readonly"
+      :muted="fields.enabled.readonly"
+    >
+      <template #icon>
+        <UiIcon name="crosshair" :size="16" />
+      </template>
+    </UiToggleRow>
+  </UiCard>
 
   <template v-if="fields">
-  <section v-for="kind in kinds" :key="kind" class="settings-block">
-    <h3>{{ t(`groundingCfg.${kind}`) }}</h3>
-    <SetupField
-      v-for="f in ['url', 'token', 'model']"
-      :key="f"
-      :id="`${kind}_${f}`"
-      :field="fields[`${kind}_${f}`]"
-      v-model="form[`${kind}_${f}`]"
-      :options="modelOptions(kind)"
-      :fetching="models[kind].loading"
-      :fetched="models[kind].done"
-      :fetch-error="models[kind].error"
-      @fetch="fetchModels(kind)"
+    <UiCard
+      v-for="kind in kinds"
+      :key="kind"
+      :title="t(`groundingCfg.${kind}`)"
     >
-      <template v-if="f === 'model'" #aside>
-        <button
-          class="btn"
-          :class="{ 'is-ok': testOk(kind) }"
-          type="button"
-          :disabled="testing"
-          @click="test"
-        >
-          {{ testing ? "…" : t("groundingCfg.test") }}
-        </button>
+      <template #icon>
+        <UiIcon name="cpu" :size="18" />
       </template>
-    </SetupField>
-    <p v-if="testError(kind)" class="hint vault-error">{{ testError(kind) }}</p>
-  </section>
+      <SetupField
+        v-for="f in ['url', 'token', 'model']"
+        :key="f"
+        :id="`${kind}_${f}`"
+        :field="fields[`${kind}_${f}`]"
+        v-model="form[`${kind}_${f}`]"
+        :options="modelOptions(kind)"
+        :fetching="models[kind].loading"
+        :fetched="models[kind].done"
+        :fetch-error="models[kind].error"
+        @fetch="fetchModels(kind)"
+      >
+        <template v-if="f === 'model'" #aside>
+          <UiButton
+            :ok="testOk(kind)"
+            :disabled="testing"
+            @click="test"
+          >
+            <template #icon>
+              <UiIcon name="play" :size="14" />
+            </template>
+            {{ testing ? "…" : t("groundingCfg.test") }}
+          </UiButton>
+        </template>
+      </SetupField>
+      <p v-if="testError(kind)" class="hint vault-error">{{ testError(kind) }}</p>
+    </UiCard>
 
-  <section class="settings-block">
-    <h3>{{ t("guard.limitsTitle") }}</h3>
-    <label class="settings-field">
-      <span>{{ t("guard.groundingLoops") }}</span>
-      <input v-model.number="loops" type="number" min="1" max="8" step="1" />
-    </label>
-  </section>
-  <div class="settings-save-bar">
-    <span v-if="saved" class="setup-ok">{{ t("llm.saved") }}</span>
-    <span v-if="saveError" class="vault-error">{{ saveError }}</span>
-    <button class="btn primary" type="button" :disabled="saving" @click="save">{{ saving ? "…" : t("llm.save") }}</button>
-  </div>
+    <UiCard :title="t('guard.limitsTitle')">
+      <template #icon>
+        <UiIcon name="update" :size="18" />
+      </template>
+      <label class="settings-field">
+        <span>{{ t("guard.groundingLoops") }}</span>
+        <input v-model.number="loops" type="number" min="1" max="8" step="1" />
+      </label>
+      <template #footer>
+        <span v-if="saved" class="setup-ok">{{ t("llm.saved") }}</span>
+        <span v-if="saveError" class="vault-error">{{ saveError }}</span>
+        <UiButton variant="primary" :disabled="saving" @click="save">
+          <template #icon>
+            <UiIcon name="save" :size="16" />
+          </template>
+          {{ saving ? "…" : t("llm.save") }}
+        </UiButton>
+      </template>
+    </UiCard>
   </template>
 </template>
 
@@ -69,6 +83,10 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { refreshSetup } from "../store";
 import SetupField from "./SetupField.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiCard from "./ui/UiCard.vue";
+import UiIcon from "./ui/UiIcon.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const { t } = useI18n();
 const kinds = ["grounder"];

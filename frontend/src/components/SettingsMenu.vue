@@ -8,13 +8,7 @@
       aria-haspopup="menu"
       @click="open = !open"
     >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-        <circle cx="12" cy="12" r="3.2" />
-        <path
-          d="M12 3.5v2.2M12 18.3v2.2M4.9 6.6l1.6 1.5M17.5 15.9l1.6 1.5M3.5 12h2.2M18.3 12h2.2M4.9 17.4l1.6-1.5M17.5 8.1l1.6-1.5"
-          stroke-linecap="round"
-        />
-      </svg>
+      <UiIcon name="sun" />
     </button>
     <ul v-if="open" class="settings-pop" role="menu">
       <li>
@@ -23,24 +17,44 @@
         </button>
       </li>
       <li class="settings-sep" role="separator" />
-      <li v-if="!confirming">
-        <button class="danger" type="button" role="menuitem" @click.stop="confirming = true">
-          <span>{{ t("settings.deleteAllBots") }}</span>
-        </button>
-      </li>
-      <li v-else class="inline-confirm" role="group">
-        <p>{{ t("confirm.deleteAllBots", { count: state.bots.length }) }}</p>
+      <li class="action-row settings-action-row">
         <button
           class="danger"
           type="button"
+          role="menuitem"
           :disabled="deleting || !state.bots.length"
-          @click.stop="deleteAllBots"
+          @click.stop="toggleDeleteAll"
         >
-          {{ deleting ? t("settings.deletingAllBots") : t("confirm.deleteAllGo") }}
+          <span>{{ deleting ? t("settings.deletingAllBots") : t("settings.deleteAllBots") }}</span>
         </button>
-        <button type="button" :disabled="deleting" @click.stop="confirming = false">
-          {{ t("files.cancel") }}
-        </button>
+        <span
+          v-if="armed"
+          class="action-confirm-wrap"
+          @pointerenter="tip = true"
+          @pointerleave="tip = false"
+          @focusin="tip = true"
+          @focusout="tip = false"
+        >
+          <button
+            class="action-confirm"
+            type="button"
+            :disabled="deleting || !state.bots.length"
+            :aria-label="deleteConfirmLabel"
+            @click.stop="deleteAllBots"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path
+                d="M3.2 8.2 6.4 11.4 12.8 4.6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <span v-if="tip" class="action-confirm-tip" role="tooltip">{{ deleteConfirmLabel }}</span>
+        </span>
       </li>
       <li class="settings-sep" role="separator" />
       <li>
@@ -53,19 +67,25 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { api } from "../api";
 import { state } from "../store";
 import { disconnectEvents } from "../sync";
+import UiIcon from "./ui/UiIcon.vue";
 
 const { t } = useI18n();
 const router = useRouter();
 const open = ref(false);
-const confirming = ref(false);
+const armed = ref(false);
+const tip = ref(false);
 const deleting = ref(false);
 const root = ref(null);
+
+const deleteConfirmLabel = computed(() =>
+  t("confirm.deleteAllBots", { count: state.bots.length }),
+);
 
 function openSettings() {
   open.value = false;
@@ -85,11 +105,17 @@ async function logout() {
   router.push("/login");
 }
 
+function toggleDeleteAll() {
+  if (deleting.value || !state.bots.length) return;
+  armed.value = !armed.value;
+  tip.value = false;
+}
+
 async function deleteAllBots() {
-  if (deleting.value) return;
+  if (deleting.value || !armed.value) return;
   const names = state.bots.map((b) => b.name);
   if (!names.length) {
-    confirming.value = false;
+    armed.value = false;
     open.value = false;
     return;
   }
@@ -100,7 +126,7 @@ async function deleteAllBots() {
       delete state.messages[name];
     }
     state.currentBot = null;
-    confirming.value = false;
+    armed.value = false;
     open.value = false;
     router.replace("/");
   } catch (e) {
@@ -111,7 +137,10 @@ async function deleteAllBots() {
 }
 
 watch(open, (isOpen) => {
-  if (!isOpen && !deleting.value) confirming.value = false;
+  if (!isOpen && !deleting.value) {
+    armed.value = false;
+    tip.value = false;
+  }
 });
 
 function onDoc(ev) {

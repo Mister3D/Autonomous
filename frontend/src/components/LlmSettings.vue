@@ -1,7 +1,8 @@
 <template>
-  <section class="settings-block">
-    <h3>{{ t("llm.title") }}</h3>
-    <p class="hint">{{ t("llm.hint") }}</p>
+  <UiCard :title="t('llm.title')" :hint="t('llm.hint')">
+    <template #icon>
+      <UiIcon name="spark" :size="18" />
+    </template>
     <p class="hint">
       {{ t("llm.docsLead") }}
       <a :href="docsModels" target="_blank" rel="noopener noreferrer">{{ t("llm.docsModels") }}</a>
@@ -277,7 +278,7 @@
     <p v-else class="hint">{{ t("llm.otherEmpty") }}</p>
 
     <p class="hint">{{ t("llm.fileNote", { path: view?.path || "~/.pi/agent/models.json" }) }}</p>
-  </section>
+  </UiCard>
 </template>
 
 <script setup>
@@ -287,6 +288,8 @@ import { api } from "../api";
 import { refreshSetup } from "../store";
 import MenuSelect from "./MenuSelect.vue";
 import SecretInput from "./SecretInput.vue";
+import UiCard from "./ui/UiCard.vue";
+import UiIcon from "./ui/UiIcon.vue";
 
 let keySeq = 0;
 

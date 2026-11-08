@@ -4,7 +4,9 @@ import { router } from "./router";
 import { i18n } from "./i18n";
 import { startGlobalSync } from "./sync";
 import { installVisualViewport } from "./visualViewport";
+import "./styles/tokens.css";
 import "./styles.css";
+import "./styles/soft-ui.css";
 
 const app = createApp(App);
 app.use(router);

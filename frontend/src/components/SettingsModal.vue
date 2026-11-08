@@ -2,9 +2,7 @@
   <div class="settings-page">
     <header class="settings-page-head">
       <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M15 6 9 12l6 6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <UiIcon name="chevron-left" />
       </button>
       <h1>{{ t("settings.title") }}</h1>
     </header>
@@ -18,38 +16,21 @@
           :aria-current="section === tab.id ? 'page' : undefined"
           @click="openSection(tab.id)"
         >
-          <svg v-if="tab.id === 'agent'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4.5" y="5" width="15" height="14" rx="2" />
-            <path d="M8 10.2 10.2 12 8 13.8M12.2 14.2h3.6" />
-          </svg>
-          <svg v-else-if="tab.id === 'vault'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="6" y="10.2" width="12" height="8.3" rx="1.6" />
-            <path d="M9 10.2V8.2a3 3 0 0 1 6 0v2" />
-          </svg>
-          <svg v-else-if="tab.id === 'llm'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-          </svg>
-          <svg v-else-if="tab.id === 'grounding'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="6" />
-            <path d="M12 3v5M12 16v5M3 12h5M16 12h5" />
-          </svg>
-          <svg v-else-if="tab.id === 'memory'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6.5 7h11M6.5 12h11M6.5 17h7" />
-          </svg>
-          <svg v-else class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4" y="5" width="16" height="11" rx="1.8" />
-            <path d="M9 19.5h6M12 16v3.5" />
-          </svg>
+          <UiIcon class="settings-nav-ico" :name="tab.icon" />
           <span>{{ t(tab.label) }}</span>
         </button>
       </nav>
       <div class="settings-main">
       <LlmSettings v-if="section === 'llm'" />
       <GroundingSettings v-if="section === 'grounding'" />
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("lang.choose") }}</h3>
-        <p class="hint">{{ t("settings.languageHint") }}</p>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('lang.choose')"
+        :hint="t('settings.languageHint')"
+      >
+        <template #icon>
+          <UiIcon name="lang" :size="18" />
+        </template>
         <div class="settings-field">
           <div
             class="lang-seg"
@@ -77,11 +58,16 @@
             <small>{{ loading ? "…" : status?.version || "—" }}</small>
           </span>
         </div>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("settings.timezone") }}</h3>
-        <p class="hint">{{ t("settings.timezoneHint") }}</p>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('settings.timezone')"
+        :hint="t('settings.timezoneHint')"
+      >
+        <template #icon>
+          <UiIcon name="clock" :size="18" />
+        </template>
         <div class="settings-field">
           <div class="settings-tz">
             <input
@@ -112,11 +98,16 @@
           </div>
         </div>
         <p v-if="tzError" class="vault-error">{{ tzError }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("settings.passwordTitle") }}</h3>
-        <p class="hint">{{ t("settings.passwordHint") }}</p>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('settings.passwordTitle')"
+        :hint="t('settings.passwordHint')"
+      >
+        <template #icon>
+          <UiIcon name="key" :size="18" />
+        </template>
         <label class="settings-field">
           <span>{{ t("settings.passwordCurrent") }}</span>
           <SecretInput
@@ -146,22 +137,26 @@
           />
         </label>
         <div class="setup-toolbar">
-          <button
-            class="btn primary"
-            type="button"
+          <UiButton
+            variant="primary"
             :disabled="pwBusy || !pwCanSubmit"
             @click="submitPasswordChange"
           >
             {{ pwBusy ? t("settings.passwordBusy") : t("settings.passwordSubmit") }}
-          </button>
+          </UiButton>
           <span v-if="pwOk" class="setup-ok">{{ pwOk }}</span>
           <span v-if="pwError" class="vault-error">{{ pwError }}</span>
         </div>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("update.channelTitle") }}</h3>
-        <p class="hint">{{ t("update.channelHint") }}</p>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('update.channelTitle')"
+        :hint="t('update.channelHint')"
+      >
+        <template #icon>
+          <UiIcon name="update" :size="18" />
+        </template>
         <div class="settings-field">
           <span>{{ t("update.remoteUrl") }}</span>
           <input
@@ -262,11 +257,16 @@
         </div>
         <p v-if="!updateGit" class="hint">{{ t("update.noGit") }}</p>
         <p v-if="updateChannelError" class="vault-error">{{ updateChannelError }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("guard.title") }}</h3>
-        <p class="hint">{{ t("guard.hint") }}</p>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('guard.title')"
+        :hint="t('guard.hint')"
+      >
+        <template #icon>
+          <UiIcon name="crosshair" :size="18" />
+        </template>
         <label class="settings-field">
           <span>{{ t("guard.reviewEvery") }}</span>
           <input
@@ -292,11 +292,16 @@
           <small>{{ t("guard.maxActionsHint") }}</small>
         </label>
         <p v-if="guardError" class="vault-error">{{ guardError }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'vault'" class="settings-block">
-        <h3>{{ t("vault.title") }}</h3>
-        <p class="hint">{{ t("vault.settingsHint") }}</p>
+      <UiCard
+        v-if="section === 'vault'"
+        :title="t('settings.tabVault')"
+        :hint="t('vault.settingsHint')"
+      >
+        <template #icon>
+          <UiIcon name="vault" :size="18" />
+        </template>
         <p v-if="vaultError" class="vault-error">{{ vaultError }}</p>
         <ul v-if="entries.length" class="settings-list">
           <li v-for="e in entries" :key="e.id">
@@ -320,11 +325,16 @@
           </li>
         </ul>
         <p v-else class="hint">{{ t("vault.empty") }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'memory'" class="settings-block">
-        <h3>{{ t("memory.title") }}</h3>
-        <p class="hint">{{ t("memory.settingsHint") }}</p>
+      <UiCard
+        v-if="section === 'memory'"
+        :title="t('settings.tabMemory')"
+        :hint="t('memory.settingsHint')"
+      >
+        <template #icon>
+          <UiIcon name="memory" :size="18" />
+        </template>
         <p v-if="memError" class="vault-error">{{ memError }}</p>
         <ul v-if="memEntries.length" class="settings-list">
           <li v-for="e in memEntries" :key="e.id">
@@ -352,12 +362,17 @@
           </li>
         </ul>
         <p v-else class="hint">{{ t("memory.empty") }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'companions'" class="settings-block">
-        <h3>{{ t("companion.title") }}</h3>
+      <UiCard
+        v-if="section === 'companions'"
+        :title="t('settings.tabCompanions')"
+        :hint="t('companion.hint')"
+      >
+        <template #icon>
+          <UiIcon name="monitor" :size="18" />
+        </template>
         <p v-if="needCompanion" class="companion-need">{{ t("companion.needOne") }}</p>
-        <p class="hint justified">{{ t("companion.hint") }}</p>
         <p class="hint justified companion-responsibility">{{ t("companion.responsibility") }}</p>
         <label class="settings-field companion-pairing-toggle">
           <span class="settings-notify">
@@ -472,7 +487,7 @@
             </button>
           </template>
         </div>
-      </section>
+      </UiCard>
       </div>
     </div>
   </div>
@@ -490,6 +505,9 @@ import GroundingSettings from "./GroundingSettings.vue";
 import LlmSettings from "./LlmSettings.vue";
 import LocaleFlag from "./LocaleFlag.vue";
 import SecretInput from "./SecretInput.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiCard from "./ui/UiCard.vue";
+import UiIcon from "./ui/UiIcon.vue";
 
 function platformLabel(raw) {
   const key = String(raw || "").trim().toLowerCase();
@@ -503,12 +521,12 @@ function platformLabel(raw) {
 const SECTIONS = ["agent", "llm", "grounding", "vault", "memory", "companions"];
 const DEFAULT_TZ = "Europe/Paris";
 const tabs = [
-  { id: "agent", label: "settings.tabAgent" },
-  { id: "llm", label: "settings.tabLlm" },
-  { id: "grounding", label: "settings.tabGrounding" },
-  { id: "vault", label: "vault.title" },
-  { id: "memory", label: "memory.title" },
-  { id: "companions", label: "companion.title" },
+  { id: "agent", label: "settings.tabAgent", icon: "terminal" },
+  { id: "llm", label: "settings.tabLlm", icon: "spark" },
+  { id: "grounding", label: "settings.tabGrounding", icon: "crosshair" },
+  { id: "vault", label: "settings.tabVault", icon: "vault" },
+  { id: "memory", label: "settings.tabMemory", icon: "memory" },
+  { id: "companions", label: "settings.tabCompanions", icon: "monitor" },
 ];
 
 const { t, locale } = useI18n();

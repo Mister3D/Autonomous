@@ -1,9 +1,14 @@
 <template>
   <div class="mcp-grants">
     <div class="mcp-grants-head">
-      <span>
-        <strong>{{ t("details.mcp") }}</strong>
-        <small>{{ t("details.mcpHint") }}</small>
+      <span class="ui-toggle-main">
+        <UiIconBadge size="sm">
+          <UiIcon name="puzzle" :size="16" :stroke="1.9" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.mcp") }}</strong>
+          <small>{{ t("details.mcpHint") }}</small>
+        </span>
       </span>
       <button
         class="settings-orb mcp-add"
@@ -12,9 +17,7 @@
         :title="t('details.mcpAdd')"
         @click="startPick"
       >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+        <UiIcon name="plus" :size="14" />
       </button>
     </div>
     <p v-if="error && !open" class="mcp-grants-error">{{ error }}</p>
@@ -89,6 +92,8 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiIcon from "./ui/UiIcon.vue";
+import UiIconBadge from "./ui/UiIconBadge.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();

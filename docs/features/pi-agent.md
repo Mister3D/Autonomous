@@ -6,7 +6,7 @@
 
 ## User behaviour
 
-- Bottom left: **round settings button** (no more flag). Menu = language, open settings, and **Delete all bots**. Inline confirmation identical to Details (`.inline-confirm`) — not `window.prompt`. Each bot: same `DELETE` (Pi session + desktop + dir wipe).
+- Bottom left: **round settings button** (no more flag). Menu = open settings, **Delete all bots**, log out. Delete-all uses the same arm → check (`.action-confirm`) pattern as the bot Details manage list — not `.inline-confirm` / `window.prompt`. Each bot: same `DELETE` (Pi session + desktop + dir wipe).
 - Home page (Autonomous brand): banner if Pi is not ready → link to model/provider config docs.
 - Each bot = one **Pi session** on the **host** machine (`data/bots/<name>/pi/`). Pi id = `autonomous-<uuid>`; the chat ↔ session link is `bots.pi_session_id` (not the slug).
 - Web messages → Pi prompt; assistant tokens over **SSE** (`message.delta` then `message.updated`).

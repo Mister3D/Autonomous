@@ -1,22 +1,5 @@
-:root {
-  --bg: #ffffff;
-  --bg-elev: #ffffff;
-  --bg-soft: #f3f3f5;
-  --line: #e7e7eb;
-  --text: #1c1c1e;
-  --muted: #8e8e93;
-  --accent: #f08c12;
-  --accent-2: #c4841d;
-  --danger: #c53434;
-  --ok: #2f9e62;
-  --warn: #f08c12;
-  --radius: 16px;
-  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", monospace;
-  --rail: 300px;
-  --inspector: 332px;
-  color-scheme: light;
-}
+/* Design tokens live in styles/tokens.css (Soft UI). Legacy aliases kept here
+   only if a rule still expects a name that tokens do not redefine. */
 
 *,
 *::before,
@@ -527,7 +510,42 @@ a:focus-visible {
   opacity: 0.55;
 }
 
-/* Confirm destructive inline — SettingsMenu + ManageMenu (même rendu). */
+/* Settings pop: same arm → check confirm as ManageMenu action-row. */
+.settings-pop .settings-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  list-style: none;
+}
+
+.settings-pop .settings-action-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.settings-pop .action-confirm {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--danger);
+  border-radius: 8px;
+}
+
+.settings-pop .action-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.settings-pop .action-confirm-tip {
+  /* Pop opens upward: tip above the check can clip — keep above with room. */
+  max-width: 15rem;
+  white-space: normal;
+}
+
+/* Confirm destructive inline — EventsPane webhooks (legacy panel confirm). */
 .inline-confirm {
   display: flex;
   flex-direction: column;
@@ -618,7 +636,7 @@ a:focus-visible {
   align-items: center;
   gap: 0.6rem;
   text-align: left;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 12px;
   padding: 0.55rem 0.7rem;
   background: transparent;
@@ -632,12 +650,15 @@ a:focus-visible {
 }
 
 .settings-nav button.active {
-  background: rgba(240, 140, 18, 0.14);
+  background: color-mix(in srgb, var(--accent) 10%, #fff);
   color: #1c1c1e;
   font-weight: 650;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
-.settings-nav-ico {
+.settings-nav-ico,
+.settings-nav .ui-icon {
   width: 18px;
   height: 18px;
   flex: none;
@@ -1200,10 +1221,16 @@ a:focus-visible {
   margin-bottom: 0.85rem;
 }
 
-.field-block small {
+.field-block-label {
+  margin-bottom: 0.1rem;
+}
+
+.field-block small,
+.field-block .ui-toggle-copy small {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.35;
+  font-weight: 400;
 }
 
 .model-picker {
@@ -2128,9 +2155,18 @@ a:focus-visible {
 .mcp-grants-head,
 .mcp-grant-list li {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.mcp-grants-head {
+  align-items: center;
+}
+
+.mcp-grants-head .ui-toggle-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .mcp-grants-head strong,

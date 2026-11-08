@@ -1,0 +1,436 @@
+/**
+ * Soft UI component layer + surface polish.
+ * Loaded after tokens.css and the legacy styles.css cascade.
+ */
+
+/* ——— Design-system primitives ——— */
+
+.ui-icon {
+  display: block;
+  flex: none;
+}
+
+.ui-icon-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.ui-icon-badge.is-sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.ui-icon-badge.is-md {
+  width: 38px;
+  height: 38px;
+}
+
+.ui-icon-badge.is-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.ui-icon-badge.is-muted {
+  background: var(--bg-soft);
+  color: var(--muted);
+}
+
+.ui-icon-badge.is-ok {
+  background: rgba(47, 158, 98, 0.14);
+  color: var(--ok);
+}
+
+.ui-icon-badge.is-danger {
+  background: rgba(197, 52, 52, 0.12);
+  color: var(--danger);
+}
+
+.ui-card {
+  margin: 0 0 1rem;
+  padding: 1.15rem 1.25rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.ui-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.ui-card-titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.ui-card-titles h3 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.ui-card-titles .hint {
+  margin: 0.28rem 0 0;
+  line-height: 1.45;
+}
+
+.ui-card-aside {
+  flex: none;
+  margin-left: auto;
+}
+
+.ui-card-body.flush {
+  margin: 0 -0.15rem;
+}
+
+.ui-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.ui-toggle-row.has-icon {
+  align-items: center;
+}
+
+.ui-toggle-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.ui-toggle-copy {
+  min-width: 0;
+}
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.95rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ui-btn.is-block {
+  width: 100%;
+}
+
+.ui-btn.is-icon-only {
+  width: 2.35rem;
+  padding: 0;
+}
+
+.ui-btn-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.ui-btn.primary {
+  box-shadow: 0 4px 12px rgba(240, 140, 18, 0.28);
+}
+
+.ui-btn.primary:hover:not(:disabled) {
+  box-shadow: 0 6px 16px rgba(240, 140, 18, 0.34);
+}
+
+/* ——— Soft surfaces (shell) ——— */
+
+body {
+  background: var(--bg-canvas);
+}
+
+.app-shell {
+  background: var(--bg-canvas);
+}
+
+.sidebar {
+  background: var(--bg-sidebar);
+  border-right-color: var(--line-soft);
+  box-shadow: inset -1px 0 0 var(--line-soft);
+}
+
+.rail-manager:hover {
+  background: var(--bg-soft);
+}
+
+.rail-manager.active {
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-glow);
+}
+
+.bot-list li button:hover {
+  background: var(--bg-soft);
+}
+
+.bot-list li button.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(240, 140, 18, 0.22);
+}
+
+.settings-orb {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-sm);
+}
+
+.settings-orb:hover,
+.rail-top .settings-orb[aria-expanded="true"],
+.settings-menu.open .settings-orb {
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.main {
+  background: var(--bg-elev);
+}
+
+.inspector {
+  background: var(--bg-sidebar);
+  border-left-color: var(--line-soft);
+}
+
+.stage-tabs.seg button.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.rail-search {
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  border-color: var(--line);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ——— Settings Soft UI ——— */
+
+.settings-page {
+  background: var(--bg-canvas);
+}
+
+.settings-page-head {
+  background: var(--bg-elev);
+  border-bottom-color: var(--line-soft);
+  box-shadow: var(--shadow-xs);
+}
+
+.settings-nav {
+  background: var(--bg-sidebar);
+  border-right-color: var(--line-soft);
+  gap: 0.25rem;
+  padding: 1rem 0.75rem;
+}
+
+.settings-nav button {
+  border-radius: var(--radius-sm);
+  position: relative;
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-nav button.active {
+  background: color-mix(in srgb, var(--accent) 10%, #fff);
+  color: var(--text);
+  font-weight: var(--font-weight-semibold);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.settings-nav button.active .settings-nav-ico,
+.settings-nav button.active .ui-icon {
+  color: var(--accent-ink);
+}
+
+.settings-main {
+  background: var(--bg-canvas);
+  padding: 1.35rem 1.5rem 2.5rem;
+}
+
+.settings-block {
+  margin: 0 0 1rem;
+  padding: 1.15rem 1.25rem;
+  border-bottom: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.settings-block:last-child {
+  margin-bottom: 0;
+  padding-bottom: 1.15rem;
+  border-bottom: 0;
+}
+
+.settings-block h3 {
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-block .info-row {
+  border-top-color: var(--line-soft);
+}
+
+.settings-field > input[type="text"],
+.settings-field > input[type="url"],
+.settings-field > input[type="number"],
+.settings-field .secret-input input,
+.settings-field select,
+.field input,
+.field textarea,
+.modal select {
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  border-color: transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-field > input[type="text"]:focus,
+.settings-field > input[type="url"]:focus,
+.settings-field > input[type="number"]:focus,
+.settings-field .secret-input input:focus,
+.settings-field select:focus,
+.field input:focus,
+.field textarea:focus {
+  background: var(--bg-elev);
+  border-color: rgba(240, 140, 18, 0.35);
+  box-shadow: 0 0 0 3px var(--accent-softer);
+  outline: none;
+}
+
+.settings-save-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+  padding: 1rem 1.15rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.settings-save-bar > .btn.primary {
+  min-width: 9rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(240, 140, 18, 0.28);
+}
+
+.btn {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn.primary {
+  box-shadow: 0 3px 10px rgba(240, 140, 18, 0.25);
+}
+
+.btn.is-ok {
+  background: var(--ok-strong);
+}
+
+.modal {
+  border-radius: var(--radius-lg);
+  border-color: var(--line-soft);
+  box-shadow: var(--shadow-float);
+}
+
+.composer {
+  border-radius: var(--radius-xl);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.composer:focus-within {
+  border-color: rgba(240, 140, 18, 0.35);
+  box-shadow: 0 0 0 3px var(--accent-softer), var(--shadow-sm);
+}
+
+.bubble.user {
+  background: var(--user-bubble);
+  color: var(--user-bubble-ink);
+}
+
+.bubble.assistant {
+  background: var(--bg-soft);
+  border: 1px solid var(--line-soft);
+}
+
+.details .field-block,
+.details .toggle-row,
+.details .info-row,
+.details .companion-link,
+.details .mcp-grants {
+  border-radius: var(--radius-sm);
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+}
+
+.details .field-block:hover,
+.details .toggle-row:hover,
+.details .info-row:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.toast {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+}
+
+.login-page {
+  background: var(--bg-canvas);
+}
+
+.login-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+}
+
+@media (max-width: 760px) {
+  .settings-main {
+    padding: 1rem 0.85rem 2rem;
+  }
+
+  .settings-nav {
+    background: var(--bg-elev);
+  }
+
+  .settings-nav button.active {
+    background: color-mix(in srgb, var(--accent) 10%, #fff);
+    border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
+  .ui-card,
+  .settings-block,
+  .settings-save-bar {
+    border-radius: var(--radius-md);
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}

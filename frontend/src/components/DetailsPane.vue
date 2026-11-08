@@ -2,77 +2,80 @@
   <div class="details">
     <h3>{{ t("settings.title") }}</h3>
     <div class="field-block">
-      <strong>{{ t("details.model") }}</strong>
-      <small>{{ t("details.modelHint") }}</small>
+      <div class="ui-toggle-main field-block-label">
+        <UiIconBadge size="sm">
+          <UiIcon name="model" :size="16" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.model") }}</strong>
+          <small>{{ t("details.modelHint") }}</small>
+        </span>
+      </div>
       <ModelPicker :model="bot.model || ''" @update:model="onModel" />
     </div>
     <div v-if="bot.pi_session_id" class="info-row">
-      <span>
-        <strong>{{ t("details.piSession") }}</strong>
-        <small class="mono">{{ bot.pi_session_id }}</small>
+      <span class="ui-toggle-main">
+        <UiIconBadge size="sm">
+          <UiIcon name="terminal" :size="16" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.piSession") }}</strong>
+          <small class="mono">{{ bot.pi_session_id }}</small>
+        </span>
       </span>
     </div>
-    <label class="toggle-row">
-      <span>
-        <strong>{{ t("details.internet") }}</strong>
-        <small>{{ t("details.internetHint") }}</small>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="!!bot.internet"
-        :aria-label="t('details.internet')"
-        @change="toggleNet"
-      />
-    </label>
+    <UiToggleRow
+      :title="t('details.internet')"
+      :hint="t('details.internetHint')"
+      :model-value="!!bot.internet"
+      @change="toggleNet"
+    >
+      <template #icon>
+        <UiIcon name="globe" :size="16" />
+      </template>
+    </UiToggleRow>
     <BotCompanion :bot="bot" />
-    <label class="toggle-row">
-      <span>
-        <strong>{{ t("details.memoryAccess") }}</strong>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="bot.memory_access !== false"
-        :aria-label="t('details.memoryAccess')"
-        @change="toggleMemory"
-      />
-    </label>
-    <label class="toggle-row" :class="{ muted: managerLocked }">
-      <span>
-        <strong>{{ t("details.isManager") }}</strong>
-        <small v-if="managerLocked">
-          {{ t("details.isManagerTaken", { name: otherManager.label || otherManager.name }) }}
-        </small>
-        <small v-else>{{ t("details.isManagerHint") }}</small>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="!!bot.is_manager"
-        :disabled="managerLocked"
-        :aria-label="t('details.isManager')"
-        @change="toggleManager"
-      />
-    </label>
-    <label class="toggle-row">
-      <span>
-        <strong>{{ t("details.autoSleep") }}</strong>
-        <small>{{ t("details.autoSleepHint") }}</small>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="bot.auto_sleep !== false"
-        :aria-label="t('details.autoSleep')"
-        @change="toggleSleep"
-      />
-    </label>
+    <UiToggleRow
+      :title="t('details.memoryAccess')"
+      :model-value="bot.memory_access !== false"
+      @change="toggleMemory"
+    >
+      <template #icon>
+        <UiIcon name="memory" :size="16" />
+      </template>
+    </UiToggleRow>
+    <UiToggleRow
+      :title="t('details.isManager')"
+      :hint="managerHint"
+      :model-value="!!bot.is_manager"
+      :disabled="managerLocked"
+      :muted="managerLocked"
+      @change="toggleManager"
+    >
+      <template #icon>
+        <UiIcon name="users" :size="16" />
+      </template>
+    </UiToggleRow>
+    <UiToggleRow
+      :title="t('details.autoSleep')"
+      :hint="t('details.autoSleepHint')"
+      :model-value="bot.auto_sleep !== false"
+      @change="toggleSleep"
+    >
+      <template #icon>
+        <UiIcon name="moon" :size="16" />
+      </template>
+    </UiToggleRow>
     <BotMcpGrants :bot="bot" />
     <div class="info-row">
-      <span>
-        <strong>{{ t("details.desk") }}</strong>
-        <small>{{ deskLabel }}</small>
+      <span class="ui-toggle-main">
+        <UiIconBadge size="sm">
+          <UiIcon name="monitor" :size="16" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.desk") }}</strong>
+          <small>{{ deskLabel }}</small>
+        </span>
       </span>
     </div>
 
@@ -89,6 +92,9 @@ import BotCompanion from "./BotCompanion.vue";
 import BotMcpGrants from "./BotMcpGrants.vue";
 import ManageMenu from "./ManageMenu.vue";
 import ModelPicker from "./ModelPicker.vue";
+import UiIcon from "./ui/UiIcon.vue";
+import UiIconBadge from "./ui/UiIconBadge.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
@@ -98,6 +104,12 @@ const otherManager = computed(
 );
 /** Cannot promote this bot while another holds the Manager slot. */
 const managerLocked = computed(() => !!otherManager.value && !props.bot.is_manager);
+const managerHint = computed(() => {
+  if (managerLocked.value) {
+    return t("details.isManagerTaken", { name: otherManager.value.label || otherManager.value.name });
+  }
+  return t("details.isManagerHint");
+});
 
 const deskLabel = computed(() => {
   const d = props.bot.desk;

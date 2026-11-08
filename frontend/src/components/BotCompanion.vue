@@ -1,18 +1,15 @@
 <template>
   <div class="companion-link">
-    <label class="toggle-row">
-      <span>
-        <strong>{{ t("details.companionTransfer") }}</strong>
-        <small>{{ t("details.companionTransferHint") }}</small>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="transferOn"
-        :aria-label="t('details.companionTransfer')"
-        @change="onTransfer"
-      />
-    </label>
+    <UiToggleRow
+      :title="t('details.companionTransfer')"
+      :hint="t('details.companionTransferHint')"
+      :model-value="transferOn"
+      @change="onTransfer"
+    >
+      <template #icon>
+        <UiIcon name="link" :size="16" />
+      </template>
+    </UiToggleRow>
     <div v-if="transferOn && devices.length" class="companion-pick" :class="{ open }" ref="root">
       <button
         class="companion-trigger"
@@ -51,19 +48,17 @@
       </ul>
     </div>
     <p v-if="error" class="mcp-grants-error">{{ error }}</p>
-    <label v-if="bot.companion_id && bot.companion_egress" class="toggle-row">
-      <span>
-        <strong>{{ t("details.companionKill") }}</strong>
-        <small>{{ t("details.companionKillHint") }}</small>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        :checked="!!bot.companion_killswitch"
-        :aria-label="t('details.companionKill')"
-        @change="onKill"
-      />
-    </label>
+    <UiToggleRow
+      v-if="bot.companion_id && bot.companion_egress"
+      :title="t('details.companionKill')"
+      :hint="t('details.companionKillHint')"
+      :model-value="!!bot.companion_killswitch"
+      @change="onKill"
+    >
+      <template #icon>
+        <UiIcon name="update" :size="16" />
+      </template>
+    </UiToggleRow>
   </div>
 </template>
 
@@ -73,6 +68,8 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { api } from "../api";
 import { state } from "../store";
+import UiIcon from "./ui/UiIcon.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();

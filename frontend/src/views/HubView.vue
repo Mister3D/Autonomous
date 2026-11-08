@@ -26,10 +26,7 @@
           :aria-expanded="searchOpen"
           @click="toggleSearch"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="M16 16.5 20 20.5" />
-          </svg>
+          <UiIcon name="search" />
         </button>
         <button
           class="settings-orb"
@@ -40,9 +37,7 @@
           :aria-disabled="!canCreate"
           @click="openCreate"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <UiIcon name="plus" />
         </button>
       </div>
       <input
@@ -402,6 +397,7 @@ import SetupPanel from "../components/SetupPanel.vue";
 import AvatarEditModal from "../components/AvatarEditModal.vue";
 import CreateDeskModal from "../components/CreateDeskModal.vue";
 import SettingsMenu from "../components/SettingsMenu.vue";
+import UiIcon from "../components/ui/UiIcon.vue";
 
 const { t } = useI18n();
 const route = useRoute();
