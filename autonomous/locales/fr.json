@@ -20,6 +20,7 @@
   "bot.manager_exists": "Il ne peut y avoir qu’un seul Manager (déjà : « {name} »). Désactivez-le avant d’en nommer un autre.",
   "bot.invalid_name": "Identifiant technique invalide (slug : [a-z0-9][a-z0-9_-]{{0,31}})",
   "bot.invalid_display_name": "Nom de bot invalide (1–64 caractères, sans / ni \\)",
+  "bot.model_required": "Choisissez un modèle pour créer le bot.",
   "chat.sent": "Message envoyé",
   "chat.cleared": "Historique effacé",
   "desk.creating": "Création du bureau…",

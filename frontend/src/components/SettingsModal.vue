@@ -1,28 +1,39 @@
 <template>
   <div class="settings-page">
-    <header class="settings-page-head">
-      <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
-        <UiIcon name="chevron-left" />
-      </button>
-      <h1>{{ t("settings.title") }}</h1>
-    </header>
     <div class="settings-layout">
-      <nav class="settings-nav" :aria-label="t('settings.title')">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          type="button"
-          :class="{ active: section === tab.id }"
-          :aria-current="section === tab.id ? 'page' : undefined"
-          @click="openSection(tab.id)"
-        >
-          <UiIcon class="settings-nav-ico" :name="tab.icon" />
-          <span>{{ t(tab.label) }}</span>
-        </button>
-      </nav>
+      <aside class="settings-side">
+        <header class="settings-side-head">
+          <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
+            <UiIcon name="chevron-left" />
+          </button>
+          <h1>{{ t("settings.title") }}</h1>
+        </header>
+        <nav class="settings-nav" :aria-label="t('settings.title')">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            type="button"
+            :class="{ active: section === tab.id }"
+            :aria-current="section === tab.id ? 'page' : undefined"
+            @click="openSection(tab.id)"
+          >
+            <UiIcon class="settings-nav-ico" :name="tab.icon" />
+            <span>{{ t(tab.label) }}</span>
+          </button>
+        </nav>
+      </aside>
       <div class="settings-main">
       <LlmSettings v-if="section === 'llm'" />
       <GroundingSettings v-if="section === 'grounding'" />
+      <UiCard v-if="section === 'agent'" :title="t('pi.version')">
+        <template #icon>
+          <UiIcon name="tag" :size="18" />
+        </template>
+        <p class="settings-version-value">
+          {{ loading ? "…" : status?.version || "—" }}
+        </p>
+      </UiCard>
+
       <UiCard
         v-if="section === 'agent'"
         :title="t('lang.choose')"
@@ -51,12 +62,6 @@
               <strong>{{ code === "fr" ? t("lang.fr") : t("lang.en") }}</strong>
             </button>
           </div>
-        </div>
-        <div class="info-row settings-version-row">
-          <span>
-            <strong>{{ t("pi.version") }}</strong>
-            <small>{{ loading ? "…" : status?.version || "—" }}</small>
-          </span>
         </div>
       </UiCard>
 
@@ -151,6 +156,62 @@
 
       <UiCard
         v-if="section === 'agent'"
+        :title="t('settings.deleteAllBots')"
+        :hint="t('settings.deleteAllBotsHint')"
+      >
+        <template #icon>
+          <UiIcon name="trash" :size="18" />
+        </template>
+        <div class="action-list settings-danger-actions">
+          <div class="action-row">
+            <button
+              class="danger"
+              type="button"
+              :disabled="deleteAllBusy || !state.bots.length"
+              @click="toggleDeleteAll"
+            >
+              {{
+                deleteAllBusy
+                  ? t("settings.deletingAllBots")
+                  : t("settings.deleteAllBots")
+              }}
+            </button>
+            <span
+              v-if="deleteAllArmed"
+              class="action-confirm-wrap"
+              @pointerenter="deleteAllTip = true"
+              @pointerleave="deleteAllTip = false"
+              @focusin="deleteAllTip = true"
+              @focusout="deleteAllTip = false"
+            >
+              <button
+                class="action-confirm"
+                type="button"
+                :disabled="deleteAllBusy || !state.bots.length"
+                :aria-label="t('confirm.confirmAction')"
+                @click="deleteAllBots"
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                  <path
+                    d="M3.2 8.2 6.4 11.4 12.8 4.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <span v-if="deleteAllTip" class="action-confirm-tip" role="tooltip">{{
+                t("confirm.confirmAction")
+              }}</span>
+            </span>
+          </div>
+        </div>
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'agent'"
         :title="t('update.channelTitle')"
         :hint="t('update.channelHint')"
       >
@@ -167,11 +228,9 @@
             autocomplete="off"
             spellcheck="false"
           />
-          <small>{{ t("update.remoteUrlHint") }}</small>
-          <small v-if="updateRemoteSaved">{{ t("update.remoteUsingCustom") }}</small>
-          <small v-else-if="updateOriginUrl">
-            {{ t("update.remoteUsingOrigin", { url: updateOriginUrl }) }}
-          </small>
+          <small v-if="updateRemoteKeepUrl">{{
+            t("update.remoteUrlHint", { url: updateRemoteKeepUrl })
+          }}</small>
           <button
             class="btn"
             type="button"
@@ -456,35 +515,65 @@
               {{ t("companion.version") }} {{ companionBuild.version || "?" }} ·
               {{ t("companion.buildStatus") }} {{ t("companion.state_" + companionBuild.state) }}
             </p>
-            <ul v-if="companionBuild.artifacts.length" class="settings-list">
-              <li v-for="a in companionBuild.artifacts" :key="a.target">
-                <span>
-                  <strong>{{ platformLabel(a.platform) }}</strong>
-                  <small> · {{ a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
-                </span>
-                <a class="btn" :href="a.url" download>{{ t("companion.download") }}</a>
+            <ul class="settings-list">
+              <li
+                v-for="(a, idx) in companionBuild.artifacts"
+                :key="a.target"
+                :class="{ 'companion-artifact-with-log': logUnderArtifact(idx) }"
+              >
+                <div class="companion-artifact-row">
+                  <span>
+                    <strong>{{ platformLabel(a.platform) }}</strong>
+                    <small> · {{ a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
+                  </span>
+                  <a class="btn" :href="a.url" download>{{ t("companion.download") }}</a>
+                </div>
+                <div v-if="logUnderArtifact(idx)" class="companion-build-panel">
+                  <p v-for="n in companionNotes" :key="n" class="hint">{{ n }}</p>
+                  <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
+                  <pre
+                    ref="companionLogEl"
+                    class="setup-log companion-build-log"
+                  >{{ companionBuild.log.join("\n") }}</pre>
+                </div>
+              </li>
+              <li v-if="sharedBuildLog" class="companion-log-row">
+                <div class="companion-build-panel">
+                  <p v-for="n in companionNotes" :key="n" class="hint">{{ n }}</p>
+                  <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
+                  <pre
+                    ref="companionLogEl"
+                    class="setup-log companion-build-log"
+                  >{{ companionBuild.log.join("\n") }}</pre>
+                </div>
+              </li>
+            </ul>
+            <div v-if="companionBuild.toolchain" class="companion-rebuild">
+              <button
+                class="btn"
+                type="button"
+                :disabled="companionBuild.state === 'building'"
+                @click="rebuildCompanion"
+              >
+                {{ companionBuild.state === "building" ? t("setup.running") : t("companion.rebuild") }}
+              </button>
+            </div>
+            <ul class="settings-list companion-macos-list">
+              <li class="companion-macos-row">
+                <div class="companion-macos-top">
+                  <span>
+                    <strong>macOS</strong>
+                    <small> · {{ t("companion.macosMeta") }}</small>
+                  </span>
+                </div>
+                <p class="hint">{{ t("companion.macosHint") }}</p>
+                <pre class="companion-cmd">{{ t("companion.macosBuild") }}</pre>
               </li>
             </ul>
             <template v-if="companionBuild.state === 'no_toolchain'">
               <p class="hint justified">{{ t("companion.noToolchain") }}</p>
               <pre class="companion-cmd">{{ companionBuild.rustup_hint }}</pre>
             </template>
-            <p v-for="n in companionBuild.notes" :key="n" class="hint">{{ n }}</p>
-            <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
-            <pre
-              v-if="companionBuild.log?.length"
-              ref="companionLogEl"
-              class="setup-log companion-build-log"
-            >{{ companionBuild.log.join("\n") }}</pre>
-            <button
-              v-if="companionBuild.toolchain"
-              class="btn"
-              type="button"
-              :disabled="companionBuild.state === 'building'"
-              @click="rebuildCompanion"
-            >
-              {{ companionBuild.state === "building" ? t("setup.running") : t("companion.rebuild") }}
-            </button>
           </template>
         </div>
       </UiCard>
@@ -602,6 +691,9 @@ const pwConfirm = ref("");
 const pwBusy = ref(false);
 const pwError = ref("");
 const pwOk = ref("");
+const deleteAllArmed = ref(false);
+const deleteAllTip = ref(false);
+const deleteAllBusy = ref(false);
 const updateChannel = ref("main");
 const updateChannelBusy = ref(false);
 const updateChannelError = ref("");
@@ -617,6 +709,11 @@ const updatePreset = computed(() => {
   if (ch === "main" || ch === "dev") return ch;
   return "custom";
 });
+
+/** URL kept when the remote field is left empty (custom remote, else origin). */
+const updateRemoteKeepUrl = computed(
+  () => String(updateRemoteSaved.value || updateOriginUrl.value || "").trim(),
+);
 
 const pwCanSubmit = computed(
   () =>
@@ -648,6 +745,35 @@ async function submitPasswordChange() {
     pwError.value = e.message || t("login.changeError");
   } finally {
     pwBusy.value = false;
+  }
+}
+
+function toggleDeleteAll() {
+  if (deleteAllBusy.value || !state.bots.length) return;
+  deleteAllArmed.value = !deleteAllArmed.value;
+  deleteAllTip.value = false;
+}
+
+async function deleteAllBots() {
+  if (deleteAllBusy.value || !deleteAllArmed.value) return;
+  const names = state.bots.map((b) => b.name);
+  if (!names.length) {
+    deleteAllArmed.value = false;
+    return;
+  }
+  deleteAllBusy.value = true;
+  try {
+    for (const name of names) {
+      await api.deleteBot(name);
+      delete state.messages[name];
+    }
+    state.currentBot = null;
+    deleteAllArmed.value = false;
+    router.replace("/");
+  } catch (e) {
+    alert(e.message || String(e));
+  } finally {
+    deleteAllBusy.value = false;
   }
 }
 
@@ -850,6 +976,16 @@ const companionBuild = ref(null);
 const companionLogEl = ref(null);
 const buildError = ref("");
 const companionsEnabled = ref(true);
+const companionNotes = computed(() =>
+  (companionBuild.value?.notes || []).filter((n) => !/^macOS is not built/i.test(String(n || ""))),
+);
+const hasBuildLog = computed(() => (companionBuild.value?.log || []).length > 0);
+/** Log partagé après Linux+Windows (ou pendant un build sans artefact encore). */
+const sharedBuildLog = computed(() => hasBuildLog.value && (companionBuild.value?.artifacts || []).length !== 1);
+function logUnderArtifact(idx) {
+  if (!hasBuildLog.value || sharedBuildLog.value) return false;
+  return idx === (companionBuild.value?.artifacts || []).length - 1;
+}
 let companionBuildTimer = 0;
 
 watch(

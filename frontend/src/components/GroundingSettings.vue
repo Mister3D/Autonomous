@@ -63,17 +63,18 @@
         <span>{{ t("guard.groundingLoops") }}</span>
         <input v-model.number="loops" type="number" min="1" max="8" step="1" />
       </label>
-      <template #footer>
-        <span v-if="saved" class="setup-ok">{{ t("llm.saved") }}</span>
-        <span v-if="saveError" class="vault-error">{{ saveError }}</span>
-        <UiButton variant="primary" :disabled="saving" @click="save">
-          <template #icon>
-            <UiIcon name="save" :size="16" />
-          </template>
-          {{ saving ? "…" : t("llm.save") }}
-        </UiButton>
-      </template>
     </UiCard>
+
+    <div class="settings-save-bar">
+      <span v-if="saved" class="setup-ok">{{ t("llm.saved") }}</span>
+      <span v-if="saveError" class="vault-error">{{ saveError }}</span>
+      <UiButton variant="primary" block :disabled="saving" @click="save">
+        <template #icon>
+          <UiIcon name="save" :size="16" />
+        </template>
+        {{ saving ? "…" : t("llm.save") }}
+      </UiButton>
+    </div>
   </template>
 </template>
 

@@ -21,7 +21,7 @@
           class="action-confirm"
           type="button"
           :disabled="busy"
-          :aria-label="item.confirm"
+          :aria-label="t('confirm.confirmAction')"
           @click="run(item.id)"
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -35,7 +35,9 @@
             />
           </svg>
         </button>
-        <span v-if="tip === item.id" class="action-confirm-tip" role="tooltip">{{ item.confirm }}</span>
+        <span v-if="tip === item.id" class="action-confirm-tip" role="tooltip">{{
+          t("confirm.confirmAction")
+        }}</span>
       </span>
     </div>
   </div>

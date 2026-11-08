@@ -31,7 +31,7 @@
     </UiToggleRow>
     <UiToggleRow
       :title="t('details.isManager')"
-      :hint="t('details.isManagerHint')"
+      :tip="t('details.isManagerHint')"
       :model-value="!!bot.is_manager"
       :disabled="managerLocked"
       :muted="managerLocked"
@@ -79,9 +79,7 @@ const otherManager = computed(
 /** Cannot promote this bot while another holds the Manager slot. */
 const managerLocked = computed(() => !!otherManager.value && !props.bot.is_manager);
 const managerLockReason = computed(() =>
-  managerLocked.value
-    ? t("details.isManagerTaken", { name: otherManager.value.label || otherManager.value.name })
-    : "",
+  managerLocked.value ? t("details.isManagerTaken") : "",
 );
 
 async function onModel(next) {

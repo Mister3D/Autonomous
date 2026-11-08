@@ -11,7 +11,7 @@
 - `autonomous/avatars.py` — ready catalogue
 - `autonomous/migrations/001_schema.sql` — columns `avatar`, `avatar_color`
 
-**Last updated**: 2026-11-08 (Firefox Android: no CSS scale on the root SVG, explicit px size)
+**Last updated**: 2026-11-09 (picker : aperçu work, sélection notify)
 
 ## User behaviour
 
@@ -22,7 +22,7 @@
 - **red dot** `.avatar-pip.unread` (rail sm): unread **or** `status=waiting`.
 - **idle**: still; on hover, the eyes follow the mouse.
 - **lg avatar (inspector)**: hover → **immediate custom tooltip** (no browser `title`) with the agent state; no more "State" line in Details.
-- **Creation**: character grid + 18 colour swatches in 3 rows of 6 (22 px), centred. Avatar editing (inspector) keeps the wide grid.
+- **Creation / edit picker**: character grid + colour swatches. Large preview plays **work**; the selected character tile plays **notify**; others stay **idle**. Cells keep `overflow: visible` (no hard clip) with a slight shrink (~92%) so limbs stay readable inside the tile.
 - **Inspector**: click on the lg avatar → same picker → `PATCH` `avatar` / `avatar_color`.
 
 ## Reusable package

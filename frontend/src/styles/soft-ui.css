@@ -161,13 +161,13 @@ body {
 }
 
 .app-shell {
-  background: var(--bg-canvas);
+  background: var(--bg-sidebar);
 }
 
 .sidebar {
   background: var(--bg-sidebar);
-  border-right-color: var(--line-soft);
-  box-shadow: inset -1px 0 0 var(--line-soft);
+  border-right: 0;
+  box-shadow: none;
 }
 
 .rail-manager:hover {
@@ -203,12 +203,18 @@ body {
 }
 
 .main {
+  background: var(--bg-sidebar);
+}
+
+.chat-surface {
   background: var(--bg-elev);
+  border-color: var(--line-soft);
+  box-shadow: var(--shadow-card);
 }
 
 .inspector {
   background: var(--bg-sidebar);
-  border-left-color: var(--line-soft);
+  border-left: 0;
 }
 
 .stage-tabs.seg button.active {
@@ -234,20 +240,18 @@ body {
 /* ——— Settings Soft UI ——— */
 
 .settings-page {
-  background: var(--bg-canvas);
+  background: var(--bg-sidebar);
 }
 
-.settings-page-head {
-  background: var(--bg-elev);
-  border-bottom-color: var(--line-soft);
-  box-shadow: var(--shadow-xs);
+.settings-side {
+  background: var(--bg-sidebar);
+  border-right: 0;
 }
 
 .settings-nav {
-  background: var(--bg-sidebar);
-  border-right-color: var(--line-soft);
+  background: transparent;
   gap: 0.25rem;
-  padding: 1rem 0.75rem;
+  padding: 0.35rem 0.75rem 1rem;
 }
 
 .settings-nav button {
@@ -270,8 +274,8 @@ body {
 }
 
 .settings-main {
-  background: var(--bg-canvas);
-  padding: 1.35rem 1.5rem 2.5rem;
+  background: var(--bg-sidebar);
+  padding: 1.35rem 1.5rem 2.5rem 0;
 }
 
 .settings-block {
@@ -303,6 +307,7 @@ body {
 .settings-field > input[type="number"],
 .settings-field .secret-input input,
 .settings-field select,
+.settings-field .model-picker.is-field .model-trigger,
 .field input,
 .field textarea,
 .modal select {
@@ -312,11 +317,18 @@ body {
   transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
+.settings-field .model-picker.is-field .model-trigger {
+  min-height: var(--control-h);
+  padding: 0.45rem 0.8rem;
+  box-shadow: none;
+}
+
 .settings-field > input[type="text"]:focus,
 .settings-field > input[type="url"]:focus,
 .settings-field > input[type="number"]:focus,
 .settings-field .secret-input input:focus,
 .settings-field select:focus,
+.settings-field .model-picker.is-field.open .model-trigger,
 .field input:focus,
 .field textarea:focus {
   background: var(--bg-elev);
@@ -327,20 +339,21 @@ body {
 
 .settings-save-bar {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.65rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
   margin-top: 0.35rem;
-  padding: 1rem 1.15rem;
-  background: var(--bg-elev);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .settings-save-bar > .btn.primary {
-  min-width: 9rem;
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 12px rgba(240, 140, 18, 0.28);
 }
@@ -389,11 +402,16 @@ body {
 .details .field-block,
 .details .toggle-row,
 .details .info-row,
-.details .companion-link,
 .details .mcp-grants {
   border-radius: var(--radius-sm);
   padding-left: 0.55rem;
   padding-right: 0.55rem;
+}
+
+/* Wrapper only — padding lives on the inner .toggle-row so badges stay left-aligned. */
+.details .companion-link {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .details .field-block:hover,
@@ -423,8 +441,12 @@ body {
     padding: 1rem 0.85rem 2rem;
   }
 
+  .settings-side {
+    background: var(--bg-sidebar);
+  }
+
   .settings-nav {
-    background: var(--bg-elev);
+    background: transparent;
   }
 
   .settings-nav button.active {
@@ -434,8 +456,7 @@ body {
   }
 
   .ui-card,
-  .settings-block,
-  .settings-save-bar {
+  .settings-block {
     border-radius: var(--radius-md);
     padding-left: 1rem;
     padding-right: 1rem;

@@ -10,12 +10,12 @@
 - `autonomous/services/pi_rpc.py` — `_MANAGER_SYSTEM_HINT`
 - UI: `CreateBotModal`, `DetailsPane`, `HubView` (Managers rail)
 
-**Last updated**: 2026-10-31 (a single Manager)
+**Last updated**: 2026-11-09 (Details Manager tip on the switch)
 
 ## User behaviour
 
 - A **Manager** bot is a normal bot + the "Manager (orchestrator)" checkbox (creation or Details).
-- **A single Manager** in the household: creating or promoting a second one → 409 `manager_exists`. The UI disables the checkbox if another Manager already exists.
+- **A single Manager** in the household: creating or promoting a second one → 409 `manager_exists`. The UI disables the checkbox if another Manager already exists. In Details, the Manager hint is a custom hover tip on the switch (not a line under the title); when locked the tip is « Un seul manager possible. ».
 - To change Manager: disable the current one (Details), then enable / create the other.
 - **Rail**: Managers are **featured at the top** (md avatar + name below, centred); the other bots stay in the list below.
 - It can **list** the other bots (`bot_list` / `GET /bots/:name/mail/peers`): name, label, status, capability. No persona.

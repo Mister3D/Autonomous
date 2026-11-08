@@ -84,7 +84,8 @@ from autonomous.services import grounding as ground_svc
 from autonomous.services import screenshot as shot_svc
 from autonomous.services import terminal as term_svc
 from autonomous.services import vault_inject as vault_inject_svc
-from autonomous.services.errors import AutonomousError, Forbidden
+from autonomous.i18n import t
+from autonomous.services.errors import AutonomousError, Forbidden, ValidationError
 from autonomous.services.events import sse_response
 
 
@@ -124,6 +125,9 @@ class BotList(MethodView):
             from autonomous.services import setup as setup_svc
 
             setup_svc.ensure_ready(g.home)
+            model = (data.get("model") or "").strip()
+            if not model:
+                raise ValidationError(t("bot.model_required"), code="model_required")
             return bots_svc.create_bot(
                 data["name"],
                 label=data.get("label"),
@@ -131,7 +135,7 @@ class BotList(MethodView):
                 internet=data.get("internet", True),
                 memory_access=data.get("memory_access", True),
                 is_manager=bool(data.get("is_manager", False)),
-                model=data.get("model"),
+                model=model,
                 avatar=data.get("avatar"),
                 avatar_color=data.get("avatar_color"),
                 home=g.home,

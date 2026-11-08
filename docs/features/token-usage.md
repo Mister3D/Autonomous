@@ -2,11 +2,11 @@
 
 **Status**: in place  
 **Key files**: `bots.tokens_in` / `tokens_out`, `bots.add_token_usage`, `agent.message_end`, `ChatPane` (badge)  
-**Last updated**: 2026-10-31 (custom tooltip)
+**Last updated**: 2026-11-09 (floats above detached chat card)
 
 ## User behaviour
 
-- Top left of the Conversation area: `↑ sent · ↓ received` (conversation total).
+- Top left chrome row (above the rounded `.chat-surface` card): `↑ sent · ↓ received` (conversation total).
 - Source: `usage` field of Pi assistant messages (`input` / `output`) on every LLM turn (including tool calls).
 - Reset to **zero** when the bot's chat is cleared.
 - Hover → **immediate custom tooltip** (explains ↑ context / ↓ replies + exact totals; no browser `title`).

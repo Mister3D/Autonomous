@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/{vault,crypto_box,vault_inject,vnc_type_worker}.py`, `autonomous/api/{vault_routes,bots}.py`, `autonomous/migrations/001_schema.sql`, `autonomous/pi_extensions/vault.ts`, `frontend/src/components/{VaultRequestCard,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-01 (no manual add in Settings)
+**Last updated**: 2026-11-09 (FR label « Coffre », hint = secrets enregistrés par les bots)
 
 ## User behaviour
 

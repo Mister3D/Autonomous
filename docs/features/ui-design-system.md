@@ -8,15 +8,18 @@
 - `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
 - `frontend/index.html` — Plus Jakarta Sans
 
-**Last updated**: 2026-11-09 (top chrome vertical alignment)
+**Last updated**: 2026-11-09 (Manager : infobulle custom sur le switch)
 
 ## User behaviour
 
 - Light Soft UI: soft canvas (`--bg-canvas`), elevated white cards, orange accent, soft shadows.
-- Settings sections are card-based with icon badges (Générale, LLM, Grounding, vault, memory, companions).
-- Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**.
-- Rail settings pop: Réglages / Supprimer tous les bots / Déconnexion each have a `UiIcon` (`settings`, `trash`, `logout`).
+- Settings sections are card-based with icon badges (Générale, LLM, Grounding, vault, memory, companions). LLM card (`.llm-settings`) stacks sections with one flex gap + shared subhead rule (no mixed per-block margins).
+- `UiIcon` `memory` = [SVG Repo brain](https://www.svgrepo.com/svg/521533/brain) (filled `currentColor`) — settings nav Mémoire + inspector Mémoire.
+- Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**. Manager uses `UiToggleRow` `tip` (custom bubble on the switch) instead of the `<small>` hint; when locked, the tip shows the “already a Manager” reason.
+- Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (arm → check; tooltip = « Confirmer ? »).
 - Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
+- Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane.
+- Settings: `.settings-main` has no left padding (nav already pads); top/right/bottom stay.
 - Labels: Conversation / Terminal / Écran; inspector Files tab = « Fichiers »; settings nav keys under `settings.tab*`.
 
 ## Implementation
@@ -26,6 +29,7 @@
 3. Existing feature CSS keeps working; Soft UI overrides polish surfaces (shell, settings, composer, bubbles).
 4. i18n: `tabs.screen` = « Écran », `tabs.discussion` aligned with Conversation, `settings.tabVault|Memory|Companions` for nav consistency.
 5. Top chrome sizes: `--chrome-top` / `--control-h-sm` in `tokens.css`; rail bottom settings orb stays `--control-h`.
+6. Chat card: `ChatPane` wraps messages + composer in `.chat-surface`; stage panes reuse the same radius/shadow on canvas.
 
 ## Pitfalls / non-regressions
 
@@ -39,5 +43,5 @@
 1. `autonomous serve --host 127.0.0.1 --port 8787 --dev`
 2. Open `/b/<bot>/discussion` — Soft canvas, orange active tab, « Écran ».
 3. Open inspector — icon badges on Internet / memory / manager / sleep.
-4. Open `/settings/grounding` — card stack, orange active nav bar, Enregistrer with save icon.
+4. Open `/settings/grounding` — card stack; model picker height matches other fields (`--control-h`); full-width Enregistrer under the cards.
 5. Narrow to ~390px — bot list XOR chat; settings nav scrolls horizontally.

@@ -1,7 +1,6 @@
 <template>
   <div class="events-pane">
     <p class="events-tz">{{ tzLabel }}</p>
-    <p class="hint events-who">{{ t("events.piOnly") }}</p>
 
     <section class="events-section">
       <h3>{{ t("events.schedules") }}</h3>

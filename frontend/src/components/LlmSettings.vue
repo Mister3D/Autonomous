@@ -1,11 +1,13 @@
 <template>
-  <UiCard :title="t('llm.title')" :hint="t('llm.hint')">
+  <UiCard class="llm-settings" :title="t('llm.title')" :hint="t('llm.hint')">
     <template #icon>
       <UiIcon name="spark" :size="18" />
     </template>
     <p class="hint">
       {{ t("llm.docsLead") }}
       <a :href="docsModels" target="_blank" rel="noopener noreferrer">{{ t("llm.docsModels") }}</a>
+      ·
+      <a :href="docsProviders" target="_blank" rel="noopener noreferrer">{{ t("llm.docsProviders") }}</a>
       ·
       <a :href="docsConfig" target="_blank" rel="noopener noreferrer">{{ t("llm.docsConfig") }}</a>
     </p>
@@ -116,7 +118,6 @@
     </div>
 
     <h3 class="llm-subhead">{{ t("llm.modelsTitle") }}</h3>
-    <p class="hint llm-providers-hint">{{ t("llm.modelsHint") }}</p>
 
     <ul v-if="modelRows.length" class="llm-provider-list">
       <li
@@ -251,12 +252,7 @@
     </div>
 
     <h3 class="llm-subhead">{{ t("llm.otherTitle") }}</h3>
-    <p class="hint llm-providers-hint">
-      {{ t("llm.otherHint") }}
-      <a :href="docsModels" target="_blank" rel="noopener noreferrer">{{ t("llm.docsModels") }}</a>
-      ·
-      <a :href="docsProviders" target="_blank" rel="noopener noreferrer">{{ t("llm.docsProviders") }}</a>
-    </p>
+    <p class="hint llm-providers-hint">{{ t("llm.otherHint") }}</p>
     <div v-if="catalogModels.length" class="llm-catalog">
       <div class="llm-catalog-head" role="row">
         <span role="columnheader">{{ t("llm.model") }}</span>
@@ -277,7 +273,6 @@
     </div>
     <p v-else class="hint">{{ t("llm.otherEmpty") }}</p>
 
-    <p class="hint">{{ t("llm.fileNote", { path: view?.path || "~/.pi/agent/models.json" }) }}</p>
   </UiCard>
 </template>
 

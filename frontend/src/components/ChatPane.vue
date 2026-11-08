@@ -48,6 +48,7 @@
         {{ tokenStats.tip }}
       </span>
     </div>
+    <div class="chat-surface">
     <div
       class="messages"
       :class="{ 'messages-placing': !threadPlaced }"
@@ -499,9 +500,7 @@
             ref="composer"
             v-model="text"
             rows="1"
-            :placeholder="
-              runLocked ? t('chat.placeholderQueue') : t('chat.placeholderTo', { name: bot.label || bot.name })
-            "
+            :placeholder="composerPlaceholder"
             :title="t('chat.newlineHint')"
             @keydown="onComposerKey"
             @paste="onPaste"
@@ -572,6 +571,7 @@
         </svg>
       </button>
     </form>
+    </div>
   </div>
 </template>
 
@@ -621,6 +621,9 @@ const text = ref(getComposerDraft(props.bot?.name));
 const pending = ref(getComposerPending(props.bot?.name).slice());
 const scroller = ref(null);
 const composer = ref(null);
+const compactComposerPh = ref(
+  typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
+);
 const secretRefuseHint = ref("");
 const mirror = ref(null);
 const fileInput = ref(null);
@@ -719,12 +722,19 @@ const composerHighlight = computed(() =>
   composerHighlightHtml(text.value, state.bots || [])
 );
 
+const composerPlaceholder = computed(() => {
+  if (runLocked.value) return t("chat.placeholderQueue");
+  if (compactComposerPh.value) return t("chat.placeholderToMobile");
+  return t("chat.placeholderTo", { name: props.bot.label || props.bot.name });
+});
+
 function autosize() {
   const el = composer.value;
   if (!el) return;
   el.style.height = "auto";
   const max = 160;
-  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  const min = 32; /* match .composer .icon-btn */
+  el.style.height = `${Math.min(Math.max(el.scrollHeight, min), max)}px`;
   syncMirrorScroll();
 }
 
@@ -1958,7 +1968,16 @@ watch(
   }
 );
 
+let composerMq;
+function onComposerMqChange(e) {
+  compactComposerPh.value = !!e.matches;
+  nextTick(() => autosize());
+}
+
 onMounted(async () => {
+  composerMq = window.matchMedia("(max-width: 720px)");
+  compactComposerPh.value = composerMq.matches;
+  composerMq.addEventListener("change", onComposerMqChange);
   await nextTick();
   autosize();
   if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
@@ -1993,5 +2012,6 @@ onBeforeUnmount(() => {
   pending.value = [];
   if (flashTimer) clearTimeout(flashTimer);
   window.removeEventListener("keydown", onLightboxKey);
+  composerMq?.removeEventListener("change", onComposerMqChange);
 });
 </script>

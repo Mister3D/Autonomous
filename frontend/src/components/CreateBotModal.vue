@@ -22,7 +22,7 @@
           </div>
           <div class="field">
             <label>{{ t("create.model") }}</label>
-            <ModelPicker :model="model" @update:model="(v) => (model = v)" />
+            <ModelPicker field :model="model" @update:model="(v) => (model = v)" />
           </div>
           <div class="create-bot-options">
             <label class="create-check">
@@ -68,7 +68,11 @@
         <button class="btn ghost" type="button" @click="state.createOpen = false">
           {{ t("create.cancel") }}
         </button>
-        <button class="btn primary" type="submit" :disabled="busy || !name.trim() || !ready">
+        <button
+          class="btn primary"
+          type="submit"
+          :disabled="busy || !name.trim() || !model.trim() || !ready"
+        >
           {{ t("create.submit") }}
         </button>
       </div>
@@ -77,7 +81,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { CompanionAvatarPicker, CHARACTER_IDS } from "@companion-avatar";
@@ -125,15 +129,6 @@ function slugifyBotName(raw) {
 
 const slugPreview = computed(() => slugifyBotName(name.value));
 
-onMounted(async () => {
-  try {
-    const models = await api.piModels();
-    if (models[0]) model.value = models[0].ref;
-  } catch {
-    /* keep empty */
-  }
-});
-
 async function submit() {
   busy.value = true;
   error.value = "";
@@ -148,13 +143,18 @@ async function submit() {
     busy.value = false;
     return;
   }
+  if (!model.value.trim()) {
+    error.value = t("create.modelRequired");
+    busy.value = false;
+    return;
+  }
   try {
     const bot = await api.createBot({
       name: display,
       internet: internet.value,
       memory_access: memoryAccess.value,
       is_manager: isManager.value,
-      model: model.value || null,
+      model: model.value.trim(),
       avatar: avatar.value,
       avatar_color: avatarColor.value,
     });

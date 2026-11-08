@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-06 (live build.log CLI on setup checklist + Settings → Companions)
+**Last updated**: 2026-11-09 (séparateur au-dessus de macOS, pas du log)
 
 ## User behaviour
 
@@ -47,6 +47,8 @@ cd companion && cargo test --no-default-features --lib
 Window: `cargo build --release` then launch the binary, pair from Settings. Internet egress is ticked in a bot's details, not in the companion. Don't enable it on an instance that has other containers if iptables is not understood.
 
 ## Build
+
+Settings → Companions: download rows for Linux / Windows; build log (+ Docker note) sits **under the Windows row** when there is a single binary, or as a **shared panel after both rows** when Linux and Windows are present (or while building with no artifact yet). Then **Recompiler**, then a **macOS** row with full local build steps (`git clone` → `cd …/companion` → `cargo build --release`). The old one-line macOS note is filtered out of the hint stack.
 
 `companion_build.py` builds in Docker when it works: image `autonomous-companion-builder:<Dockerfile hash>` from `companion/build/Dockerfile`, one `docker run --rm` per target (`x86_64-unknown-linux-gnu`, `x86_64-pc-windows-gnu`), sources mounted read-only, no privileged mode, no Docker socket. Caches: `$AUTONOMOUS_HOME/companion/docker-target` and `docker-cargo`. Without Docker (or with `AUTONOMOUS_COMPANION_DOCKER=0`) the host `cargo` is used. macOS is not built by the server. Output goes to `$AUTONOMOUS_HOME/companion/build.log`; `GET /api/v1/companion/build` returns a `log` tail (last ~250 lines). The setup checklist and Settings → Companions show that tail in a `setup-log` panel (same style as self-update), including background builds started by `serve`. Setup job `companion` still pumps the same file into `/jobs/<id>`.
 

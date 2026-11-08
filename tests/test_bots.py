@@ -29,11 +29,22 @@ def test_create_list_delete(auth_client):
     assert auth_client.get("/api/v1/bots").json == []
 
 
+def test_create_without_model_rejected(auth_client):
+    """Explicit empty model → création refusée (UI + API)."""
+    for payload in (
+        {"name": "No Model Bot", "model": ""},
+        {"name": "No Model Bot", "model": "   "},
+    ):
+        r = auth_client.post("/api/v1/bots", json=payload)
+        assert r.status_code in (400, 422), (payload, r.status_code, r.data)
+
+
 def test_create_freeform_name_slugifies(auth_client):
     r = auth_client.post("/api/v1/bots", json={"name": "Bad Name"})
     assert r.status_code == 201
     assert r.json["name"] == "bad-name"
     assert r.json["label"] == "Bad Name"
+    assert r.json.get("model") == "test/provider:fixture"
     auth_client.delete("/api/v1/bots/bad-name")
 
 
@@ -77,7 +88,7 @@ def test_invalid_name(auth_client):
 def test_bearer_auth(client, bearer_headers):
     r = client.post(
         "/api/v1/bots",
-        json={"name": "tok"},
+        json={"name": "tok", "model": "test/provider:fixture"},
         headers=bearer_headers,
     )
     assert r.status_code == 201

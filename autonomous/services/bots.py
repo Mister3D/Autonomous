@@ -363,15 +363,11 @@ def create_bot(
     guard = {"review_every": None, "max_actions": None}
     from autonomous.paths import bot_pi_dir
     from autonomous.services.pi_rpc import new_session_id
-    from autonomous.services.pi_status import list_models
 
     session_id = new_session_id(tech)
     bot_id = new_bot_id()
+    # No auto-pick: empty model stays empty (API / UI require a model at create).
     model_ref = (model or "").strip()
-    if not model_ref:
-        models = list_models()
-        if models:
-            model_ref = models[0]["ref"]
     used_avatars = {b.get("avatar") or "" for b in list_bots(home=home)}
     avatar_raw = (avatar or "").strip()
     if avatar_raw:

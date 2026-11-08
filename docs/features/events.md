@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/migrations/001_schema.sql`, `autonomous/services/{bot_events,cronutil,scheduler}.py`, `autonomous/api/{bots,hooks}.py`, `autonomous/pi_extensions/events.ts`, `frontend/src/components/{EventsPane,ChatPane}.vue`  
-**Last updated**: 2026-11-07 (webhook payload also in agent_prompt)
+**Last updated**: 2026-11-09 (drop Events tab copy about who creates tasks)
 
 ## User behaviour
 
@@ -10,7 +10,7 @@
 - **Input** (Pi `schedule_*` tools only): 5-field cron in the **time zone chosen in Settings → Agent** (`settings.timezone`). The field filters as you type (Paris → `Europe/Paris`) and saves as soon as you pick, without a button. With no saved value, the default is **Europe/Paris**. An explicit empty string remains the host time zone.
 - **Storage**: equivalent expression in UTC (`cron_utc`) + `next_run_at` / `last_run_at` in UTC. `GET /api/v1/clock` exposes the effective time zone (`timezone` + `utc_offset`).
 - The UI shows the cron and the next run in that time zone (the cron tooltip shows the UTC expression). Changing the time zone in Settings redisplays already saved tasks without rewriting them.
-- **Creation**: Pi tools only. The tab has no form. A line under the time zone says so. Cron **update**: Pi tools.
+- **Creation**: Pi tools only. The tab has no form. Cron **update**: Pi tools. The header only shows the active time zone (`Fuseau : …`).
 - The open **Events** tab updates itself when the agent creates, modifies or deletes a reminder (SSE `schedule.updated` / `schedule.deleted`, same for webhooks). No need to switch tabs.
 - To know the time before a relative cron, the agent runs `TZ=<timezone> date` with `vm_terminal_exec` (the VM is requested if there isn't one). It does not invent the time. `date -u` is UTC and ignores `TZ=`: the terminal output points this out, along with the local time. No separate clock tool.
 - A one-shot whose time has already passed today (day and day-of-week as `*`) is **refused** (`oneshot_too_far`) instead of being silently pushed to the next day. To target another day, the cron must set the day of month and the month. `GET /clock` includes `now` (`YYYY-MM-DD HH:MM`).
