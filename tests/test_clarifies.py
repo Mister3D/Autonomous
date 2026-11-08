@@ -43,6 +43,24 @@ def test_choice_and_text(home):
     assert answered["result"]["answer"] == "Nora"
 
 
+def test_language_choice_always_allows_text(home):
+    bots_svc.create_bot("ada", label="Ada", home=home)
+    req = clarify_svc.create_request(
+        "ada",
+        title="Language / Langue",
+        prompt="Which language should I use with you?",
+        choices=["Français", "English"],
+        home=home,
+    )
+    assert req["allow_text"] is True
+    # A card stored before the model remembered allow_text still accepts a typed language.
+    with clarify_svc.get_db(home) as conn:
+        conn.execute("UPDATE clarify_requests SET allow_text = 0 WHERE id = ?", (req["id"],))
+    typed = clarify_svc.resolve_request(req["id"], text="Deutsch", home=home)
+    assert typed["result"]["via"] == "text"
+    assert typed["result"]["answer"] == "Deutsch"
+
+
 def test_chat_cancels(home):
     bots_svc.create_bot("bob", label="Bob", home=home)
     req = clarify_svc.create_request(

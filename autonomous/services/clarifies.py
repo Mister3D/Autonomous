@@ -65,6 +65,20 @@ def _clean_choices(choices: list[str] | None) -> list[str]:
     return out
 
 
+def is_onboarding_language_question(
+    title: str = "",
+    prompt: str = "",
+    choices: list[str] | None = None,
+) -> bool:
+    """The setup language card (Français | English, plus a typed language)."""
+    blob = f"{title}\n{prompt}\n" + "\n".join(choices or [])
+    blob = blob.casefold()
+    asks = "langue" in blob or "language" in blob
+    has_fr = "français" in blob or "francais" in blob
+    has_en = "english" in blob or "anglais" in blob
+    return asks and has_fr and has_en
+
+
 def _decode(row, *, home: Path | None = None) -> dict[str, Any]:
     bot_id = row["bot"]
     try:
@@ -110,7 +124,9 @@ def create_request(
     if len(head) > _TITLE_MAX:
         raise ValidationError(f"title too long (max {_TITLE_MAX})")
     labels = _clean_choices(choices)
-    if allow_text is None:
+    if is_onboarding_language_question(head, text, labels):
+        allow_text = True
+    elif allow_text is None:
         allow_text = not labels
     if not labels and not allow_text:
         raise ValidationError(
@@ -279,7 +295,12 @@ def resolve_request(
             home=home,
         )
     if typed:
-        if not req.get("allow_text"):
+        language = is_onboarding_language_question(
+            req.get("title") or "",
+            req.get("prompt") or "",
+            req.get("choices") or [],
+        )
+        if not req.get("allow_text") and not language:
             raise ValidationError("text answer is not allowed", code="clarify_answer")
         if len(typed) > _TEXT_MAX:
             raise ValidationError(f"text too long (max {_TEXT_MAX})", code="clarify_answer")
