@@ -42,5 +42,7 @@
   "serve.stopped": "Serveur arrêté.",
   "serve.killed": "Le serveur ne s'est pas arrêté à temps ; pid {pid} tué.",
   "serve.not_running": "Aucun serveur en cours (serve.pid absent ou obsolète).",
-  "serve.already_running": "Serveur déjà lancé (pid {pid}). Utilisez : autonomous serve stop"
+  "serve.already_running": "Serveur déjà lancé (pid {pid}). Utilisez : autonomous serve stop",
+  "notify.botWaitingTitle": "Action requise",
+  "notify.botWaitingBody": "{bot} attend votre réponse."
 }

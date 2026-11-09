@@ -340,7 +340,10 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
     if (data.kind === "device.pairing" && !fromBroadcast) {
       pushNotification(t("notify.devicePairing", { name: data.name, code: data.code }));
     }
-    if (data.kind === "bot.busy" && data.bot) {
+    if (
+      (data.kind === "bot.busy" || data.kind === "bot.waiting") &&
+      data.bot
+    ) {
       const name = data.bot.name || data.bot;
       const i = state.bots.findIndex((b) => b.name === name);
       if (i >= 0 && data.bot.name) state.bots[i] = data.bot;

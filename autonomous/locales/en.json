@@ -42,5 +42,7 @@
   "serve.stopped": "Server stopped.",
   "serve.killed": "Server did not exit in time; killed pid {pid}.",
   "serve.not_running": "No running server (serve.pid missing or stale).",
-  "serve.already_running": "Server already running (pid {pid}). Use: autonomous serve stop"
+  "serve.already_running": "Server already running (pid {pid}). Use: autonomous serve stop",
+  "notify.botWaitingTitle": "Action needed",
+  "notify.botWaitingBody": "{bot} is waiting for your reply."
 }

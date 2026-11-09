@@ -11,13 +11,14 @@
 - `autonomous/avatars.py` — ready catalogue
 - `autonomous/migrations/001_schema.sql` — columns `avatar`, `avatar_color`
 
-**Last updated**: 2026-11-09 (picker : aperçu work, sélection notify)
+**Last updated**: 2026-11-10 (rail waiting : cadre orange clignotant)
 
 ## User behaviour
 
 - Badge **without background or circle**; sizes `sm` 40 / `md` 64 (Manager rail) / `lg` 96.
 - **work** (`status=busy`): Work animation.
 - **await** (`status=waiting`): jumps — authorisation, credentials, etc.
+- **Rail** (worker list + Manager): when `status=waiting`, the bot button gets an **orange blinking frame** (`.waiting`, `prefers-reduced-motion` → solid frame, no blink).
 - **notify**: unread assistant messages (bot not selected).
 - **red dot** `.avatar-pip.unread` (rail sm): unread **or** `status=waiting`.
 - **idle**: still; on hover, the eyes follow the mouse.

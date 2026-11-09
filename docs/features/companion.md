@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-09 (séparateur au-dessus de macOS, pas du log)
+**Last updated**: 2026-11-10 (nudge compagnon après 10s en waiting)
 
 ## User behaviour
 
@@ -15,6 +15,7 @@
 - **MCP**: the user adds a command and arguments on the companion. `%LOCALAPPDATA%` and other `%NAME%` are expanded at launch (the saved value keeps the `%NAME%`). The companion speaks JSON-RPC, one object per line (VectorCraft and the MCP standard). No automatic detection of already installed MCPs. Running the command by hand in a terminal does not connect it: it just waits on its standard input.
 - **Per-bot authorisation**: in the bot's details, the **+** icon opens a small window: choose the companion, then the MCP server, then Add. Without this row, `mcp_list` is empty and `mcp_call` is refused, even if the companion is online. The row stays if the PC shuts down; the tools come back on reconnection. Two companions can expose the same name: the pair is what counts. An already launched Pi session only sees the new extension in the next process.
 - **Notifications**: the agent calls `notify_user` only when the user asked to be notified. In the thread: centred yellow card (title + text), not a tool line, and not the "Notification sent…" bubble that repeats the same thing. In Settings → Companions, a **Notifications** checkbox per PC (ticked by default) chooses who receives them. **Test notification**, on that same page, sends "This is a test notification." to the ticked, online companions, without a conversation. The companion shows, according to its checkboxes: badge on the icon, Windows on-screen message, sound. A click on this message (or on the icon while the badge is there) brings up `/b/<bot>/discussion`. If a hub tab is already open, that tab comes to the foreground instead of opening another. Otherwise the browser opens. Nothing is sent on each webhook.
+- **Waiting nudge**: when a bot enters `status=waiting` (vault / approval / clarify / desk…), the hub rail shows an orange blinking frame immediately. After **10 s** still waiting, the server pushes one companion notification (`notify.botWaitingTitle` / `notify.botWaitingBody`). Leaving `waiting` (or deleting the bot) cancels the timer; a second patch to `waiting` while already waiting does not restart it. No companion checked / offline → silent skip (UI frame still shows).
 - The companion program no longer offers these two checkboxes: they stay in the bot's details. An old binary may still send `egress` / `killswitch` on `PATCH /devices/me`; the server stores them on the device and no longer uses them for iptables.
 
 ## Implementation

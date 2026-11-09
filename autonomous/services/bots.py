@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import threading
 import unicodedata
 import uuid
 from datetime import datetime, timezone
@@ -17,6 +19,14 @@ from autonomous.paths import bot_dir
 from autonomous.services.errors import Conflict, NotFound, ValidationError
 from autonomous.services.events import BUS
 
+log = logging.getLogger("autonomous.bots")
+
+# Companion nudge once a bot stays in `waiting` for this long.
+WAITING_NUDGE_DELAY_S = 10.0
+_WAITING_NUDGE_LOCK = threading.Lock()
+_WAITING_NUDGE_TIMERS: dict[str, threading.Timer] = {}
+_WAITING_NUDGE_SENT: set[str] = set()
+
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
@@ -29,6 +39,71 @@ _MAX_DISPLAY_LEN = 64
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _waiting_nudge_key(name: str, home: Path | None) -> str:
+    return f"{home or ''}|{name}"
+
+
+def cancel_waiting_nudge(name: str, *, home: Path | None = None) -> None:
+    """Drop a pending / sent companion nudge for this waiting episode."""
+    key = _waiting_nudge_key(name, home)
+    with _WAITING_NUDGE_LOCK:
+        timer = _WAITING_NUDGE_TIMERS.pop(key, None)
+        _WAITING_NUDGE_SENT.discard(key)
+    if timer is not None:
+        timer.cancel()
+
+
+def _fire_waiting_nudge(name: str, home: Path | None) -> None:
+    key = _waiting_nudge_key(name, home)
+    with _WAITING_NUDGE_LOCK:
+        _WAITING_NUDGE_TIMERS.pop(key, None)
+        if key in _WAITING_NUDGE_SENT:
+            return
+        _WAITING_NUDGE_SENT.add(key)
+    try:
+        bot = get_bot(name, home=home)
+    except NotFound:
+        cancel_waiting_nudge(name, home=home)
+        return
+    if bot.get("status") != "waiting":
+        cancel_waiting_nudge(name, home=home)
+        return
+    label = bot.get("label") or name
+    try:
+        from autonomous.services import devices as devices_svc
+
+        devices_svc.notify_user(
+            t("notify.botWaitingTitle"),
+            t("notify.botWaitingBody", bot=label),
+            bot=name,
+            home=home,
+        )
+    except Exception as exc:
+        # No companion checked / offline — UI blink still covers the wait.
+        log.info("waiting nudge skipped for %s: %s", name, exc)
+
+
+def schedule_waiting_nudge(
+    name: str,
+    *,
+    home: Path | None = None,
+    delay_s: float | None = None,
+) -> None:
+    """Notify the companion once after `delay_s` if the bot is still waiting."""
+    key = _waiting_nudge_key(name, home)
+    delay = WAITING_NUDGE_DELAY_S if delay_s is None else float(delay_s)
+    with _WAITING_NUDGE_LOCK:
+        prev = _WAITING_NUDGE_TIMERS.pop(key, None)
+        _WAITING_NUDGE_SENT.discard(key)
+    if prev is not None:
+        prev.cancel()
+    timer = threading.Timer(delay, _fire_waiting_nudge, args=(name, home))
+    timer.daemon = True
+    with _WAITING_NUDGE_LOCK:
+        _WAITING_NUDGE_TIMERS[key] = timer
+    timer.start()
 
 
 def _decode(row: dict[str, Any]) -> dict[str, Any]:
@@ -453,6 +528,12 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
     }
     if not updates:
         return get_bot(name, home=home)
+    prev_status: str | None = None
+    if "status" in updates:
+        try:
+            prev_status = str(get_bot(name, home=home).get("status") or "")
+        except NotFound:
+            prev_status = None
     sets: list[str] = []
     vals: list[Any] = []
     if "label" in updates:
@@ -584,6 +665,10 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         BUS.publish("notification", {"kind": "bot.busy", "bot": bot}, bot=name)
     elif updates.get("status") == "waiting":
         BUS.publish("notification", {"kind": "bot.waiting", "bot": bot}, bot=name)
+        if prev_status != "waiting":
+            schedule_waiting_nudge(name, home=home)
+    elif "status" in updates and prev_status == "waiting":
+        cancel_waiting_nudge(name, home=home)
     return bot
 
 
@@ -641,6 +726,7 @@ def reset_token_usage(name: str, *, home: Path | None = None) -> dict[str, Any]:
 def delete_bot(name: str, home: Path | None = None, destroy_desk: bool = True) -> None:
     bot_row = get_bot(name, home=home)
     bid = bot_row.get("id") or ""
+    cancel_waiting_nudge(name, home=home)
     try:
         from autonomous.services.pi_rpc import MANAGER
 

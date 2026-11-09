@@ -88,7 +88,10 @@
           :key="b.name"
           type="button"
           class="rail-manager"
-          :class="{ active: state.currentBot === b.name }"
+          :class="{
+            active: state.currentBot === b.name,
+            waiting: b.status === 'waiting',
+          }"
           :title="b.label || b.name"
           @click="selectBot(b.name)"
         >
@@ -102,7 +105,14 @@
           {{ t("nav.bots") }}
         </li>
         <li v-for="b in railWorkers" :key="b.name">
-          <button type="button" :class="{ active: state.currentBot === b.name }" @click="selectBot(b.name)">
+          <button
+            type="button"
+            :class="{
+              active: state.currentBot === b.name,
+              waiting: b.status === 'waiting',
+            }"
+            @click="selectBot(b.name)"
+          >
             <BotAvatar :bot="b" size="sm" />
             <span class="bot-copy">
               <span class="bot-name">{{ b.label || b.name }}</span>
