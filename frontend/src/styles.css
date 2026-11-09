@@ -4637,11 +4637,13 @@ label.muted {
   gap: 0.35rem;
 }
 
-/* Fixed live panel — avoids the chat jumping when each tool's args/result differ. */
-.tool-group.live .tool-group-live {
-  min-height: 12.5rem;
-  max-height: 12.5rem;
-  overflow: auto;
+/* Compact live line — fixed height so rapid tool spam does not reflow the thread. */
+.tool-group.live .tool-group-live-compact {
+  min-height: 2.35rem;
+  max-height: 2.35rem;
+  overflow: hidden;
+  contain: layout paint;
+  box-sizing: border-box;
 }
 
 .tool-group-live.grounding {
@@ -5120,6 +5122,57 @@ label.muted {
   width: 18px;
   height: 18px;
   flex: none;
+}
+
+.bubble.botmail.botmail-collapsible {
+  cursor: pointer;
+  user-select: text;
+}
+
+.bubble.botmail.botmail-collapsible:hover {
+  background: #eaf1ff;
+}
+
+.botmail-body {
+  display: block;
+  text-align: center;
+}
+
+.botmail-body.collapsed .botmail-body-html {
+  display: inline;
+}
+
+.botmail-body.collapsed .botmail-body-html > p {
+  display: inline;
+  margin: 0;
+}
+
+.botmail-body.collapsed .botmail-body-html > p + p,
+.botmail-body.collapsed .botmail-body-html > ul,
+.botmail-body.collapsed .botmail-body-html > ol,
+.botmail-body.collapsed .botmail-body-html > pre,
+.botmail-body.collapsed .botmail-body-html > blockquote {
+  display: none;
+}
+
+.botmail-fold {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #2f6fed;
+  vertical-align: middle;
+  opacity: 0.85;
+}
+
+.botmail-body.expanded {
+  text-align: left;
+}
+
+.botmail-body.expanded .botmail-fold {
+  display: block;
+  margin: 0.45rem 0 0;
+  text-align: center;
 }
 
 .notice-card {

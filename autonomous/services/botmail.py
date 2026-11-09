@@ -954,7 +954,7 @@ def _try_deliver_inbox_item(item_id: str, *, home: Path | None) -> bool:
     bot = item["bot"]
     with _lock_for(bot):
         status = (bots_svc.get_bot(bot, home=home).get("status") or "idle")
-        if status in ("busy", "waiting"):
+        if status == "waiting":
             return False
         return _deliver_locked(item, home=home)
 
@@ -966,7 +966,8 @@ def _drain_one(bot: str, *, home: Path | None) -> bool:
         bot_id = bots_svc.bot_uuid(bot, home=home)
     except NotFound:
         return False
-    if status in ("busy", "waiting"):
+    # Waiting on a human form — keep mail queued. Busy recipients get a mid-run steer.
+    if status == "waiting":
         return False
     while True:
         with get_db(home) as conn:
@@ -1012,8 +1013,10 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
                 (_now(), item["id"]),
             )
         return False
-    if status in ("busy", "waiting"):
+    # Waiting on a human form — keep mail queued. Busy is OK: we steer mid-run.
+    if status == "waiting":
         return False
+    mid_run = status == "busy"
 
     from_bot = item.get("from_bot") or "?"
     from_id = item.get("from_bot_id")
@@ -1098,7 +1101,7 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
             f"{_INBOUND_LANG_RULE}\n\n"
             f"Question:\n{body}"
         )
-        _start_agent(bot, prompt, home=home)
+        _start_agent(bot, prompt, home=home, mid_run=mid_run)
         return True
 
     if kind == "reply":
@@ -1127,7 +1130,7 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
             "Tell the user in the language of your conversation with them "
             "(one language only; do not mix French and English)."
         )
-        _start_agent(bot, prompt, home=home)
+        _start_agent(bot, prompt, home=home, mid_run=mid_run)
         return True
 
     # tell
@@ -1156,17 +1159,32 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
         f"{_INBOUND_LANG_RULE}\n\n"
         f"{body}"
     )
-    _start_agent(bot, prompt, home=home)
+    _start_agent(bot, prompt, home=home, mid_run=mid_run)
     return True
 
 
-def _start_agent(bot: str, prompt: str, *, home: Path | None) -> None:
+def _start_agent(
+    bot: str,
+    prompt: str,
+    *,
+    home: Path | None,
+    mid_run: bool = False,
+) -> None:
     from autonomous.services import reactions as reactions_svc
 
     # Mail is not the user's bubble — don't react on a stale turn.
     reactions_svc.set_turn_message(bot, None)
     backend = str(settings_svc.get("agent_backend", home=home, default="pi") or "pi")
     if backend == "null":
+        return
+    if mid_run:
+        from autonomous.services.agent import steer_mid_run
+
+        if steer_mid_run(bot, prompt, home=home):
+            return
+        # Steer unavailable — leave the received card; a later idle drain won't
+        # re-fire this item (already delivered). Best-effort only.
+        log.warning("botmail mid-run steer missed for %s — card delivered without agent nudge", bot)
         return
     from autonomous.services.agent import get_agent
 

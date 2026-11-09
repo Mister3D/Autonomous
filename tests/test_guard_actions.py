@@ -5,9 +5,14 @@ from __future__ import annotations
 from autonomous.services import bots as bots_svc
 from autonomous.services import chat as chat_svc
 from autonomous.services.agent import (
+    _clear_pending_guard_gate,
+    _pop_pending_guard_gate,
+    _queue_pending_guard_gate,
     _resolve_action_limit,
     _resolve_review_every,
+    _wants_guard_continue,
     _wants_guard_stop,
+    _wants_guard_token,
 )
 from autonomous.services import settings as settings_svc
 
@@ -70,3 +75,16 @@ def test_guard_stop_parse():
     assert _wants_guard_stop("guard : stop")
     assert not _wants_guard_stop("GUARD:CONTINUE")
     assert not _wants_guard_stop("still working")
+    assert _wants_guard_continue("GUARD:CONTINUE\nnext step")
+    assert not _wants_guard_continue("GUARD:STOP")
+    assert _wants_guard_token("GUARD:CONTINUE\nnext step")
+    assert _wants_guard_token("guard : stop")
+    assert not _wants_guard_token("still working")
+
+
+def test_pending_guard_gate_queue():
+    _clear_pending_guard_gate("g-gate")
+    _queue_pending_guard_gate("g-gate", count=100, limit=1000, review_every=100)
+    info = _pop_pending_guard_gate("g-gate")
+    assert info == {"count": 100, "limit": 1000, "review_every": 100}
+    assert _pop_pending_guard_gate("g-gate") is None

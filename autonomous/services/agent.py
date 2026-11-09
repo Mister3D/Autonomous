@@ -259,12 +259,24 @@ class PiAgent:
             "action_limit": action_limit,
             "review_every": review_every,
             "reviews_steered": set(),  # milestones already steered this process
+            # Blocking review gate: no tools after the milestone until GUARD:CONTINUE|STOP.
+            "guard_gate": None,  # None | "awaiting"
+            "guard_gate_count": None,  # action_count at which the gate opened
+            "guard_gate_violation": False,  # tools attempted while gate open
+            "guard_tools_blocked": False,  # gate-only follow-up run: block every tool
+            # CONTINUE arrived after a gate abort — settle must resume the task.
+            "guard_resume_task": False,
             "pending_secret_reformulate": False,
             "meta_base": {
                 "pi_session_id": session_id,
                 "model": model,
             },
         }
+        gate_mode = _take_guard_gate_run_mode(bot)
+        if gate_mode:
+            state["guard_gate"] = "awaiting"
+            state["guard_gate_count"] = int(gate_mode.get("count") or 0)
+            state["guard_tools_blocked"] = True
 
         def flush_pending_images(*, persist: bool = False) -> None:
             """Ensure files_share_image markdown is in the assistant text (even if model forgot)."""
@@ -324,6 +336,18 @@ class PiAgent:
             content = state["content"]
             if error and not content:
                 content = f"⚠️ {error}"
+            # Whitespace-only turns (common before tool batches) leave timestamp-only
+            # bubbles in the thread — drop the placeholder instead of finalising.
+            if not error and not (content or "").strip() and not state.get(
+                "pending_images_md"
+            ):
+                try:
+                    chat_svc.discard_message(bot, msg_id, home=home)
+                except Exception:
+                    log.exception("discard empty assistant failed for %s", bot)
+                state["msg_id"] = None
+                state["content"] = ""
+                return
             meta = {
                 **state["meta_base"],
                 "aborted": state["aborted"],
@@ -353,6 +377,12 @@ class PiAgent:
                     if delta:
                         msg_id = ensure_assistant()
                         state["content"] += delta
+                        # Open the gate as soon as CONTINUE streams — tools in the
+                        # same turn must not race message_end and get aborted.
+                        if _wants_guard_continue(state["content"]):
+                            _release_guard_gate(
+                                bot, state=state, from_continue=True
+                            )
                         # Never stream raw vault secrets to the UI.
                         try:
                             from autonomous.services import vault as vault_svc
@@ -387,6 +417,9 @@ class PiAgent:
                     close_assistant()
             elif rtype == "tool_execution_start":
                 close_assistant()
+                # CONTINUE may already be in the closed bubble content.
+                if _wants_guard_continue(state.get("content") or ""):
+                    _release_guard_gate(bot, state=state, from_continue=True)
                 state["action_count"] = int(state.get("action_count") or 0) + 1
                 limit = int(state.get("action_limit") or 1000)
                 review_every = int(state.get("review_every") or 0)
@@ -415,6 +448,17 @@ class PiAgent:
                         pass
                     state["settled"].set()
                     return
+                # Blocking review: no tools after the milestone until GUARD:CONTINUE|STOP.
+                if (
+                    state.get("guard_gate") == "awaiting"
+                    and int(state.get("guard_gate_count") or 0) > 0
+                    and count > int(state["guard_gate_count"])
+                ):
+                    _block_tools_for_guard_gate(bot, state=state, home=home)
+                    return
+                if state.get("guard_tools_blocked"):
+                    _block_tools_for_guard_gate(bot, state=state, home=home)
+                    return
                 # Periodic self-check: steer the LLM (not a full conversation reset).
                 if (
                     review_every > 0
@@ -431,6 +475,9 @@ class PiAgent:
                             review_every=review_every,
                             home=home,
                         )
+                        state["guard_gate"] = "awaiting"
+                        state["guard_gate_count"] = count
+                        state["guard_gate_violation"] = False
                 call_id = str(record.get("toolCallId") or "")
                 tool_name = str(record.get("toolName") or "tool")
                 args = record.get("args") if isinstance(record.get("args"), dict) else {}
@@ -546,6 +593,21 @@ class PiAgent:
                     if text and state["msg_id"]:
                         state["content"] = text
                         flush_pending_images(persist=True)
+                    if state.get("guard_gate") == "awaiting" and text:
+                        if _wants_guard_continue(text):
+                            _release_guard_gate(
+                                bot, state=state, from_continue=True
+                            )
+                        elif _wants_guard_stop(text):
+                            _release_guard_gate(bot, state=state)
+                        elif (text or "").strip() and not _wants_guard_token(text):
+                            # Spoke without the mandatory token — re-steer, keep gate.
+                            try:
+                                MANAGER.steer(bot, _GUARD_GATE_RETRY_STEER)
+                            except Exception:
+                                log.exception(
+                                    "guard gate retry steer failed for %s", bot
+                                )
                     if text and _wants_guard_stop(text):
                         state["aborted"] = True
                         state["error"] = (
@@ -702,6 +764,31 @@ class PiAgent:
                     )
                 else:
                     close_assistant(error=state["error"])
+                # Review gate still open at settle → dedicated follow-up that only
+                # accepts GUARD:CONTINUE / GUARD:STOP (no tools until then).
+                stopped_by_guard = bool(
+                    state.get("aborted")
+                    and state.get("error")
+                    and "GUARD:STOP" in str(state.get("error") or "")
+                )
+                need_guard_gate = (
+                    state.get("guard_gate") == "awaiting"
+                    or state.get("guard_gate_violation")
+                ) and not stopped_by_guard
+                need_guard_resume = bool(state.get("guard_resume_task")) and not (
+                    stopped_by_guard or soft_busy
+                )
+                if need_guard_gate and not soft_busy and not need_guard_resume:
+                    _queue_pending_guard_gate(
+                        bot,
+                        count=int(
+                            state.get("guard_gate_count")
+                            or state.get("action_count")
+                            or 0
+                        ),
+                        limit=int(state.get("action_limit") or 1000),
+                        review_every=int(state.get("review_every") or 0),
+                    )
                 if silent_abort:
                     # Drop empty / abort placeholders left mid-stream.
                     try:
@@ -769,6 +856,20 @@ class PiAgent:
                             target=_kick_secret_reformulate_run,
                             args=(bot, home),
                             name=f"secret-reform-{bot}",
+                            daemon=True,
+                        ).start()
+                    elif need_guard_resume:
+                        threading.Thread(
+                            target=_kick_guard_resume_run,
+                            args=(bot, home),
+                            name=f"guard-resume-{bot}",
+                            daemon=True,
+                        ).start()
+                    elif need_guard_gate:
+                        threading.Thread(
+                            target=_kick_guard_gate_run,
+                            args=(bot, home),
+                            name=f"guard-gate-{bot}",
                             daemon=True,
                         ).start()
                     else:
@@ -867,6 +968,152 @@ def _wants_guard_stop(text: str) -> bool:
     if not text:
         return False
     return bool(re.search(r"\bGUARD\s*:\s*STOP\b", text, flags=re.IGNORECASE))
+
+
+def _wants_guard_continue(text: str) -> bool:
+    if not text:
+        return False
+    return bool(re.search(r"\bGUARD\s*:\s*CONTINUE\b", text, flags=re.IGNORECASE))
+
+
+def _wants_guard_token(text: str) -> bool:
+    return _wants_guard_continue(text) or _wants_guard_stop(text)
+
+
+# bot → {count, limit, review_every} while a blocking review follow-up is due.
+_pending_guard_gate: dict[str, dict[str, int]] = {}
+# bot → info for the next start_run that must open in gate-only mode (block all tools).
+_guard_gate_run_mode: dict[str, dict[str, int]] = {}
+_pending_guard_gate_lock = threading.Lock()
+
+
+def _queue_pending_guard_gate(
+    bot: str, *, count: int, limit: int, review_every: int
+) -> None:
+    with _pending_guard_gate_lock:
+        _pending_guard_gate[bot] = {
+            "count": int(count),
+            "limit": int(limit),
+            "review_every": int(review_every),
+        }
+
+
+def _clear_pending_guard_gate(bot: str) -> None:
+    with _pending_guard_gate_lock:
+        _pending_guard_gate.pop(bot, None)
+        _guard_gate_run_mode.pop(bot, None)
+
+
+def _pop_pending_guard_gate(bot: str) -> dict[str, int] | None:
+    with _pending_guard_gate_lock:
+        return _pending_guard_gate.pop(bot, None)
+
+
+def _take_guard_gate_run_mode(bot: str) -> dict[str, int] | None:
+    with _pending_guard_gate_lock:
+        return _guard_gate_run_mode.pop(bot, None)
+
+
+def _arm_guard_gate_run_mode(bot: str, info: dict[str, int]) -> None:
+    with _pending_guard_gate_lock:
+        _guard_gate_run_mode[bot] = dict(info)
+
+
+def _release_guard_gate(
+    bot: str,
+    *,
+    state: dict[str, Any],
+    from_continue: bool = False,
+) -> None:
+    """Allow tools again after GUARD:CONTINUE / STOP (STOP still aborts separately)."""
+    # If CONTINUE arrives after we already aborted for a gate violation, the
+    # in-flight turn is dead — schedule a task resume on settle (do not clear
+    # that need by wiping violation without a follow-up).
+    if from_continue and (
+        state.get("guard_gate_violation") or state.get("aborted")
+    ):
+        state["guard_resume_task"] = True
+    state["guard_gate"] = None
+    state["guard_gate_count"] = None
+    state["guard_tools_blocked"] = False
+    state["guard_gate_violation"] = False
+    _clear_pending_guard_gate(bot)
+
+
+def _block_tools_for_guard_gate(
+    bot: str,
+    *,
+    state: dict[str, Any],
+    home: Path | None,
+) -> None:
+    """Abort the run when the model calls tools while the review gate is closed.
+
+    No chat card — the review card already signals the gate; a follow-up run asks
+    for GUARD:CONTINUE / STOP quietly.
+    """
+    del home  # reserved (cards intentionally omitted)
+    # Undo the increment — the tool did not actually run.
+    try:
+        state["action_count"] = max(0, int(state.get("action_count") or 1) - 1)
+    except Exception:
+        pass
+    state["guard_gate_violation"] = True
+    state["aborted"] = True
+    mark_silent_abort(bot)
+    try:
+        MANAGER.abort(bot)
+    except Exception:
+        pass
+    state["settled"].set()
+
+
+_GUARD_GATE_RETRY_STEER = (
+    "GUARD RAIL still open. Do NOT call tools. "
+    "Reply with exactly GUARD:CONTINUE (then resume the task) "
+    "or GUARD:STOP (and stop). Nothing else before that token."
+)
+
+
+_GUARD_GATE_RUN_PROMPT = (
+    "GUARD RAIL checkpoint — mandatory. You reached a review milestone and tried "
+    "to keep calling tools without answering.\n"
+    "You have used about {count} tool calls since the last user / webhook / cron "
+    "(hard limit {limit}; reviews every {review_every}).\n"
+    "Do NOT call any tools yet.\n"
+    "Reply with exactly one of:\n"
+    "GUARD:CONTINUE — you are progressing and will resume the task right after\n"
+    "GUARD:STOP — you should stop now\n"
+    "If you choose CONTINUE, immediately continue the unfinished task after the token."
+)
+
+
+_MID_RUN_STEER_PREFIX = (
+    "MID-TASK MESSAGE — someone wrote while you were working.\n"
+    "Answer them briefly in the chat now, then continue your current task unless "
+    "they clearly ask you to stop or change direction.\n\n"
+    "Their message:\n"
+)
+
+
+def steer_mid_run(
+    bot: str,
+    prompt: str,
+    *,
+    home: Path | None = None,
+) -> bool:
+    """Inject a human/peer message into the live Pi turn. Returns True if steered."""
+    del home  # reserved for future session routing
+    text = str(prompt or "").strip()
+    if not text:
+        return False
+    if not run_in_progress(bot):
+        return False
+    try:
+        result = MANAGER.steer(bot, f"{_MID_RUN_STEER_PREFIX}{text}")
+    except Exception:
+        log.exception("mid-run steer failed for %s", bot)
+        return False
+    return result is not None
 
 
 _SECRET_REFORMULATE_STEER = (
@@ -998,17 +1245,17 @@ def _steer_progress_review(
     review_every: int,
     home: Path | None,
 ) -> None:
-    """Steer Pi: ask whether the agent is progressing and wants to continue."""
+    """Steer Pi: blocking review — no more tools until GUARD:CONTINUE|STOP."""
     remaining = max(0, limit - count)
     steer_msg = (
-        f"GUARD RAIL checkpoint: you have used {count} tool calls since the last "
-        f"user message / webhook / cron (hard limit {limit}, ~{remaining} left). "
-        f"Reviews fire every {review_every} tools.\n"
-        "Answer briefly:\n"
-        "1) Are you still making progress toward the user's goal?\n"
-        "2) Do you want to continue?\n"
-        "If you should stop, reply with exactly GUARD:STOP and do not call more tools.\n"
-        "If you continue, reply with exactly GUARD:CONTINUE then take the next useful step."
+        f"GUARD RAIL checkpoint (BLOCKING): you have used {count} tool calls since "
+        f"the last user message / webhook / cron (hard limit {limit}, "
+        f"~{remaining} left). Reviews fire every {review_every} tools.\n"
+        "Do NOT call any more tools until you answer.\n"
+        "Reply with exactly one of:\n"
+        "GUARD:CONTINUE — still progressing; then take the next useful step\n"
+        "GUARD:STOP — stop now, no more tools\n"
+        "Nothing else before that token."
     )
     try:
         chat_svc.create_message(
@@ -1033,6 +1280,77 @@ def _steer_progress_review(
         MANAGER.steer(bot, steer_msg)
     except Exception:
         log.exception("guard review steer failed for %s", bot)
+
+
+_GUARD_RESUME_PROMPT = (
+    "GUARD:CONTINUE was accepted. An in-flight tool batch was interrupted by the "
+    "review gate. Resume your unfinished task immediately with the next useful "
+    "tool calls. Do not redo work that already succeeded."
+)
+
+
+def _kick_guard_resume_run(bot: str, home: Path | None) -> None:
+    """Resume the task after CONTINUE landed on an already-aborted gate turn."""
+    import time
+
+    time.sleep(0.35)
+    try:
+        row = bots_svc.get_bot(bot, home=home)
+        if (row.get("status") or "") in ("busy", "waiting"):
+            time.sleep(1.0)
+            if (bots_svc.get_bot(bot, home=home).get("status") or "") in (
+                "busy",
+                "waiting",
+            ):
+                log.warning("guard resume deferred — bot %s still busy", bot)
+                return
+        get_agent(
+            str(settings_svc.get("agent_backend", home=home, default="pi") or "pi"),
+            home=home,
+        ).start_run(bot, _GUARD_RESUME_PROMPT, home=home)
+    except Exception:
+        log.exception("guard resume run failed for %s", bot)
+
+
+def _kick_guard_gate_run(bot: str, home: Path | None) -> None:
+    """Follow-up run that only accepts GUARD:CONTINUE / STOP before tools resume."""
+    import time
+
+    time.sleep(0.35)
+    info = _pop_pending_guard_gate(bot)
+    if not info:
+        return
+    try:
+        row = bots_svc.get_bot(bot, home=home)
+        if (row.get("status") or "") in ("busy", "waiting"):
+            _queue_pending_guard_gate(
+                bot,
+                count=info["count"],
+                limit=info["limit"],
+                review_every=info["review_every"],
+            )
+            time.sleep(1.0)
+            if (bots_svc.get_bot(bot, home=home).get("status") or "") in (
+                "busy",
+                "waiting",
+            ):
+                log.warning("guard gate deferred — bot %s still busy", bot)
+                return
+            info = _pop_pending_guard_gate(bot) or info
+        # Mark the next start_run as a gate-only turn (all tools blocked until CONTINUE).
+        _arm_guard_gate_run_mode(bot, info)
+        prompt = _GUARD_GATE_RUN_PROMPT.format(
+            count=info["count"],
+            limit=info["limit"],
+            review_every=info["review_every"] or "?",
+        )
+        get_agent(
+            str(settings_svc.get("agent_backend", home=home, default="pi") or "pi"),
+            home=home,
+        ).start_run(bot, prompt, home=home)
+    except Exception:
+        log.exception("guard gate run failed for %s", bot)
+        _clear_pending_guard_gate(bot)
 
 
 def _format_tool_card(

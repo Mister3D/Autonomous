@@ -28,22 +28,13 @@
       </svg>
     </button>
 
-    <!-- Pendant le run : résultat du dernier appel d’outil (tous outils, pas seulement grounding). -->
-    <div v-if="livePreview" class="tool-group-live">
+    <!-- Live: one compact line only (no args/result panel — that height thrash jumps the thread). -->
+    <div v-if="livePreview" class="tool-group-live tool-group-live-compact">
       <div class="tool-live-head">
         <span class="tool-live-name">{{ livePreview.name }}</span>
         <span class="tool-live-status">{{ livePreview.status }}</span>
         <span v-if="livePreview.hint" class="tool-live-hint">{{ livePreview.hint }}</span>
       </div>
-      <div v-if="livePreview.args" class="tool-section">
-        <span class="tool-section-label">{{ t("chat.toolArgs") }}</span>
-        <pre>{{ livePreview.args }}</pre>
-      </div>
-      <div v-if="livePreview.result" class="tool-section">
-        <span class="tool-section-label">{{ t("chat.toolResult") }}</span>
-        <pre>{{ livePreview.result }}</pre>
-      </div>
-      <p v-else-if="!livePreview.args" class="tool-empty">{{ t("chat.toolNoDetail") }}</p>
     </div>
 
     <!-- Liste d’outils (repliée) : pas de blocs séparés cible / pointeur. -->
@@ -451,7 +442,7 @@ const liveTick = computed(() => {
   return `${last.id}:${last.meta?.status || ""}:${String(last.content || "").length}`;
 });
 
-/** Aperçu live : dernier outil, quel qu’il soit (vm_*, browser_*, …). */
+/** Compact live line: last tool name + status (details stay in the folded list). */
 const livePreview = computed(() => {
   if (props.sealed) return null;
   const m = lastTool.value;
@@ -460,8 +451,6 @@ const livePreview = computed(() => {
     name: m.meta?.tool_name || t("chat.tool"),
     status: statusLabel(m),
     hint: pointerHint(m),
-    args: argsText(m),
-    result: resultText(m),
   };
 });
 

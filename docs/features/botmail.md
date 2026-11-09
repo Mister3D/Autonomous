@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/botmail.py`, `autonomous/migrations/001_schema.sql`, `autonomous/api/bots.py` (`/mail/*` routes), `autonomous/pi_extensions/botmail.ts`, `autonomous/services/{chat,agent,pi_rpc}.py`, `frontend/src/{mentions.js,components/ChatPane.vue}`  
-**Last updated**: 2026-11-09 (composer @ menu: ArrowUp/Down keep highlight)
+**Last updated**: 2026-11-09 (collapsible botmail cards in chat)
 
 ## User behaviour
 
@@ -16,11 +16,12 @@ In a bot's input area:
 - **Peer-facing content** is always authored by the sending bot: objective, relevant facts, constraints, expected result. The peer does **not** see this chat. Address them as « you »; never a raw relative clause (« if she… »).
 - Exchanges are **async**. Confirming transmission ≠ task finished. Prefer Ask (or follow-up) when the user said « bring it back here »; Tell when they continue in the peer’s chat.
 - Inter-bot mail does **not** grant new rights and does not replace vault / approval / external-send consent.
-- If the recipient is **busy** or **waiting**, the message is **queued** and processed when idle.
+- If the recipient is **waiting** (vault / approval / …), the message stays **queued** until idle. If they are **busy** mid-run, delivery tries a **mid-run steer** so they can answer then continue; otherwise it queues.
 - `@name` resolves `name` (case-insensitive) or `label`. Composer `@` autocomplete: ↑/↓ move the highlight; Enter/Tab inserts.
 - In the thread: centred blue cards for inter-bot mail. UI copy comes from frontend locales (en/fr).
   - **Sent** (sender): when `bot_tell` / `bot_ask` / API mail succeeds, a card shows the **peer-facing body** (« Sent to @x »). Ask *replies* still stamp the assistant bubble as outgoing.
   - **Received** (peer): « Received from @x » with the same body (or the ask answer).
+  - Long bodies are **collapsed** to the first sentence; a click on the card expands/collapses (links stay clickable without toggling).
 
 Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** only — see [manager.md](./manager.md)). Invisible in the thread. `bot_ask` waits (`status=waiting`) — Managers must not use it to orchestrate.
 
@@ -44,6 +45,7 @@ Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** 
 - `null` backend (tests): route_intent is set, peer stays empty until an explicit `tell`/`ask`.
 - Capture `state["content"]` before `close_assistant()` for ask replies.
 - UI locales: escape every `@` as `{'@'}`.
+- Botmail collapse: sentence break requires `.!?…` followed by whitespace/end (so `Vue.js` does not cut early). Expand state is UI-only (per message id, not persisted).
 - Bot deletion → `botmail.purge_for_bot`; ghost sender → `cancelled`.
 
 ## Quick check

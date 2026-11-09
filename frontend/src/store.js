@@ -272,6 +272,12 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
       markBotUnread(bot);
     }
   }
+  if (type === "message.deleted" && data.bot && data.id) {
+    const list = state.messages[data.bot];
+    if (list) {
+      state.messages[data.bot] = list.filter((m) => m.id !== data.id);
+    }
+  }
   if (type === "message.cleared" && data.bot) {
     state.messages[data.bot] = [];
     const i = state.bots.findIndex((b) => b.name === data.bot);

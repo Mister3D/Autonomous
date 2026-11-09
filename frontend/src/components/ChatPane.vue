@@ -269,8 +269,27 @@
                     botmail: !!botmailDirection(item.message),
                     sent: botmailDirection(item.message) === 'sent',
                     received: botmailDirection(item.message) === 'received',
+                    'botmail-open':
+                      !!botmailDirection(item.message) &&
+                      isBotmailExpanded(item.message),
+                    'botmail-collapsible':
+                      !!botmailDirection(item.message) &&
+                      botmailCollapsible(item.message),
                   },
                 ]"
+                :title="
+                  botmailCollapsible(item.message)
+                    ? isBotmailExpanded(item.message)
+                      ? t('chat.mailCollapse')
+                      : t('chat.mailExpand')
+                    : undefined
+                "
+                :aria-expanded="
+                  botmailCollapsible(item.message)
+                    ? isBotmailExpanded(item.message)
+                    : undefined
+                "
+                @click="onBotmailBubbleClick(item.message, $event)"
               >
                 <div
                   v-if="botmailDirection(item.message)"
@@ -359,6 +378,28 @@
                   v-if="isEventTrigger(item.message)"
                   v-html="render(eventDisplay(item.message))"
                 />
+                <div
+                  v-else-if="botmailDirection(item.message) && showBubbleText(item.message)"
+                  class="botmail-body"
+                  :class="{
+                    collapsed:
+                      botmailCollapsible(item.message) &&
+                      !isBotmailExpanded(item.message),
+                    expanded: isBotmailExpanded(item.message),
+                  }"
+                >
+                  <span
+                    class="botmail-body-html"
+                    v-html="renderBotmail(item.message)"
+                  />
+                  <span
+                    v-if="botmailCollapsible(item.message)"
+                    class="botmail-fold"
+                    aria-hidden="true"
+                  >{{
+                    isBotmailExpanded(item.message) ? "▴" : "▾"
+                  }}</span>
+                </div>
                 <span
                   v-else-if="showBubbleText(item.message)"
                   v-html="render(item.message)"
@@ -579,7 +620,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { marked } from "marked";
@@ -1403,6 +1452,60 @@ function botmailLead(m) {
   return "";
 }
 
+/** Expanded botmail cards (click toggles). Keys = message id. */
+const botmailExpanded = reactive({});
+
+function botmailPlainBody(m) {
+  let raw = String(m?.content || "").trim();
+  if (botmailDirection(m) === "received") {
+    raw = raw.replace(
+      /^@[a-zA-Z0-9_-]+\s+m['’]a envoyé un message\s*:\s*/i,
+      "",
+    );
+  }
+  return raw.trim();
+}
+
+/** First sentence (period must be followed by space/end — keeps Vue.js / paths intact). */
+function botmailFirstSentence(text) {
+  const flat = String(text || "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const m = flat.match(/^(.+?(?:[.!?…](?=\s|$)))/);
+  if (m) return m[1].trim();
+  const line = String(text || "").split(/\n/, 1)[0].trim();
+  if (line.length <= 160) return line;
+  return `${line.slice(0, 157).trimEnd()}…`;
+}
+
+function botmailCollapsible(m) {
+  if (!botmailDirection(m)) return false;
+  const full = botmailPlainBody(m);
+  if (!full) return false;
+  const first = botmailFirstSentence(full);
+  if (!first) return false;
+  return full.slice(first.length).replace(/^\s+/, "").length > 0;
+}
+
+function isBotmailExpanded(m) {
+  return !!(m?.id && botmailExpanded[m.id]);
+}
+
+function renderBotmail(m) {
+  if (!botmailCollapsible(m) || isBotmailExpanded(m)) return render(m);
+  return render(botmailFirstSentence(botmailPlainBody(m)));
+}
+
+function onBotmailBubbleClick(m, ev) {
+  if (!botmailCollapsible(m)) return;
+  const t = ev?.target;
+  if (t && typeof t.closest === "function") {
+    if (t.closest("a, button, input, textarea, summary, pre, code")) return;
+  }
+  const id = m?.id;
+  if (!id) return;
+  botmailExpanded[id] = !botmailExpanded[id];
+}
+
 /** Instruction seule, sans le préambule déjà dit par la première ligne. */
 function eventInstruction(m) {
   let text = String(m?.content || "").trim();
@@ -1556,6 +1659,18 @@ function guardItem(m) {
         text: t("chat.guardReview", { count: meta.action_count ?? "?" }),
       };
     }
+    if (meta.guard_continue) {
+      return {
+        ...base,
+        icon: "🧭",
+        tone: "continue",
+        text: t("chat.guardContinue"),
+      };
+    }
+    // Legacy "tools blocked" notices — hide (review card is enough).
+    if (meta.guard_blocked) {
+      return null;
+    }
     const raw = String(m.content || "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
     return {
       ...base,
@@ -1685,6 +1800,15 @@ const thread = computed(() => {
     if (isHiddenTool(m)) {
       continue;
     }
+    // Whitespace-only assistant turns leave a timestamp with no bubble — skip.
+    if (
+      m?.role === "assistant" &&
+      !(m.content || "").trim() &&
+      !m?.meta?.streaming &&
+      !(m.attachments && m.attachments.length)
+    ) {
+      continue;
+    }
     if (isActivity(m)) {
       activityBuf.push(m);
       continue;
@@ -1728,7 +1852,8 @@ const thread = computed(() => {
       continue;
     }
     if (isGuardSystem(m)) {
-      items.push(guardItem(m));
+      const g = guardItem(m);
+      if (g) items.push(g);
       continue;
     }
     const reply = guardReply(m);
@@ -1747,15 +1872,17 @@ const thread = computed(() => {
     items.push({ kind: "msg", id: m.id, message: m });
   }
   flushActivity();
-  // Tool groups stay "live" (open + last result) until a later chat item appears.
-  // The live indicator sits just above queued sends, which stay at the bottom
-  // without folding the live tool group.
+  // Guard cards must not seal tool groups (that collapsed the live panel and
+  // jumped the thread). Walking backwards: only the last tools group stays
+  // live; earlier ones seal. Stay unsealed between tools of the active group
+  // (do not toggle on !running — that flashed the live line every call).
   let laterContent = false;
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    if (it.kind === "day" || it.kind === "new") continue;
+    if (it.kind === "day" || it.kind === "new" || it.kind === "guard") continue;
     if (it.kind === "tools") {
       it.sealed = laterContent;
+      laterContent = true;
     } else {
       laterContent = true;
     }
@@ -1954,6 +2081,7 @@ watch(
   }
 );
 
+let scrollFollowRaf = 0;
 watch(
   () =>
     [
@@ -1963,22 +2091,20 @@ watch(
         .join("\0"),
     ].join("|"),
   async () => {
-    const el = scroller.value;
-    // A fresh history is still at the top: keep it hidden until the jump.
-    if (
-      stickToBottom.value &&
-      el &&
-      el.scrollTop < 40 &&
-      el.scrollHeight > el.clientHeight + 480
-    ) {
-      threadPlaced.value = false;
-    }
+    // Never flip messages-placing mid-run: hiding the thread on each tool
+    // update makes the conversation visibly jump/flicker.
     await nextTick();
     if (router.currentRoute.value.query?.msg) {
       threadPlaced.value = true;
       return;
     }
-    scrollMessagesToBottom(false);
+    if (!stickToBottom.value) return;
+    // Coalesce rapid tool SSE bursts into one scroll per frame.
+    if (scrollFollowRaf) cancelAnimationFrame(scrollFollowRaf);
+    scrollFollowRaf = requestAnimationFrame(() => {
+      scrollFollowRaf = 0;
+      scrollMessagesToBottom(false);
+    });
   }
 );
 

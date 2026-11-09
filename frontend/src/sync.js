@@ -48,6 +48,7 @@ export function connectEvents() {
     "message.created",
     "message.delta",
     "message.updated",
+    "message.deleted",
     "message.cleared",
     "pi.status",
     "desk.updated",

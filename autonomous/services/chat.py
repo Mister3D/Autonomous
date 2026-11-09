@@ -225,14 +225,16 @@ def send_message(
             )
             message["meta"] = meta
 
-        # Agent already working → keep the bubble, run later (FIFO).
+        # Agent already working → prefer mid-run steer (answer now, then continue);
+        # fall back to FIFO queue if steer is unavailable.
         if bot_run_blocked(bot, home=home):
             # Waiting on a vault form: a chat reply cancels the form and guides
             # the agent (e.g. « validate on another device », not an OTP code).
             # Do not park the message in the queue — that loses the intent if the
             # the user later hits « Refuser » on the card.
             row = bots_svc.get_bot(bot, home=home)
-            if (row.get("status") or "") == "waiting":
+            status = row.get("status") or ""
+            if status == "waiting":
                 cancelled: list = []
                 try:
                     from autonomous.services import vault as vault_svc
@@ -271,13 +273,24 @@ def send_message(
                         cancelled = []
                 if cancelled:
                     return message
+                return _mark_queued(bot, msg_id, content, meta, home=home)
+            steered = _try_mid_run_steer(bot, agent_prompt, home=home)
+            if steered:
+                mid_meta = dict(meta)
+                mid_meta["mid_run"] = True
+                return update_message(bot, msg_id, content, home=home, meta=mid_meta)
             return _mark_queued(bot, msg_id, content, meta, home=home)
 
         from autonomous.services.agent import run_in_progress
 
         # Status can still say idle for a moment after a run has claimed the slot.
-        # Parking here avoids a second start_run that would drop the message.
+        # Prefer steer; otherwise park so a second start_run does not drop the message.
         if run_in_progress(bot):
+            steered = _try_mid_run_steer(bot, agent_prompt, home=home)
+            if steered:
+                mid_meta = dict(meta)
+                mid_meta["mid_run"] = True
+                return update_message(bot, msg_id, content, home=home, meta=mid_meta)
             return _mark_queued(bot, msg_id, content, meta, home=home)
 
         started = _start_agent_for_user_message(
@@ -299,6 +312,18 @@ def _mark_queued(
     queued_meta = dict(meta)
     queued_meta["queued"] = True
     return update_message(bot, msg_id, content, home=home, meta=queued_meta)
+
+
+def _try_mid_run_steer(
+    bot: str,
+    prompt: str,
+    *,
+    home: Path | None = None,
+) -> bool:
+    """Inject a busy-bot message into the live Pi turn (answer now, then continue)."""
+    from autonomous.services.agent import steer_mid_run
+
+    return bool(steer_mid_run(bot, prompt, home=home))
 
 
 def _start_agent_for_user_message(
@@ -646,6 +671,31 @@ def finalize_assistant(
     meta = dict(meta or {})
     meta["streaming"] = False
     return update_message(bot, msg_id, content, home=home, meta=meta)
+
+
+def discard_message(
+    bot: str,
+    msg_id: str,
+    *,
+    home: Path | None = None,
+) -> bool:
+    """Delete a message (e.g. empty assistant placeholder) and broadcast ``message.deleted``."""
+    bots_svc.get_bot(bot, home=home)
+    with get_db(home) as conn:
+        cur = conn.execute(
+            "DELETE FROM messages WHERE id = ? AND bot = ?",
+            (msg_id, bot),
+        )
+        deleted = cur.rowcount > 0
+    if deleted:
+        BUS.publish("message.deleted", {"bot": bot, "id": msg_id}, bot=bot)
+        try:
+            from autonomous.services import search as search_svc
+
+            search_svc.remove_message(msg_id, home=home)
+        except Exception:
+            pass
+    return deleted
 
 
 def stop_run(bot: str, home: Path | None = None) -> None:

@@ -184,7 +184,7 @@ Details: `docs/features/terminal-pty.md`, `docs/features/desk-screen.md`.
 ```
 event: ping
 event: bot.created | bot.updated | bot.deleted
-event: message.created | message.delta | message.updated | message.cleared
+event: message.created | message.delta | message.updated | message.deleted | message.cleared
 event: desk.updated
 event: job.updated
 event: terminal.created
