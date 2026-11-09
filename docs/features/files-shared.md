@@ -8,7 +8,7 @@
 - `autonomous/api/bots.py` (`/files`, `/files/upload`, `/files/mkdir`, `/files/download`)
 - `autonomous/services/desk.py` (mounts shared + workspace)
 
-**Last updated**: 2026-11-09 (live Files refresh via `files.changed` + quiet poll)
+**Last updated**: 2026-11-09 (live Files refresh via `files.changed` only — no poll)
 
 ## User behaviour
 
@@ -19,7 +19,7 @@
 - Folder creation: **inline form** (not `window.prompt` — often blocked → "it doesn't work").
 - List: accent-themed folder/file icons; download / delete as icons on hover.
 - Content synced with the VM under `~/shared` (and `~/workspace`, same volume).
-- **Live list**: agent/UI writes (`files_write` / mkdir / upload / delete) emit SSE `files.changed` → the Files tab reloads quietly. While the tab is open, a 4 s quiet poll also catches shell/`vm_terminal_exec` writes that skip the API.
+- **Live list**: agent/UI writes (`files_write` / mkdir / upload / delete) emit SSE `files.changed` → the Files tab reloads quietly (debounced). No interval poll — shell/`vm_terminal_exec` writes that skip the files API are not auto-detected until the next API mutation or manual navigation.
 - **Not "inside" the VM**: host bind mount → if the desktop goes to sleep (`docker stop`) or is destroyed, the files **remain**. Only a **desktop reset** (or manual deletion of the host folder) erases them.
 
 ## Implementation

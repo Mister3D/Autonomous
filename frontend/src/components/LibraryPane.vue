@@ -186,7 +186,6 @@ const mkdirOpen = ref(false);
 const mkdirName = ref("");
 const mkdirInput = ref(null);
 let dragDepth = 0;
-let pollTimer = 0;
 let reloadTimer = 0;
 let loadGen = 0;
 
@@ -229,7 +228,7 @@ async function load({ quiet = false } = {}) {
   }
 }
 
-/** Debounce live refreshes (SSE bursts / polling) so the list does not thrash. */
+/** Debounce live refreshes (SSE bursts) so the list does not thrash. */
 function scheduleReload() {
   clearTimeout(reloadTimer);
   reloadTimer = window.setTimeout(() => {
@@ -363,15 +362,9 @@ watch(
 
 onMounted(() => {
   load();
-  // Shell / VM writes bypass files_* — poll gently while the tab is open.
-  pollTimer = window.setInterval(() => {
-    if (document.hidden) return;
-    load({ quiet: true });
-  }, 4000);
 });
 
 onUnmounted(() => {
-  clearInterval(pollTimer);
   clearTimeout(reloadTimer);
   loadGen += 1;
 });
