@@ -2165,8 +2165,38 @@ a:focus-visible {
   color: #1c1c22;
 }
 
+.events-icon-btn.active {
+  background: #eef3fa;
+  color: var(--accent-2, #3b6ea5);
+}
+
 .events-icon-btn.danger:hover {
   color: var(--danger);
+}
+
+.events-instruction {
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: #f7f4ee;
+  border: 1px dashed #e0d4bc;
+}
+
+.events-instruction-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: #8a7350;
+}
+
+.events-instruction-body {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: #2a2a30;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .events-toggle {
