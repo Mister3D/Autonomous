@@ -167,9 +167,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import { state } from "../store";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
@@ -185,6 +186,9 @@ const mkdirOpen = ref(false);
 const mkdirName = ref("");
 const mkdirInput = ref(null);
 let dragDepth = 0;
+let pollTimer = 0;
+let reloadTimer = 0;
+let loadGen = 0;
 
 const crumbs = computed(() => {
   if (!path.value || path.value === ".") return [];
@@ -204,17 +208,33 @@ function formatSize(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-async function load() {
-  loading.value = true;
-  error.value = "";
-  try {
-    entries.value = await api.listFiles(props.bot.name, path.value);
-  } catch (e) {
-    entries.value = [];
-    error.value = e.message || String(e);
-  } finally {
-    loading.value = false;
+async function load({ quiet = false } = {}) {
+  const gen = ++loadGen;
+  if (!quiet) {
+    loading.value = true;
+    error.value = "";
   }
+  try {
+    const next = await api.listFiles(props.bot.name, path.value);
+    if (gen !== loadGen) return;
+    entries.value = next;
+  } catch (e) {
+    if (gen !== loadGen) return;
+    if (!quiet) {
+      entries.value = [];
+      error.value = e.message || String(e);
+    }
+  } finally {
+    if (!quiet && gen === loadGen) loading.value = false;
+  }
+}
+
+/** Debounce live refreshes (SSE bursts / polling) so the list does not thrash. */
+function scheduleReload() {
+  clearTimeout(reloadTimer);
+  reloadTimer = window.setTimeout(() => {
+    load({ quiet: true });
+  }, 250);
 }
 
 function open(e) {
@@ -333,5 +353,26 @@ watch(
   }
 );
 
-onMounted(load);
+watch(
+  () => state.filesFeed,
+  (feed) => {
+    if (!feed || feed.bot !== props.bot.name) return;
+    scheduleReload();
+  }
+);
+
+onMounted(() => {
+  load();
+  // Shell / VM writes bypass files_* — poll gently while the tab is open.
+  pollTimer = window.setInterval(() => {
+    if (document.hidden) return;
+    load({ quiet: true });
+  }, 4000);
+});
+
+onUnmounted(() => {
+  clearInterval(pollTimer);
+  clearTimeout(reloadTimer);
+  loadGen += 1;
+});
 </script>

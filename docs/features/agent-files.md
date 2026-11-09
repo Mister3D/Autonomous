@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `pi_extensions/files.ts`, `services/files.py`, `GET|PUT /files/content`, `POST /files/share`, `POST /files/attach`  
-**Last updated**: 2026-10-29 (images = inline markdown; attachments = PDF/zip/…)
+**Last updated**: 2026-11-09 (writes notify Files tab via `files.changed`)
 
 ## User behaviour
 
@@ -16,6 +16,7 @@
 - `share_image`: validates + returns `{markdown, url}` (no chat write).
 - `attach_file`: refuses images (`use_share_image`); attaches `{type:file,…}` to the streaming assistant bubble (or creates one); `ensure_assistant` reuses that bubble.
 - `files_share_image` / `files_attach` tool cards hidden.
+- Mutating tools (`files_write` / `files_mkdir` / `files_delete` / uploads) publish `files.changed` so the Files inspector updates without a manual refresh (see [files-shared.md](./files-shared.md)).
 - Chat: marked + DOMPurify allows `<img>`; thumbnail in the bubble, click → lightbox.
 
 ## Pitfalls / non-regressions

@@ -26,6 +26,8 @@ export const state = reactive({
   composerRestore: null,
   /** Latest schedule/webhook SSE payload so the Events tab can refresh live. */
   eventsFeed: null,
+  /** Latest ~/shared mutation so the Files tab can refresh live. */
+  filesFeed: null,
   /** Set when the user saves a timezone in Settings, so Events can reload. */
   userTimezone: null,
   piStatus: null,
@@ -262,6 +264,9 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
     type === "webhook.deleted"
   ) {
     state.eventsFeed = { type, ...data, at: Date.now() };
+  }
+  if (type === "files.changed" && data.bot) {
+    state.filesFeed = { type, ...data, at: Date.now() };
   }
   if (type === "notification" && data.kind) {
     if (data.kind === "desk.running" && !fromBroadcast) {

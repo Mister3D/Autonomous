@@ -59,6 +59,7 @@ export function connectEvents() {
     "webhook.updated",
     "webhook.deleted",
     "vault.user_secret_report",
+    "files.changed",
     "ui.focus",
   ];
   for (const t of types) {

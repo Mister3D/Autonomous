@@ -8,7 +8,7 @@
 - `autonomous/api/bots.py` (`/files`, `/files/upload`, `/files/mkdir`, `/files/download`)
 - `autonomous/services/desk.py` (mounts shared + workspace)
 
-**Last updated**: 2026-10-29 (agent `files_*` tools without host shell — see [`agent-files.md`](./agent-files.md))
+**Last updated**: 2026-11-09 (live Files refresh via `files.changed` + quiet poll)
 
 ## User behaviour
 
@@ -19,12 +19,14 @@
 - Folder creation: **inline form** (not `window.prompt` — often blocked → "it doesn't work").
 - List: accent-themed folder/file icons; download / delete as icons on hover.
 - Content synced with the VM under `~/shared` (and `~/workspace`, same volume).
+- **Live list**: agent/UI writes (`files_write` / mkdir / upload / delete) emit SSE `files.changed` → the Files tab reloads quietly. While the tab is open, a 4 s quiet poll also catches shell/`vm_terminal_exec` writes that skip the API.
 - **Not "inside" the VM**: host bind mount → if the desktop goes to sleep (`docker stop`) or is destroyed, the files **remain**. Only a **desktop reset** (or manual deletion of the host folder) erases them.
 
 ## Implementation
 
 - Host root: `data/bots/<bot>/home/` (= former desk "home").
 - API paths relative to this root; `shared/` or `~/shared/` prefixes accepted then normalised.
+- `files._notify_changed` → `BUS.publish("files.changed", {bot, op, path})`; UI `state.filesFeed` + `LibraryPane` debounce reload.
 - Upload: `POST /api/v1/bots/:name/files/upload?path=.` multipart field `file` (don't force `Content-Type: application/json` on FormData).
 - Text content (agent): `GET|PUT /api/v1/bots/:name/files/content` — see [`agent-files.md`](./agent-files.md).
 - Mkdir: `POST /api/v1/bots/:name/files/mkdir` JSON `{ "path": ".", "name": "dossier" }`.

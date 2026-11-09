@@ -36,6 +36,30 @@ def test_read_write_text(home):
     assert got["encoding"] == "utf-8"
 
 
+def test_write_publishes_files_changed(home):
+    from autonomous.services.events import BUS
+
+    bots_svc.create_bot("fev", slug="fev", home=home)
+    q = BUS.subscribe("*")
+    try:
+        files_svc.write_text("fev", "live.txt", "x", home=home)
+        files_svc.mkdir("fev", ".", "docs", home=home)
+        files_svc.delete_path("fev", "live.txt", home=home)
+        seen = []
+        while True:
+            try:
+                seen.append(q.get_nowait())
+            except Exception:
+                break
+    finally:
+        BUS.unsubscribe("*", q)
+    changed = [e for e in seen if e.name == "files.changed" and e.data.get("bot") == "fev"]
+    ops = [e.data.get("op") for e in changed]
+    assert "write" in ops
+    assert "mkdir" in ops
+    assert "delete" in ops
+
+
 def test_read_missing(home):
     bots_svc.create_bot("fm", slug="fm", home=home)
     with pytest.raises(NotFound):

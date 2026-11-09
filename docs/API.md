@@ -190,6 +190,7 @@ event: job.updated
 event: terminal.created
 event: notification
 event: vault.updated | vault.deleted | vault.grant | vault.revoke | vault.request
+event: files.changed                 # ~/shared write/mkdir/upload/delete → Files tab refresh
 ```
 
 Global `/events` is what every open browser tab should subscribe to so creations, runs and toasts stay in sync.

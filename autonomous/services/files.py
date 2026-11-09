@@ -13,6 +13,7 @@ from autonomous.i18n import t
 from autonomous.paths import bot_dir
 from autonomous.services import bots as bots_svc
 from autonomous.services.errors import AutonomousError, Forbidden, NotFound
+from autonomous.services.events import BUS
 
 # Shown in the UI as ~/shared — host path bots/<name>/home
 SHARED_LABEL = "shared"
@@ -20,6 +21,20 @@ CHAT_UPLOAD_DIR = "upload"
 MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024
 
 _SAFE_NAME = re.compile(r"^[^/\x00]{1,255}$")
+
+
+def _notify_changed(
+    bot: str,
+    *,
+    op: str,
+    path: str = "",
+    is_dir: bool | None = None,
+) -> None:
+    """Push a Files-tab refresh hint (SSE + BroadcastChannel)."""
+    payload: dict[str, Any] = {"bot": bot, "op": op, "path": path or ""}
+    if is_dir is not None:
+        payload["is_dir"] = bool(is_dir)
+    BUS.publish("files.changed", payload, bot=bot)
 
 
 def _root(bot: str, home: Path | None) -> Path:
@@ -301,7 +316,9 @@ def write_text(
         os.chown(target, 1000, 1000)
     except OSError:
         pass
-    return _entry_dict(root, target)
+    entry = _entry_dict(root, target)
+    _notify_changed(bot, op="write", path=entry["path"], is_dir=False)
+    return entry
 
 
 def delete_path(bot: str, path: str, home: Path | None = None) -> None:
@@ -311,12 +328,18 @@ def delete_path(bot: str, path: str, home: Path | None = None) -> None:
         raise Forbidden(t("files.forbidden"))
     if not target.exists():
         raise NotFound(t("files.not_found"))
-    if target.is_dir():
+    try:
+        rel = str(target.relative_to(root)).replace(os.sep, "/")
+    except ValueError:
+        rel = path or ""
+    was_dir = target.is_dir()
+    if was_dir:
         import shutil
 
         shutil.rmtree(target)
     else:
         target.unlink()
+    _notify_changed(bot, op="delete", path=rel, is_dir=was_dir)
 
 
 def _safe_filename(name: str) -> str:
@@ -365,7 +388,9 @@ def mkdir(
         os.chown(target, 1000, 1000)
     except OSError:
         pass
-    return _entry_dict(root, target)
+    entry = _entry_dict(root, target)
+    _notify_changed(bot, op="mkdir", path=entry["path"], is_dir=True)
+    return entry
 
 
 def save_upload(
@@ -399,7 +424,9 @@ def save_upload(
         os.chown(target, 1000, 1000)
     except OSError:
         pass
-    return _entry_dict(root, target)
+    entry = _entry_dict(root, target)
+    _notify_changed(bot, op="upload", path=entry["path"], is_dir=False)
+    return entry
 
 
 def save_chat_upload(
@@ -464,6 +491,7 @@ def save_chat_upload(
     from urllib.parse import quote
 
     rel_path = f"{rel_dir}/{safe}".replace("\\", "/")
+    _notify_changed(bot, op="upload", path=rel_path, is_dir=False)
     return {
         "type": "file",
         "name": safe,
