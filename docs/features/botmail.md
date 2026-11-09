@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/botmail.py`, `autonomous/migrations/001_schema.sql`, `autonomous/api/bots.py` (`/mail/*` routes), `autonomous/pi_extensions/botmail.ts`, `autonomous/services/{chat,agent,pi_rpc}.py`, `frontend/src/{mentions.js,components/ChatPane.vue}`  
-**Last updated**: 2026-11-08 (outgoing Sent card on tell/ask)
+**Last updated**: 2026-11-09 (composer @ menu: ArrowUp/Down keep highlight)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@ In a bot's input area:
 - Exchanges are **async**. Confirming transmission ≠ task finished. Prefer Ask (or follow-up) when the user said « bring it back here »; Tell when they continue in the peer’s chat.
 - Inter-bot mail does **not** grant new rights and does not replace vault / approval / external-send consent.
 - If the recipient is **busy** or **waiting**, the message is **queued** and processed when idle.
-- `@name` resolves `name` (case-insensitive) or `label`. Composer `@` autocomplete unchanged.
+- `@name` resolves `name` (case-insensitive) or `label`. Composer `@` autocomplete: ↑/↓ move the highlight; Enter/Tab inserts.
 - In the thread: centred blue cards for inter-bot mail. UI copy comes from frontend locales (en/fr).
   - **Sent** (sender): when `bot_tell` / `bot_ask` / API mail succeeds, a card shows the **peer-facing body** (« Sent to @x »). Ask *replies* still stamp the assistant bubble as outgoing.
   - **Received** (peer): « Received from @x » with the same body (or the ask answer).
@@ -37,6 +37,7 @@ Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** 
 
 - Do **not** restore composer bypass that regex-forwards fragments without the local agent.
 - Do **not** re-enable rescue that builds the peer body from the user message.
+- Composer `@keyup` calls `syncMentionQuery` — only reset `mentionIndex` when the filter (`start`/`query`) changes, otherwise ArrowDown/Up snap back to the first row.
 - Source code, tests, and agent prompts stay **English**. UI strings → `frontend/src/locales/{en,fr}.json`. Keep FR `Dit`/`Demande` only as composer parse aliases.
 - The **mail body** and the **reply to the user** stay in the conversation language (one language). Prompts say so explicitly (`_LANG_RULE` / `_INBOUND_LANG_RULE`) so the model does not mix French and English just because the instructions are English.
 - Drain only when `status` ∉ {busy, waiting}. Deliver reply outside the replying bot’s lock.

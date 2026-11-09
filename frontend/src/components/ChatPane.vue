@@ -767,9 +767,18 @@ function syncMentionQuery() {
     return;
   }
   mentionDismissedStart = null;
+  const prev = mentionQuery.value;
+  const sameQuery =
+    prev &&
+    prev.start === q.start &&
+    String(prev.query || "").toLowerCase() === String(q.query || "").toLowerCase();
   mentionQuery.value = q;
   mentionOpen.value = true;
-  mentionIndex.value = 0;
+  // ArrowUp/Down also fire keyup → keep the highlighted row unless the filter changed.
+  if (!sameQuery) mentionIndex.value = 0;
+  else if (mentionIndex.value >= mentionMatches.value.length) {
+    mentionIndex.value = Math.max(0, mentionMatches.value.length - 1);
+  }
 }
 
 function closeMentions() {
