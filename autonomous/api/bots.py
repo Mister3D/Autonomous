@@ -94,8 +94,18 @@ from autonomous.services.events import sse_response
 
 
 def _abs_webhook_url(url_path: str) -> str:
-    root = (request.url_root or "").rstrip("/")
-    return f"{root}{url_path}"
+    """Absolute fire URL for display / agents.
+
+    Prefer ``AUTONOMOUS_PUBLIC_URL`` when set so we don't advertise
+    ``http://127.0.0.1`` (unreachable from outside) or plain ``http://`` behind a
+    TLS terminator that answers with a 301 and drops the Bearer on follow.
+    """
+    import os
+
+    public = (os.environ.get("AUTONOMOUS_PUBLIC_URL") or "").strip().rstrip("/")
+    root = public or (request.url_root or "").rstrip("/")
+    path = url_path if str(url_path).startswith("/") else f"/{url_path}"
+    return f"{root}{path}"
 
 
 def _with_webhook_url(row: dict) -> dict:

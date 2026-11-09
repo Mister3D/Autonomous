@@ -40,6 +40,37 @@ def _bearer_token() -> str | None:
     return tok or None
 
 
+def _fire_hook():
+    from autonomous.services.client_ip import client_ip
+    from autonomous.services.ratelimit import HOOKS
+
+    token = _bearer_token()
+    if not token:
+        abort(401, message="Authorization: Bearer <webhook-token> required")
+
+    ip = client_ip(request)
+    tok = token[:64]
+    if not HOOKS.hit(f"hook:tok:{tok}", limit=30, window_s=60):
+        abort(429, message="Webhook rate limit exceeded")
+    if not HOOKS.hit(f"hook:ip:{ip}", limit=60, window_s=60):
+        abort(429, message="Webhook rate limit exceeded")
+    try:
+        msg = events_svc.fire_webhook(
+            token,
+            payload=_payload_from_request(),
+            home=g.home,
+        )
+        meta = msg.get("meta") or {}
+        return {
+            "ok": True,
+            "message_id": msg["id"],
+            "bot": msg["bot"],
+            "queued": bool(meta.get("queued")),
+        }
+    except AutonomousError as exc:
+        _handle(exc)
+
+
 @blp.route("")
 class PublicHook(MethodView):
     """Fire with ``Authorization: Bearer <webhook-token>`` (token not in the URL)."""
@@ -47,31 +78,4 @@ class PublicHook(MethodView):
     @blp.response(200, HookFireResultSchema)
     @blp.doc(security=[])
     def post(self):
-        from autonomous.services.client_ip import client_ip
-        from autonomous.services.ratelimit import HOOKS
-
-        token = _bearer_token()
-        if not token:
-            abort(401, message="Authorization: Bearer <webhook-token> required")
-
-        ip = client_ip(request)
-        tok = token[:64]
-        if not HOOKS.hit(f"hook:tok:{tok}", limit=30, window_s=60):
-            abort(429, message="Webhook rate limit exceeded")
-        if not HOOKS.hit(f"hook:ip:{ip}", limit=60, window_s=60):
-            abort(429, message="Webhook rate limit exceeded")
-        try:
-            msg = events_svc.fire_webhook(
-                token,
-                payload=_payload_from_request(),
-                home=g.home,
-            )
-            meta = msg.get("meta") or {}
-            return {
-                "ok": True,
-                "message_id": msg["id"],
-                "bot": msg["bot"],
-                "queued": bool(meta.get("queued")),
-            }
-        except AutonomousError as exc:
-            _handle(exc)
+        return _fire_hook()

@@ -269,8 +269,13 @@ async function removeWebhook(w) {
 }
 
 async function copyUrl(w) {
-  // Prefer Bearer header invoke — token stays out of the URL / proxy access logs.
-  const endpoint = w.url || `${location.origin}${w.url_path || "/api/v1/hooks"}`;
+  // Always use the browser origin (same host/scheme as the UI). Server-built
+  // ``w.url`` often is ``http://127.0.0.1:…`` and yields a 301 (e.g. to HTTPS)
+  // that strips the Bearer / turns POST into GET — fire then looks like it "worked"
+  // for the agent while the caller only saw a redirect.
+  const path = (w.url_path || "/api/v1/hooks").replace(/\/+$/, "") || "/api/v1/hooks";
+  const origin = String(location.origin || "").replace(/\/+$/, "");
+  const endpoint = `${origin}${path.startsWith("/") ? path : `/${path}`}`;
   const token = w.token || "";
   const text = token
     ? `curl -sS -X POST '${endpoint}' -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' -d '{}'`
