@@ -2,7 +2,6 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import { router } from "./router";
 import { i18n } from "./i18n";
-import { startGlobalSync } from "./sync";
 import { installVisualViewport } from "./visualViewport";
 import "./styles/tokens.css";
 import "./styles.css";
@@ -13,5 +12,4 @@ app.use(router);
 app.use(i18n);
 app.mount("#app");
 
-startGlobalSync();
 installVisualViewport();

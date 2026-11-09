@@ -1,11 +1,13 @@
 /**
- * Cross-tab sync: one EventSource to /api/v1/events + BroadcastChannel
- * so all open tabs (up to many) see bot create / run / notifications.
+ * Live sync via EventSource ``/api/v1/events``.
+ *
+ * Every open tab connects its own stream — do **not** rebroadcast SSE on
+ * BroadcastChannel. That used to apply ``message.delta`` twice (same tab echo
+ * + peer tabs that also have EventSource) and duplicated streamed tokens until
+ * a hard refresh reloaded the clean DB text.
  */
 import { api } from "./api";
 import { state, pushNotification, applyEvent } from "./store";
-
-const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("autonomous") : null;
 
 let es = null;
 
@@ -21,18 +23,6 @@ function onEvent(ev) {
     window.dispatchEvent(new CustomEvent("autonomous-focus", { detail: data }));
   }
   applyEvent(envelope);
-  if (channel) {
-    channel.postMessage(envelope);
-  }
-}
-
-export function startGlobalSync() {
-  if (channel) {
-    channel.onmessage = (msg) => {
-      // Ignore echoes from this tab if we already applied; still apply for other tabs' local actions
-      applyEvent(msg.data, { fromBroadcast: true });
-    };
-  }
 }
 
 export function connectEvents() {

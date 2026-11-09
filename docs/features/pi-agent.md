@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-10 (stable system prefix for prompt/KV cache)
+**Last updated**: 2026-11-10 (fix double-apply of SSE deltas via BroadcastChannel)
 
 ## User behaviour
 
@@ -83,6 +83,7 @@ Pi is **not** in the VMs. It's on the host.
 - PATH: serve with `~/.local/bin` visible (the code enriches `PATH` for subprocesses).
 - Host Pi tools active (web search + vault + terminal + VM screenshot). Computer-use / click = next step.
 - `message.delta` is not replayed on refresh: the final content is in the database via `message.updated`.
+- Do **not** rebroadcast SSE envelopes on `BroadcastChannel`: every tab already has EventSource, and the posting tab also receives its own broadcast → each `message.delta` was applied twice (duplicated tokens until refresh). See `frontend/src/sync.js`.
 - Mid-turn navigation: `loadMessages` / mid-stream `message.updated` must not truncate SSE text already shown — `preferLiveStreamingMessage` keeps the longer body while `streaming` is true; missing bubbles are created on delta if `message.created` was missed.
 - On Pi `message_end`: don't reopen a bubble if it was already finalised at `toolcall_start` (otherwise an identical duplicate right before the tool).
 - On refresh, don't stop at the last page of tools: the `user` message (and therefore the assistant reply more recent than it) must stay in the displayed thread.
