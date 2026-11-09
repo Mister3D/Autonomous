@@ -781,8 +781,9 @@ class ScreenDescribeSchema(Schema):
 class ScreenDescribeResultSchema(Schema):
     ok = fields.Bool(required=True)
     text = fields.Str()
-    screenshot_id = fields.Str()
-    model = fields.Str()
+    screenshot_id = fields.Str(allow_none=True)
+    model = fields.Str(allow_none=True)
+    code = fields.Str(load_default=None, allow_none=True)
 
 
 class GroundLocateResultSchema(Schema):

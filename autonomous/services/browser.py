@@ -177,11 +177,15 @@ def html(
 
 
 def text(bot: str, *, max_chars: int = 8000, home: Path | None = None) -> dict[str, Any]:
-    return _run(
+    out = _run(
         bot,
         ["text", "--max", str(max(500, min(int(max_chars), 100_000)))],
         home=home,
     )
+    from autonomous.services.observe_gate import mark_dom_observe
+
+    mark_dom_observe(bot)
+    return out
 
 
 def links(
@@ -218,7 +222,11 @@ def snapshot(
     args = ["snapshot", "--max", str(max(1, min(int(max_elements), 120)))]
     if query:
         args.extend(["--query", query])
-    return _run(bot, args, home=home)
+    out = _run(bot, args, home=home)
+    from autonomous.services.observe_gate import mark_dom_observe
+
+    mark_dom_observe(bot)
+    return out
 
 
 def frames_snapshot(
@@ -232,7 +240,11 @@ def frames_snapshot(
     args = ["frames_snapshot", "--max", str(max(1, min(int(max_elements), 120)))]
     if query:
         args.extend(["--query", query])
-    return _run(bot, args, home=home)
+    out = _run(bot, args, home=home)
+    from autonomous.services.observe_gate import mark_dom_observe
+
+    mark_dom_observe(bot)
+    return out
 
 
 def click_selector(

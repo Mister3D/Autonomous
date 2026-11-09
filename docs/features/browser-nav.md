@@ -2,7 +2,7 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-10-30 (slider_hints, query_fallback, per-iframe offsets, switch/close_tab, hover, spoof of new tabs)
+**Last updated**: 2026-11-10 (vm_look soft-gated: DOM observe first, no back-to-back looks)
 
 ## Action loop (enforced order)
 
@@ -11,7 +11,7 @@ The captcha is **not** a special case: it's the same pipeline.
 | Step | Tool | Role |
 |-------|--------|------|
 | 1. DOM context | **`browser_snapshot`** / **`browser_frames_snapshot`** | Page (+ cross-origin iframes) without any gesture; the snapshot **flags** `BLOCKING OVERLAY` (cookie banner, modal…) + its buttons and marks hidden controls `[COVERED by …]` |
-| 1bis. Eyes | **`vm_look`** | Fresh capture → multimodal model (host) → **text description** of the screen (exact text, errors, blockers, field state). Use when the DOM is empty / after a submit / **before** announcing an error |
+| 1bis. Eyes | **`vm_look`** | Fresh capture → multimodal → text description. Soft-gated when Chrome is up: need a prior `browser_snapshot` / frames / text; no back-to-back looks without a new DOM observe. Use when DOM empty / after submit / before announcing an error |
 | 2. Gesture type | (agent reasoning) | `left_click` / `right_click` / `double` / `drag` |
 | 3. Localisation | **`screen=x,y`** from `browser_snapshot` / `center_screen` from frames_snapshot (fast, exact) **otherwise** `vm_ground` (slow ~10 s, for canvas / images / native dialogs) | Desktop screen pixels (= viewport + `chrome_h`) |
 | 4. Execution | **`vm_click`** / **`vm_drag`** | real VNC input; never invent coords if `ok=false` |
@@ -102,12 +102,17 @@ Chrome CDP `:9222`; profile `$HOME/.autonomous-chrome` (see `chrome-desktop-imag
 
 10 consecutive runs, fresh bot + desk each time (image with extended fonts + `enumerateDevices` spoof), "get my latest order" scenario: **10/10 succeeded**, 140–248 s (average ≈ 195 s) after the screen was ready, 46–74 tools per run. No block page encountered → `browser_reset_session` **not exercised** in real conditions (only checked by hand).
 
+## Pitfalls / non-regressions
+
+- `vm_look` / `POST …/screen/describe` soft-refuses (`ok:false`, `code=dom_observe_required`) when a **screen** desk is up (or CDP tabs works) and no successful DOM observe ran since process start / since the last look. Do not key the gate on CDP alone — VNC can show Chrome while tabs fails. Terminal / no desk stays allowed. Gate state is in-memory (`observe_gate.py`) — resets on serve restart.
+
 ## Quick check
 
 ```bash
 TOKEN=$(cat data/token)
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"max_elements":20}' http://127.0.0.1:8787/api/v1/bots/playmo/browser/snapshot | head -c 600
+python3 -m pytest tests/test_observe_gate.py -q
 ```
 
-Restart the Pi session after changing `browser.ts` / `vm.ts` (`DELETE …/messages` or stop_all).
+Restart the Pi session after changing `browser.ts` / `vm.ts` (`DELETE …/messages` or stop_all) so the new system hint / tool text loads.

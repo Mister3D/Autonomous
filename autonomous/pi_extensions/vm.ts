@@ -317,15 +317,18 @@ export default function (pi: ExtensionAPI) {
     name: "vm_look",
     label: "VM look (read the screen)",
     description:
-      "Your EYES. Fresh desktop screenshot → multimodal model → plain-text description: " +
-      "page/site, exact visible text (errors, banners, dialogs), blockers (consent layer, " +
-      "modal, verification widget, access-denied page, login wall), form state " +
-      "(empty / filled / validation errors) and key data shown. Use it whenever the DOM " +
-      "tools are empty or inconclusive, after a submit/login/click whose outcome you " +
-      "cannot read in browser_text, and BEFORE you tell the user what went wrong — " +
-      "never report an error message you did not read. Optional `question` is answered first. " +
-      "NEVER use it for pixel coordinates: any x/y it states is a guess in an unknown " +
-      "scale and will miss the target — get click positions from browser_snapshot / " +
+      "Your EYES (expensive). Fresh desktop screenshot → multimodal model → plain-text " +
+      "description: page/site, exact visible text (errors, banners, dialogs), blockers " +
+      "(consent layer, modal, verification widget, access-denied page, login wall), form " +
+      "state (empty / filled / validation errors) and key data shown. " +
+      "NOT the first observe when Chrome is up: call browser_snapshot (no query) first. " +
+      "Use vm_look only when that DOM read was empty/inconclusive, after a " +
+      "submit/login/click whose outcome you cannot read, and BEFORE you tell the user " +
+      "what went wrong — never report an error you did not read. " +
+      "Do not chain two vm_look calls without a fresh browser_snapshot / " +
+      "browser_frames_snapshot / browser_text between them. Optional `question` is " +
+      "answered first. NEVER use it for pixel coordinates: any x/y it states is a guess " +
+      "in an unknown scale — get click positions from browser_snapshot / " +
       "browser_frames_snapshot (screen=x,y) or vm_ground.",
     parameters: Type.Object({
       question: Type.Optional(
@@ -346,10 +349,19 @@ export default function (pi: ExtensionAPI) {
         `/bots/${encodeURIComponent(cfg.bot)}/screen/describe`,
         body,
       );
-      if (!res.ok || res.data?.ok === false) {
+      if (!res.ok) {
         return textResult(`vm_look failed: ${errMessage(res.data, res.status)}`, {
           error: true,
         });
+      }
+      if (res.data?.ok === false) {
+        const why = String(res.data?.text || errMessage(res.data, res.status) || "").trim();
+        return textResult(
+          why.startsWith("Call browser_")
+            ? why
+            : `vm_look refused: ${why || "observe the DOM first (browser_snapshot)."}`,
+          { error: true, code: res.data?.code || "dom_observe_required" },
+        );
       }
       return textResult(String(res.data?.text || "(no description)"), {
         ok: true,
