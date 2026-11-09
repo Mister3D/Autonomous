@@ -1995,10 +1995,11 @@ const hasPendingResume = computed(() =>
   )
 );
 
-function lastUserIndex(all) {
+function lastUserIndex(all, { includeOptimistic = true } = {}) {
   for (let i = all.length - 1; i >= 0; i--) {
     const m = all[i];
     if (m?.role !== "user" || m?.meta?.hidden_prompt || m?.meta?.queued) continue;
+    if (!includeOptimistic && String(m?.id || "").startsWith("tmp-")) continue;
     return i;
   }
   return -1;
@@ -2010,51 +2011,95 @@ const hasRunningTools = computed(() =>
   )
 );
 
-/** Idle bot: last user turn never got a successful assistant reply. */
+/**
+ * Idle bot: last turn ended on a real failure bubble (⚠️ / abort / stop).
+ * "User message, no assistant yet" is the normal post-send gap — never a retry.
+ */
 const lastTurnFailed = computed(() => {
   const all = state.messages[props.bot.name] || [];
-  const lastUser = lastUserIndex(all);
+  const lastUser = lastUserIndex(all, { includeOptimistic: false });
   if (lastUser < 0) return false;
+  let sawFailure = false;
   for (let i = lastUser + 1; i < all.length; i++) {
     const m = all[i];
     if (m?.role === "user") break;
     if (m?.role !== "assistant") continue;
     const meta = m.meta || {};
     const text = String(m.content || "").trim();
-    if (meta.streaming || meta.aborted || meta.error) return true;
-    if (!text || text.startsWith("⚠️") || /^⏹\s*Stopped\.?$/i.test(text)) return true;
+    if (meta.streaming) return false;
+    if (meta.aborted || meta.error) {
+      sawFailure = true;
+      continue;
+    }
+    if (!text || text.startsWith("⚠️") || /^⏹\s*Stopped\.?$/i.test(text)) {
+      sawFailure = true;
+      continue;
+    }
     return false;
   }
-  return true;
+  return sawFailure;
 });
 
-/** Busy bot: empty streaming / error bubble and no live tool — likely LLM hung. */
-const stuckBusy = computed(() => {
-  if (!busy.value || waitingHuman.value || hasRunningTools.value) return false;
+/**
+ * Busy with no live tool: "hard" = error/abort bubble; "soft" = waiting for
+ * first token / gap between tools (normal — must not flash Relancer).
+ */
+const stuckBusyKind = computed(() => {
+  if (!busy.value || waitingHuman.value || hasRunningTools.value) return null;
   const all = state.messages[props.bot.name] || [];
-  const lastUser = lastUserIndex(all);
-  if (lastUser < 0) return true;
+  const lastUser = lastUserIndex(all, { includeOptimistic: false });
+  if (lastUser < 0) return "soft";
   for (let i = all.length - 1; i > lastUser; i--) {
     const m = all[i];
     if (m?.role !== "assistant") continue;
     const meta = m.meta || {};
     const text = String(m.content || "").trim();
-    if (meta.streaming && !text) return true;
-    if (meta.aborted || meta.error || text.startsWith("⚠️")) return true;
-    if (meta.streaming && text) return false;
-    return false;
+    if (meta.aborted || meta.error || text.startsWith("⚠️")) return "hard";
+    if (meta.streaming && text) return null;
+    if (meta.streaming && !text) return "soft";
+    return null;
   }
-  return true;
+  return "soft";
 });
 
-const showRetryBar = computed(
-  () =>
-    !waitingHuman.value &&
-    (hasQueued.value ||
-      hasPendingResume.value ||
-      stuckBusy.value ||
-      (!busy.value && lastTurnFailed.value))
+/** Soft "looks stuck" only after a grace window — first-token wait is normal. */
+const STUCK_BUSY_GRACE_MS = 45_000;
+const stuckBusy = ref(false);
+let stuckBusyTimer = 0;
+watch(
+  stuckBusyKind,
+  (kind) => {
+    clearTimeout(stuckBusyTimer);
+    stuckBusyTimer = 0;
+    if (kind === "hard") {
+      stuckBusy.value = true;
+      return;
+    }
+    if (kind === "soft") {
+      stuckBusy.value = false;
+      stuckBusyTimer = window.setTimeout(() => {
+        stuckBusy.value = stuckBusyKind.value === "soft";
+      }, STUCK_BUSY_GRACE_MS);
+      return;
+    }
+    stuckBusy.value = false;
+  },
+  { immediate: true }
 );
+
+const showRetryBar = computed(() => {
+  if (waitingHuman.value) return false;
+  // Active run waiting for tokens = Working orb, not Relancer.
+  if (busy.value && !stuckBusy.value && !hasQueued.value && !hasPendingResume.value) {
+    return false;
+  }
+  return (
+    hasQueued.value ||
+    hasPendingResume.value ||
+    stuckBusy.value ||
+    (!busy.value && lastTurnFailed.value)
+  );
+});
 
 const retryHint = computed(() => {
   if (hasQueued.value) return t("chat.retryHintQueued");
@@ -2358,6 +2403,7 @@ onBeforeUnmount(() => {
   pending.value = [];
   if (flashTimer) clearTimeout(flashTimer);
   clearTimeout(messagesScrollUiTimer);
+  clearTimeout(stuckBusyTimer);
   scroller.value?.classList.remove("messages-scrolling");
   window.removeEventListener("keydown", onLightboxKey);
   composerMq?.removeEventListener("change", onComposerMqChange);

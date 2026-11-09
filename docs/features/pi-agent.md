@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-10 (Relancer = retry unprocessed after LLM outage)
+**Last updated**: 2026-11-10 (Relancer bar: no false stuck while LLM answers)
 
 ## User behaviour
 
@@ -25,7 +25,7 @@
 - Model **per bot** (creation + Details); if an RPC session is running, `set_model` mid-session.
 - During a run: the send button becomes the **Working orb** ([thinking-orbs](https://libraries.dev/orbs), canvas engine `thinking-orbs/engine` via `WorkingOrb.vue`) — click = Pi `abort`. In the Conversation thread, the same orb appears **as long as no assistant text has started** (waiting for the model / between tool turns); from the first token, it disappears in favour of the bubble.
 - If the Pi session dies while waiting for the user (vault / desktop): status `idle`, **Resume** chat card (`meta.kind=agent_interrupted`) → `POST /bots/:name/resume` relaunches the agent on the original task (without a new user bubble).
-- **Retry** bar above the composer (when there is a queue, a failed/unfinished last turn, a stuck busy orb, or a pending Resume card — not during a real human wait): **Relancer** → `POST /bots/:name/retry`. Soft-clears a dead worker (tools / streaming), keeps `pi_session_id` and the chat history, then drains the oldest queued user/webhook **or** resumes the last unfinished turn. Refuses with `waiting_for_user` if a vault/approval/clarify/desk card is still open.
+- **Retry** bar above the composer (queue, hard LLM failure bubble, pending Resume, or soft-stuck busy after **45 s** — not during a real human wait): **Relancer** → `POST /bots/:name/retry`. Soft-clears a dead worker (tools / streaming), keeps `pi_session_id` and the chat history, then drains the oldest queued user/webhook **or** resumes the last unfinished turn. Refuses with `waiting_for_user` if a vault/approval/clarify/desk card is still open. Right after send (`user` with no assistant yet, or busy waiting for the first token) must **not** show the bar — that is the normal Working-orb wait, not a failed turn.
 - Desk ready while a run is still going: **no** second `resume_run` (avoids "Agent is already processing"). Always set `status=busy` back for the Working orb — don't leave a forced `idle` at the end of desk boot.
 - On `tool_execution_end`, Pi often sends `args={}`: Autonomous keeps the args from the start and enriches `meta` (click/drag coords, `duration_ms`, `timed_out`) for the UI.
 - **Actions** guard-rail (Settings, saved as soon as the field changes — no button), counter **since the last `user` message** (user, webhook or cron) — **not** the whole conversation, and **not** reset by a desk/vault resume:
@@ -94,6 +94,8 @@ Pi is **not** in the VMs. It's on the host.
 - Stop kills the RPC process (stdin abort alone may stay stuck if the HTTP provider hangs).
 - **Stop**: `stop_run` closes in-progress cards, then does a delayed sweep (+1.5 s and +6 s) because a `tool_execution_start` already read by Pi just after the stop created an orphan "In progress" card (real case: `vault_type` stuck). The sweep goes back 400 messages (long series of grounding notes were hiding old cards). Tests: `tests/test_close_running_tools.py`.
 - End of run / stop: `close_running_tools` switches `status=running` cards to **error** (otherwise `vm_ground` etc. stay "In progress" if Pi dies without `tool_execution_end`).
+- Retry bar: do **not** treat `busy` + empty streaming / no assistant yet as immediately stuck — that is the normal Working-orb wait. Soft stuck needs a grace timer; hard stuck = abort/error/⚠️ only. Idle `lastTurnFailed` must require a real failure bubble — never “user message with no assistant yet” (that flashed Relancer on every send while status was still idle).
+
 - `vm_request_desk` (and desk failures of screenshot/exec) **block** until the user's authorisation — like the vault; the agent must not chain other tools.
 - Pi cwd under the repo: always `--no-context-files` so as not to swallow Autonomous's `AGENTS.md`.
 - Never leave `data/bots/<name>/pi/sessions` after a bot `DELETE`: Pi resumes the `*.jsonl` if the same `--session-id` comes back.
