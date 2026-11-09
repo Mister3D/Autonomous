@@ -547,6 +547,9 @@ class PiAgent:
                     content = _format_tool_card(
                         tool_name, args=args, status=status, result=result_text
                     )
+                    timed_out = _tool_timed_out(
+                        result_text, details=details, is_error=is_error
+                    )
                     meta = {
                         "kind": "tool",
                         "status": status,
@@ -555,6 +558,7 @@ class PiAgent:
                         "args": args,
                         "is_error": is_error,
                         "duration_ms": record.get("durationMs"),
+                        "timed_out": timed_out,
                     }
                     meta.update(
                         _pointer_fields(tool_name, args, result_text, details)
@@ -1406,6 +1410,35 @@ def _tool_result_details(result: Any) -> dict[str, Any]:
         if isinstance(details, dict):
             return details
     return {}
+
+
+def _tool_timed_out(
+    result_text: str,
+    *,
+    details: dict[str, Any] | None = None,
+    is_error: bool = False,
+) -> bool:
+    """True when the tool stopped because a timeout fired (not a normal error)."""
+    del is_error  # reserved — timeout may still be reported as isError by Pi
+    details = details or {}
+    if details.get("timed_out") is True or details.get("timeout") is True:
+        return True
+    if details.get("state") == "timeout":
+        return True
+    # docker/subprocess convention used by vm_terminal_exec
+    try:
+        if int(details.get("exit_code")) == 124:
+            return True
+    except (TypeError, ValueError):
+        pass
+    low = (result_text or "").lower()
+    if "[timeout after" in low:
+        return True
+    if "timed out waiting" in low or "timed out after" in low:
+        return True
+    if "desk authorization" in low and "timed out" in low:
+        return True
+    return False
 
 
 _SHARE_IMG_MD = re.compile(

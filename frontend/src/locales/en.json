@@ -117,6 +117,7 @@
   "chat.toolDone": "Done",
   "chat.toolError": "Error",
   "chat.toolErrorCount": "{count} error(s)",
+  "chat.toolTimeout": "Stopped by timeout",
   "chat.screenshot": "Screenshot",
   "chat.imageLightbox": "Image preview",
   "chat.closeLightbox": "Close",

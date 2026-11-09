@@ -3,7 +3,17 @@
     <button class="tool-group-summary" type="button" @click="onToggleList">
       <span class="tool-group-ico" aria-hidden="true">⚙</span>
       <span class="tool-group-title">{{ title }}</span>
-      <span v-if="statusSummary" class="tool-group-badge">{{ statusSummary }}</span>
+      <span
+        v-if="groupDurationLabel"
+        class="tool-dur"
+        :class="{ timeout: groupTimedOut }"
+        :title="groupTimedOut ? t('chat.toolTimeout') : undefined"
+      >{{ groupDurationLabel }}</span>
+      <span
+        v-if="statusSummary"
+        class="tool-group-badge"
+        :class="{ timeout: groupTimedOut }"
+      >{{ statusSummary }}</span>
       <time
         v-if="groupTime"
         class="tool-group-time"
@@ -32,7 +42,15 @@
     <div v-if="livePreview" class="tool-group-live tool-group-live-compact">
       <div class="tool-live-head">
         <span class="tool-live-name">{{ livePreview.name }}</span>
-        <span class="tool-live-status">{{ livePreview.status }}</span>
+        <span
+          v-if="livePreview.duration"
+          class="tool-dur"
+          :class="{ timeout: livePreview.timedOut }"
+        >{{ livePreview.duration }}</span>
+        <span
+          class="tool-live-status"
+          :class="{ timeout: livePreview.timedOut }"
+        >{{ livePreview.status }}</span>
         <span v-if="livePreview.hint" class="tool-live-hint">{{ livePreview.hint }}</span>
       </div>
     </div>
@@ -64,7 +82,16 @@
         <template v-else>
           <button class="tool-row-head" type="button" @click="toggle(m.id)">
             <span class="tool-row-name">{{ m.meta?.tool_name || t("chat.tool") }}</span>
-            <span class="tool-row-status">{{ statusLabel(m) }}</span>
+            <span
+              v-if="toolDurationLabel(m)"
+              class="tool-dur"
+              :class="{ timeout: isTimedOut(m) }"
+              :title="isTimedOut(m) ? t('chat.toolTimeout') : undefined"
+            >{{ toolDurationLabel(m) }}</span>
+            <span
+              class="tool-row-status"
+              :class="{ timeout: isTimedOut(m) }"
+            >{{ statusLabel(m) }}</span>
             <span v-if="pointerHint(m)" class="tool-row-pointer">{{ pointerHint(m) }}</span>
             <time
               v-if="rowTime(m)"
@@ -213,7 +240,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { formatMsgTime } from "../timeFormat";
 
@@ -235,12 +262,114 @@ function rowTime(m) {
   return formatMsgTime(m?.created_at, locale.value);
 }
 
+/** Tick while a tool is running so elapsed duration updates live. */
+const nowMs = ref(Date.now());
+let tickTimer = null;
+
+function entryTools() {
+  return (props.entries || []).filter((m) => m?.meta?.kind === "tool");
+}
+
+function anyToolRunning() {
+  return entryTools().some((m) => (m.meta?.status || "running") === "running");
+}
+
+function syncTick() {
+  if (anyToolRunning()) {
+    nowMs.value = Date.now();
+    if (!tickTimer) {
+      tickTimer = setInterval(() => {
+        nowMs.value = Date.now();
+      }, 1000);
+    }
+  } else if (tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
+
+onMounted(syncTick);
+onBeforeUnmount(() => {
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = null;
+});
+
+watch(
+  () => props.entries,
+  () => syncTick(),
+  { deep: true },
+);
+
+/** Compact duration: 842ms · 12s · 1m 05s · 1h 02m */
+function formatDurationMs(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n < 0) return "";
+  if (n < 1000) return `${Math.round(n)}ms`;
+  const sec = n / 1000;
+  if (sec < 60) {
+    return sec < 10 ? `${sec.toFixed(1)}s` : `${Math.round(sec)}s`;
+  }
+  const totalSec = Math.round(sec);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) {
+    return `${h}h ${String(m).padStart(2, "0")}m`;
+  }
+  return s > 0 ? `${m}m ${String(s).padStart(2, "0")}s` : `${m}m`;
+}
+
+function isTimedOut(m) {
+  const meta = m?.meta || {};
+  if (meta.timed_out === true) return true;
+  const c = String(m?.content || "");
+  if (/\[timeout after\s+\d+s\]/i.test(c)) return true;
+  if (/timed out waiting/i.test(c) || /timed out after/i.test(c)) return true;
+  return false;
+}
+
+function toolDurationMs(m) {
+  const meta = m?.meta || {};
+  const stored = Number(meta.duration_ms);
+  if (Number.isFinite(stored) && stored >= 0) return stored;
+  if ((meta.status || "running") === "running" && m?.created_at) {
+    const start = Date.parse(m.created_at);
+    if (Number.isFinite(start)) return Math.max(0, nowMs.value - start);
+  }
+  return null;
+}
+
+function toolDurationLabel(m) {
+  const ms = toolDurationMs(m);
+  return ms == null ? "" : formatDurationMs(ms);
+}
+
 const groupTimeIso = computed(() => {
   const first = props.entries.find((m) => m?.created_at);
   return first?.created_at || "";
 });
 
 const groupTime = computed(() => formatMsgTime(groupTimeIso.value, locale.value));
+
+const groupDurationMs = computed(() => {
+  void nowMs.value;
+  let total = 0;
+  let any = false;
+  for (const m of entryTools()) {
+    const ms = toolDurationMs(m);
+    if (ms == null) continue;
+    total += ms;
+    any = true;
+  }
+  return any ? total : null;
+});
+
+const groupDurationLabel = computed(() => {
+  const ms = groupDurationMs.value;
+  return ms == null ? "" : formatDurationMs(ms);
+});
+
+const groupTimedOut = computed(() => entryTools().some((m) => isTimedOut(m)));
 
 function isShot(m) {
   return m?.meta?.kind === "screenshot";
@@ -439,7 +568,7 @@ const lastTool = computed(() => {
 const liveTick = computed(() => {
   const last = lastTool.value;
   if (!last) return "none";
-  return `${last.id}:${last.meta?.status || ""}:${String(last.content || "").length}`;
+  return `${last.id}:${last.meta?.status || ""}:${String(last.content || "").length}:${toolDurationMs(last) ?? ""}`;
 });
 
 /** Compact live line: last tool name + status (details stay in the folded list). */
@@ -447,10 +576,13 @@ const livePreview = computed(() => {
   if (props.sealed) return null;
   const m = lastTool.value;
   if (!m) return null;
+  void nowMs.value;
   return {
     name: m.meta?.tool_name || t("chat.tool"),
     status: statusLabel(m),
     hint: pointerHint(m),
+    duration: toolDurationLabel(m),
+    timedOut: isTimedOut(m),
   };
 });
 

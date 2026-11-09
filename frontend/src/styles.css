@@ -4566,6 +4566,23 @@ label.muted {
   letter-spacing: 0.04em;
 }
 
+.tool-dur {
+  flex: none;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--muted, #8a8a90);
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tool-dur.timeout,
+.tool-group-badge.timeout,
+.tool-row-status.timeout,
+.tool-live-status.timeout {
+  color: #e07a10;
+}
+
 .tool-group-time,
 .tool-row-time {
   flex: none;
@@ -4939,7 +4956,7 @@ label.muted {
   letter-spacing: 0.03em;
 }
 
-.tool-row.error .tool-row-status {
+.tool-row.error .tool-row-status:not(.timeout) {
   color: var(--danger);
 }
 

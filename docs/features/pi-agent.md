@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-09 (escape raw HTML in chat markdown so long user msgs stay intact)
+**Last updated**: 2026-11-10 (tool duration before Done; orange on timeout)
 
 ## User behaviour
 
@@ -12,7 +12,7 @@
 - Web messages → Pi prompt; assistant tokens over **SSE** (`message.delta` then `message.updated`).
 - Emoji reaction: the `react` tool puts an emoji on the turn's user bubble (`meta.reactions`), without a tool card, only when it is justified (thanks, a joke, good news). Most turns get none; a plain question does not get one just because it was answered. It does not end the turn: the reply text follows if needed. See [`reactions.md`](./reactions.md).
 - Bot rail: sorted by **latest message** (sent or received), most recent at the top (`last_message_at` + live messages).
-- Chat layout: **user on the right**, **assistant on the left**, **tools grouped** in the centre (`ToolGroup`). During the run: live preview of the **last tool call** (fixed height, so each result does not resize the thread). No blank tail under the thread — that block used to shove the conversation up in one jump. Opening a thread jumps straight to the latest messages (the pane stays hidden for that instant) — it does not animate through the history. Streaming growth stays instant. As soon as an LLM reply (or other message) follows: the group **collapses** into a summary bar — unless the user opened the details (caret). Detail menu = **list of collapsed tools** (`vm_ground`, `vm_click`, `vm_drag`, `vm_scroll`, …) — no separate target/pointer blocks. A line's **Error** status is in red. Captures / crosses / overlays: only when expanding the relevant tool line.
+- Chat layout: **user on the right**, **assistant on the left**, **tools grouped** in the centre (`ToolGroup`). During the run: live preview of the **last tool call** (fixed height, so each result does not resize the thread). No blank tail under the thread — that block used to shove the conversation up in one jump. Opening a thread jumps straight to the latest messages (the pane stays hidden for that instant) — it does not animate through the history. Streaming growth stays instant. As soon as an LLM reply (or other message) follows: the group **collapses** into a summary bar — unless the user opened the details (caret). Detail menu = **list of collapsed tools** (`vm_ground`, `vm_click`, `vm_drag`, `vm_scroll`, …) — no separate target/pointer blocks. A line's **Error** status is in red. **Duration** (`meta.duration_ms` from Pi, or live elapsed while running) is shown **just before** Done/Error on the group summary and each tool row; **orange** when the tool ended on a timeout (`meta.timed_out` or `[timeout after Ns]` / « timed out waiting » in the result). Captures / crosses / overlays: only when expanding the relevant tool line.
 - Markdown code blocks (`<pre>`): **copy** icon top right (hover / focus) → clipboard, "Copied" feedback.
 - Markdown tables: light card, header, zebra, sticky 1st column, horizontal scroll if the table overflows.
 - **User and assistant** bubbles: **90%** of the thread width. The time is beside them, outside those 90%. **System** messages (botmail) are a centred card, same width as tool groups, light blue background and dotted outline. **Webhook** and **scheduled task** messages have that same card, with a light orange background and a dotted outline.
@@ -26,7 +26,7 @@
 - During a run: the send button becomes the **Working orb** ([thinking-orbs](https://libraries.dev/orbs), canvas engine `thinking-orbs/engine` via `WorkingOrb.vue`) — click = Pi `abort`. In the Conversation thread, the same orb appears **as long as no assistant text has started** (waiting for the model / between tool turns); from the first token, it disappears in favour of the bubble.
 - If the Pi session dies while waiting for the user (vault / desktop): status `idle`, **Resume** chat card (`meta.kind=agent_interrupted`) → `POST /bots/:name/resume` relaunches the agent on the original task (without a new user bubble).
 - Desk ready while a run is still going: **no** second `resume_run` (avoids "Agent is already processing"). Always set `status=busy` back for the Working orb — don't leave a forced `idle` at the end of desk boot.
-- On `tool_execution_end`, Pi often sends `args={}`: Autonomous keeps the args from the start and enriches `meta` (click/drag coords) for the UI.
+- On `tool_execution_end`, Pi often sends `args={}`: Autonomous keeps the args from the start and enriches `meta` (click/drag coords, `duration_ms`, `timed_out`) for the UI.
 - **Actions** guard-rail (Settings, saved as soon as the field changes — no button), counter **since the last `user` message** (user, webhook or cron) — **not** the whole conversation, and **not** reset by a desk/vault resume:
   - `guard.review_every` (**100** default, `0` = off): **blocking** Pi steer → the agent must answer `GUARD:CONTINUE` or `GUARD:STOP` before any further tools;
   - `guard.max_actions` (**1000** default): hard stop + system message.
