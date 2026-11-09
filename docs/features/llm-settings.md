@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup_config.py`, `autonomous/services/chat_attachments.py`, `frontend/src/components/LlmSettings.vue`  
-**Last updated**: 2026-11-09 (default model for Manager-created bots)
+**Last updated**: 2026-11-10 (contextWindow vs vLLM; compaction budgets)
 
 ## User behaviour
 
@@ -35,6 +35,8 @@
 - Do not drop unknown keys when saving a model.
 - Do not require a model when saving provider credentials alone.
 - Built-in providers via Pi `/login` stay outside this editor (custom OpenAI-compat only).
+- Set `contextWindow` on custom models to the real vLLM `--max-model-len` (Pi defaults to **128K** when omitted — wrong compaction / overflow). Compaction headroom: `~/.pi/agent/settings.json` → `compaction.reserveTokens` / `keepRecentTokens` (and optional `modelOverrides`). Our Mister3D Qwen ref uses `contextWindow: 262144` with reserve **49152** / keepRecent **28000** so auto-compact leaves room before a fat tool batch. vLLM prefix caching has **no TTL** → leave Pi `cacheWarming` **off**; session-affinity headers only matter with several replicas behind a LB (single node: irrelevant).
+- Future Autonomous code must not rewrite the Pi system prefix every message (no per-turn “now” / fresh memory in system) — see [pi-agent.md](./pi-agent.md) pitfalls.
 
 ## Quick check
 

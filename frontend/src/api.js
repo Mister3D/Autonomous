@@ -51,8 +51,12 @@ function formatApiError(data, fallback) {
   return fallback || "Error";
 }
 
-/** Walk pages until the written user message is included.
- * Tool and grounding events can fill the API window (max 200) and hide the turn.
+/** Walk pages until the start of the conversation (or the page cap).
+ *
+ * The API returns at most 200 messages per call (newest page). Stopping at the
+ * first page that merely *contains* a user bubble used to drop older history
+ * (e.g. Manager: 301 rows → only the newest 200 loaded, kickoff missing at top).
+ * Keep paging while the page is full; a short page means we reached the start.
  */
 async function loadThread(name) {
   const pages = [];
@@ -63,9 +67,9 @@ async function loadThread(name) {
     const page = await request(`/bots/${name}/messages?${q}`);
     if (!Array.isArray(page) || !page.length) break;
     pages.unshift(page);
-    if (page.some((m) => m.role === "user")) break;
     const oldest = page[0]?.created_at;
     if (!oldest || oldest === before) break;
+    if (page.length < 200) break;
     before = oldest;
   }
   return pages.flat();

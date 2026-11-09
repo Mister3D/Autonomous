@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-10 (Relancer bar: no false stuck while LLM answers)
+**Last updated**: 2026-11-10 (stable system prefix for prompt/KV cache)
 
 ## User behaviour
 
@@ -19,7 +19,7 @@
 - During a reply: the thread **no longer sticks** to the bottom if you scroll up; ↓ button to go back. Auto-scroll only if you are already near the bottom (or after sending).
 - Input **always open** during a run: when Pi is mid-prompt, the send prefers a **mid-run steer** (`meta.mid_run`) so the agent answers briefly then continues the task. If steer is unavailable, the message falls back to the **queue** (`meta.queued`, badge « Queued » / « En file », pinned at the bottom). Live updates stay just above queued bubbles. On drain: `created_at` reset to now, then FIFO run (also after stop). Optional `prompt` on `POST /messages` overrides the agent text while keeping a short `content` bubble (`meta.agent_prompt`). `loadMessages` merges by id and drops `tmp-*` bubbles once the server echo exists (SSE `message.created` / HTTP) so the UI never shows the same send twice. Whitespace-only assistant placeholders are discarded (no timestamp-only rows).
 - Visible timestamp: time to the **right** of assistant bubbles (left), to the **left** of user bubbles (right), vertically centred; if not today → `DD/MM` above the time. Also on the summary / tool lines (`ToolGroup`).
-- The API only returns one page of events (`limit` ≤ 200). The client (`loadThread`) pages back until it includes the **latest user message**, otherwise a tool run pushes it off the screen on refresh.
+- The API only returns one page of events (`limit` ≤ 200). The client (`loadThread`) pages backward while each page is full (up to 20×200) so the **start** of the thread is loaded — not only until the first page that happens to contain a user bubble (that bug hid older history at the top, e.g. Manager kickoff).
 - Input area: **textarea** — `Enter` sends, **`Shift+Enter`** new line (auto-resize). The text and attachments **leave the field immediately**, without waiting for the server response. If sending fails (or a vault secret is refused), the draft comes back. **Pasting an image** (Ctrl/Cmd+V) into the field → preview, then sent with the text; stored under `~/…/.autonomous/chat-attachments/`, passed to Pi as `images[]` (vision required on the model).
 - Model picker: `ModelPicker` is the shared `MenuSelect` (no native `<select>`); short label + provider.
 - Model **per bot** (creation + Details); if an RPC session is running, `set_model` mid-session.
@@ -71,7 +71,7 @@ Pi is **not** in the VMs. It's on the host.
 - Inter-bot extension: `autonomous/pi_extensions/botmail.ts` → `bot_list` / `bot_tell` / `bot_ask` (see `botmail.md`). User composer: "Dit à @…" / "Demande à @…".
 - Pi instructions (`pi_rpc.py`): `_VAULT_SYSTEM_HINT` (secret rules) and `_VM_SYSTEM_HINT` (desktop + browser) are **structured in numbered sections** — 1 Desk/shell, 2 Tools (read / wait / see / act / locate), 3 Action loop, 4 Block pages, 5 Login — one rule = one place only (no vault/VM duplicates). Generic: putting site-specific or captcha-vendor-specific recipes there is forbidden. Tool descriptions (`vm.ts`, `browser.ts`, `vault.ts`) must stay consistent with them (coordinates = snapshot or `vm_ground`, never `vm_look`).
 - `vm_look` tool: the agent **never** has the PNG; `vm_look` = capture + host multimodal model → text. Rule: never announce an error that hasn't been read (`browser_text` / `vm_look`).
-- `--append-system-prompt` at session start: core memory + hints (vault, files, VM, botmail, manager, events, memory, approval, clarification, search, vision). No more `bots.role` persona.
+- `--append-system-prompt` at session start: core memory + hints (vault, files, VM, botmail, manager, events, memory, approval, clarification, search, vision). No more `bots.role` persona. That addendum is **frozen for the life of the Pi process** — each later `prompt()` only **appends** user/tool turns (append-only transcript). Do **not** reinject wall-clock “now”, refreshed core memory, or other per-message system rewrites: that busts provider / vLLM prefix (KV) cache. Memory / timezone changes apply on the **next** Pi start. Compaction is the intentional prefix rewrite (summary + recent turns).
 - API: `GET /pi/status`, `GET /pi/models`, `POST /bots/:name/stop`, `POST /bots/:name/resume`, `POST /bots/:name/retry`.
 - Resume a session outside the UI:  
   `cd data/bots/<name>/pi && pi --session-id <pi_session_id>`  
@@ -100,6 +100,8 @@ Pi is **not** in the VMs. It's on the host.
 - Pi cwd under the repo: always `--no-context-files` so as not to swallow Autonomous's `AGENTS.md`.
 - Never leave `data/bots/<name>/pi/sessions` after a bot `DELETE`: Pi resumes the `*.jsonl` if the same `--session-id` comes back.
 - User secret leak (`report_user_secret`): **stop** of the Pi process + scrub of the `*.jsonl` (otherwise the model "remembers" the password at the next message). See [`vault.md`](./vault.md).
+- **Prompt / KV cache**: keep the leading system+tools prefix byte-stable across turns in one Pi session. Forbidden in future work: stamping the current time into `--append-system-prompt` per message, rebuilding the system block on every `prompt()`, or rotating “fresh” memory into the system mid-session. Allowed: append user/assistant/tool messages; Pi compaction; process restart (new freeze). Compaction budgets live in `~/.pi/agent/settings.json` (`compaction.reserveTokens` / `keepRecentTokens`); model `contextWindow` in `models.json` must match the real vLLM `--max-model-len` or Pi compacts / overflows on the wrong number.
+- `loadThread`: do **not** stop paging when a page contains any `role=user` — that only guaranteed the latest turn was present and silently dropped older pages. Stop on a short page / empty page / cap.
 
 ## Quick check
 
