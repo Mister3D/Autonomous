@@ -1636,7 +1636,8 @@ a:focus-visible {
 .stage-toolbar {
   position: absolute;
   top: var(--chrome-top);
-  right: 0.75rem;
+  /* Match .stage-body horizontal padding so tabs share the chat card's right edge. */
+  right: 0.35rem;
   z-index: 3;
   display: flex;
   align-items: center;
