@@ -375,6 +375,7 @@ def fire_schedule(schedule: dict[str, Any], *, home: Path | None = None) -> dict
         "kind": "schedule",
         "schedule_id": sid,
         "name": name,
+        "instruction": instruction,
         "anchor_message_id": anchor,
     }
     msg = inject_trigger_message(bot, content, meta=meta, home=home)
@@ -582,6 +583,7 @@ def fire_webhook(
         "kind": "webhook",
         "webhook_id": wh["id"],
         "name": name,
+        "instruction": instruction,
         "anchor_message_id": anchor,
     }
     agent_prompt: str | None = None

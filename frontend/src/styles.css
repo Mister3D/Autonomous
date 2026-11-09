@@ -2074,7 +2074,25 @@ a:focus-visible {
 }
 
 .events-name {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
   font-size: 0.92rem;
+  font-weight: 650;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.15em;
+}
+
+.events-name:hover {
+  text-decoration-color: currentColor;
+  color: var(--accent-2, #3b6ea5);
 }
 
 .events-cron {
@@ -2165,38 +2183,64 @@ a:focus-visible {
   color: #1c1c22;
 }
 
-.events-icon-btn.active {
-  background: #eef3fa;
-  color: var(--accent-2, #3b6ea5);
-}
-
 .events-icon-btn.danger:hover {
   color: var(--danger);
 }
 
-.events-instruction {
-  margin-top: 0.45rem;
-  padding: 0.55rem 0.65rem;
-  border-radius: 10px;
-  background: #f7f4ee;
-  border: 1px dashed #e0d4bc;
+.modal.events-instruction-modal {
+  width: min(56rem, calc(100vw - 2.5rem));
+  max-height: min(88vh, 52rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.35rem 1.45rem;
+}
+
+.events-instruction-head h2 {
+  margin: 0.1rem 0 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.events-instruction-kind {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .events-instruction-label {
-  margin: 0 0 0.25rem;
-  font-size: 0.72rem;
+  margin: 0;
+  font-size: 0.78rem;
   font-weight: 650;
-  letter-spacing: 0.02em;
-  color: #8a7350;
+  color: #6a5a40;
+}
+
+.events-instruction-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: #f7f4ee;
+  border: 1px solid #e8e0d0;
 }
 
 .events-instruction-body {
   margin: 0;
-  font-size: 0.84rem;
-  line-height: 1.4;
+  font-size: 0.92rem;
+  line-height: 1.5;
   color: #2a2a30;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.events-instruction-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .events-toggle {
@@ -4388,6 +4432,27 @@ label.muted {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   opacity: 0.85;
+}
+
+.event-trigger-name {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.12em;
+}
+
+.event-trigger-name:hover {
+  text-decoration-color: currentColor;
 }
 
 .event-anchor {

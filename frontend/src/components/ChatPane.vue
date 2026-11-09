@@ -375,7 +375,15 @@
                         : t("chat.scheduleLabel")
                     }}
                     <template v-if="item.message.meta?.name">
-                      · {{ item.message.meta.name }}
+                      ·
+                      <button
+                        type="button"
+                        class="event-trigger-name"
+                        :title="t('events.showInstruction')"
+                        @click.stop="openEventInstruction(item.message)"
+                      >
+                        {{ item.message.meta.name }}
+                      </button>
                     </template>
                   </span>
                   <button
@@ -394,10 +402,6 @@
                     <pre>{{ formatPayload(item.message.meta?.payload) }}</pre>
                   </details>
                 </div>
-                <span
-                  v-if="isEventTrigger(item.message)"
-                  v-html="render(eventDisplay(item.message))"
-                />
                 <div
                   v-else-if="botmailDirection(item.message) && showBubbleText(item.message)"
                   class="botmail-body"
@@ -648,6 +652,13 @@
       </button>
     </form>
     </div>
+    <EventInstructionModal
+      :open="!!eventInstructionModal"
+      :name="eventInstructionModal?.name || ''"
+      :instruction="eventInstructionModal?.instruction || ''"
+      :kind="eventInstructionModal?.kind || 'webhook'"
+      @close="eventInstructionModal = null"
+    />
   </div>
 </template>
 
@@ -686,6 +697,7 @@ import BotDeleteCard from "./BotDeleteCard.vue";
 import ClarifyCard from "./ClarifyCard.vue";
 import DeskRequestCard from "./DeskRequestCard.vue";
 import AgentResumeCard from "./AgentResumeCard.vue";
+import EventInstructionModal from "./EventInstructionModal.vue";
 import WorkingOrb from "./WorkingOrb.vue";
 import {
   getComposerDraft,
@@ -1441,6 +1453,32 @@ function isEventTrigger(m) {
   return kind === "schedule" || kind === "webhook";
 }
 
+const eventInstructionModal = ref(null);
+
+/** Standing instruction for a fire card (meta, or stripped content for older msgs). */
+function eventCarrierInstruction(m) {
+  const meta = m?.meta || {};
+  const fromMeta = String(meta.instruction || "").trim();
+  if (fromMeta) return fromMeta;
+  let text = String(m?.content || "").trim();
+  text = text.replace(/^La tâche planifiée « [^»]* » dit ceci :\s*/i, "");
+  text = text.replace(/^Webhook déclenché avec une charge\.\s*/i, "");
+  text = text.replace(/^Webhook déclenché\.\s*/i, "");
+  text = text.replace(/\n+Contexte ancré : message \S+\s*$/i, "");
+  text = text.replace(/\n+Payload\s*:\s*[\s\S]*$/i, "");
+  return text.trim();
+}
+
+function openEventInstruction(m) {
+  if (!isEventTrigger(m)) return;
+  const meta = m?.meta || {};
+  eventInstructionModal.value = {
+    name: String(meta.name || "").trim() || "—",
+    instruction: eventCarrierInstruction(m),
+    kind: meta.kind === "schedule" ? "schedule" : "webhook",
+  };
+}
+
 function isNotify(m) {
   return m?.role === "event" && m?.meta?.kind === "tool" && m?.meta?.tool_name === "notify_user";
 }
@@ -1566,22 +1604,6 @@ function formatBytes(n) {
   if (v < 1024) return `${v} B`;
   if (v < 1024 * 1024) return `${(v / 1024).toFixed(v < 10 * 1024 ? 1 : 0)} KB`;
   return `${(v / (1024 * 1024)).toFixed(v < 10 * 1024 * 1024 ? 1 : 0)} MB`;
-}
-
-/** Instruction seule, sans le préambule déjà dit par la première ligne. */
-function eventInstruction(m) {
-  let text = String(m?.content || "").trim();
-  text = text.replace(/^La tâche planifiée « [^»]* » dit ceci :\s*/i, "");
-  text = text.replace(/^Webhook déclenché avec une charge\.\s*/i, "");
-  text = text.replace(/^Webhook déclenché\.\s*/i, "");
-  text = text.replace(/\n+Contexte ancré : message \S+\s*$/i, "");
-  text = text.trim();
-  if (text === "(aucune instruction)") return "";
-  return text;
-}
-
-function eventDisplay(m) {
-  return t("chat.eventSent", { text: eventInstruction(m) });
 }
 
 function formatPayload(payload) {

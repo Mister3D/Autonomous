@@ -17,7 +17,14 @@
                 @change="toggleSchedule(s, $event)"
               />
             </label>
-            <strong class="events-name">{{ s.name }}</strong>
+            <button
+              type="button"
+              class="events-name"
+              :title="t('events.showInstruction')"
+              @click="openInstruction(s.name, s.instruction, 'schedule')"
+            >
+              {{ s.name }}
+            </button>
             <code class="events-cron" :title="s.cron_utc ? `UTC ${s.cron_utc}` : ''">{{ s.cron }}</code>
             <span class="events-badge">{{ s.timezone || t("events.local") }}</span>
             <span v-if="!s.recurring" class="events-badge once">{{ t("events.oneShot") }}</span>
@@ -26,26 +33,6 @@
             <div class="events-meta">
               <span>{{ t("events.nextRun") }}: {{ formatWhen(s.next_run_at, s.timezone) }}</span>
             </div>
-            <button
-              type="button"
-              class="events-icon-btn"
-              :class="{ active: previewId === `s:${s.id}` }"
-              :aria-pressed="previewId === `s:${s.id}`"
-              :aria-label="previewId === `s:${s.id}` ? t('events.hideInstruction') : t('events.showInstruction')"
-              :title="previewId === `s:${s.id}` ? t('events.hideInstruction') : t('events.showInstruction')"
-              @click="togglePreview(`s:${s.id}`)"
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path
-                  d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linejoin="round"
-                />
-                <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7" />
-              </svg>
-            </button>
             <button
               type="button"
               class="events-icon-btn danger"
@@ -57,10 +44,6 @@
                 <path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
-          </div>
-          <div v-if="previewId === `s:${s.id}`" class="events-instruction">
-            <p class="events-instruction-label">{{ t("events.instructionLabel") }}</p>
-            <p class="events-instruction-body">{{ instructionText(s.instruction) }}</p>
           </div>
         </li>
       </ul>
@@ -81,28 +64,15 @@
                 @change="toggleWebhook(w, $event)"
               />
             </label>
-            <strong class="events-name">{{ w.name }}</strong>
+            <button
+              type="button"
+              class="events-name"
+              :title="t('events.showInstruction')"
+              @click="openInstruction(w.name, w.instruction, 'webhook')"
+            >
+              {{ w.name }}
+            </button>
             <div class="events-item-actions">
-              <button
-                type="button"
-                class="events-icon-btn"
-                :class="{ active: previewId === `w:${w.id}` }"
-                :aria-pressed="previewId === `w:${w.id}`"
-                :aria-label="previewId === `w:${w.id}` ? t('events.hideInstruction') : t('events.showInstruction')"
-                :title="previewId === `w:${w.id}` ? t('events.hideInstruction') : t('events.showInstruction')"
-                @click="togglePreview(`w:${w.id}`)"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linejoin="round"
-                  />
-                  <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7" />
-                </svg>
-              </button>
               <button
                 type="button"
                 class="events-icon-btn"
@@ -132,10 +102,6 @@
               </button>
             </div>
           </div>
-          <div v-if="previewId === `w:${w.id}`" class="events-instruction">
-            <p class="events-instruction-label">{{ t("events.instructionLabel") }}</p>
-            <p class="events-instruction-body">{{ instructionText(w.instruction) }}</p>
-          </div>
           <div v-if="confirmWebhookId === w.id" class="inline-confirm" role="group">
             <p>{{ t("events.confirmDelete", { name: w.name }) }}</p>
             <button
@@ -153,6 +119,14 @@
         </li>
       </ul>
     </section>
+
+    <EventInstructionModal
+      :open="!!instructionModal"
+      :name="instructionModal?.name || ''"
+      :instruction="instructionModal?.instruction || ''"
+      :kind="instructionModal?.kind || 'webhook'"
+      @close="closeInstruction"
+    />
   </div>
 </template>
 
@@ -161,6 +135,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import EventInstructionModal from "./EventInstructionModal.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();
@@ -171,17 +146,19 @@ const loading = ref(false);
 const copiedId = ref("");
 const confirmWebhookId = ref("");
 const deletingWebhookId = ref("");
-/** `s:<id>` or `w:<id>` — which carrier instruction is open. */
-const previewId = ref("");
+const instructionModal = ref(null);
 const clock = ref({ timezone: "", utc_offset: "" });
 
-function togglePreview(key) {
-  previewId.value = previewId.value === key ? "" : key;
+function openInstruction(name, instruction, kind) {
+  instructionModal.value = {
+    name: String(name || "").trim() || "—",
+    instruction: String(instruction || ""),
+    kind,
+  };
 }
 
-function instructionText(raw) {
-  const text = String(raw || "").trim();
-  return text || t("events.instructionEmpty");
+function closeInstruction() {
+  instructionModal.value = null;
 }
 
 const tzLabel = computed(() =>
