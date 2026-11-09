@@ -13,7 +13,7 @@
 ## User behaviour
 
 - Light Soft UI: soft canvas (`--bg-canvas`), elevated white cards, orange accent, soft shadows.
-- Settings sections are card-based with icon badges (Générale, LLM, Grounding, vault, memory, companions). LLM card (`.llm-settings`) stacks sections with one flex gap + shared subhead rule (no mixed per-block margins).
+- Settings sections are card-based with icon badges (Générale, LLM, Grounding, Tokens, vault, memory, companions). Tokens is a flush full-height chart (no cards). LLM card (`.llm-settings`) stacks sections with one flex gap + shared subhead rule (no mixed per-block margins).
 - `UiIcon` `memory` = [SVG Repo brain](https://www.svgrepo.com/svg/521533/brain) (filled `currentColor`) — settings nav Mémoire + inspector Mémoire.
 - Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**. Manager uses `UiToggleRow` `tip` (custom bubble on the switch) instead of the `<small>` hint; when locked, the tip shows the “already a Manager” reason.
 - Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (arm → check; tooltip = « Confirmer ? »).

@@ -22,7 +22,8 @@
           </button>
         </nav>
       </aside>
-      <div class="settings-main">
+      <div class="settings-main" :class="{ 'settings-main-flush': section === 'tokens' }">
+      <TokenUsageChart v-if="section === 'tokens'" />
       <LlmSettings v-if="section === 'llm'" />
       <GroundingSettings v-if="section === 'grounding'" />
       <UiCard v-if="section === 'agent'" :title="t('pi.version')">
@@ -594,6 +595,7 @@ import GroundingSettings from "./GroundingSettings.vue";
 import LlmSettings from "./LlmSettings.vue";
 import LocaleFlag from "./LocaleFlag.vue";
 import SecretInput from "./SecretInput.vue";
+import TokenUsageChart from "./TokenUsageChart.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
@@ -607,12 +609,13 @@ function platformLabel(raw) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-const SECTIONS = ["agent", "llm", "grounding", "vault", "memory", "companions"];
+const SECTIONS = ["agent", "llm", "grounding", "tokens", "vault", "memory", "companions"];
 const DEFAULT_TZ = "Europe/Paris";
 const tabs = [
   { id: "agent", label: "settings.tabAgent", icon: "terminal" },
   { id: "llm", label: "settings.tabLlm", icon: "spark" },
   { id: "grounding", label: "settings.tabGrounding", icon: "crosshair" },
+  { id: "tokens", label: "settings.tabTokens", icon: "chart" },
   { id: "vault", label: "settings.tabVault", icon: "vault" },
   { id: "memory", label: "settings.tabMemory", icon: "memory" },
   { id: "companions", label: "settings.tabCompanions", icon: "monitor" },

@@ -144,6 +144,15 @@ class BotList(MethodView):
             _handle(exc)
 
 
+@blp.route("/token-usage")
+class BotTokenUsageHistory(MethodView):
+    def get(self):
+        """Daily cumulative token series for every living bot (Settings chart)."""
+        from autonomous.services import token_usage_history as usage_hist
+
+        return usage_hist.history(home=g.home)
+
+
 @blp.route("/<string:name>")
 class BotDetail(MethodView):
     @blp.response(200, BotSchema)
@@ -159,6 +168,8 @@ class BotDetail(MethodView):
     def patch(self, data, name):
         """Update bot fields."""
         try:
+            if "model" in data and not str(data.get("model") or "").strip():
+                raise ValidationError(t("bot.model_required"), code="model_required")
             return bots_svc.patch_bot(name, data, home=g.home)
         except AutonomousError as exc:
             _handle(exc)

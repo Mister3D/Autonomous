@@ -52,6 +52,8 @@ $AUTONOMOUS_HOME/
 
 Desktop sleep columns: `auto_sleep` (default 1), `desk_last_active_at`. See [features/desk-screen.md](./features/desk-screen.md).
 
+Conversation counters `tokens_in` / `tokens_out` reset on chat clear. Durable daily history lives in `bot_token_usage_daily` (see [features/token-usage.md](./features/token-usage.md)) and is purged when the bot row is deleted.
+
 `desk` when present:
 ```json
 {

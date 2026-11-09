@@ -83,11 +83,13 @@ const managerLockReason = computed(() =>
 );
 
 async function onModel(next) {
+  const model = String(next || "").trim();
+  if (!model) return;
   const i = state.bots.findIndex((b) => b.name === props.bot.name);
   const prev = i >= 0 ? state.bots[i].model : props.bot.model;
-  if (i >= 0) state.bots[i] = { ...state.bots[i], model: next };
+  if (i >= 0) state.bots[i] = { ...state.bots[i], model };
   try {
-    await api.patchBot(props.bot.name, { model: next });
+    await api.patchBot(props.bot.name, { model });
   } catch (e) {
     if (i >= 0) state.bots[i] = { ...state.bots[i], model: prev };
     alert(e.message);

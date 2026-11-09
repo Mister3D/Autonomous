@@ -88,6 +88,10 @@
       <circle cx="12" cy="12" r="3" />
       <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
     </template>
+    <template v-else-if="name === 'chart'">
+      <path d="M4.5 19.5h15" />
+      <path d="M7 16.5 10.2 11l3.1 3.4L17.5 7.5" />
+    </template>
     <template v-else-if="name === 'terminal'">
       <rect x="4.5" y="5" width="15" height="14" rx="2" />
       <path d="M8 10.2 10.2 12 8 13.8M12.2 14.2h3.6" />

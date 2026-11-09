@@ -39,6 +39,20 @@ def test_create_without_model_rejected(auth_client):
         assert r.status_code in (400, 422), (payload, r.status_code, r.data)
 
 
+def test_patch_cannot_clear_model(auth_client):
+    r = auth_client.post("/api/v1/bots", json={"name": "Keep Model"})
+    assert r.status_code == 201
+    name = r.json["name"]
+    assert r.json.get("model")
+    for body in ({"model": ""}, {"model": "   "}):
+        bad = auth_client.patch(f"/api/v1/bots/{name}", json=body)
+        assert bad.status_code in (400, 422), (body, bad.status_code, bad.data)
+    still = auth_client.get(f"/api/v1/bots/{name}")
+    assert still.status_code == 200
+    assert still.json.get("model")
+    auth_client.delete(f"/api/v1/bots/{name}")
+
+
 def test_create_freeform_name_slugifies(auth_client):
     r = auth_client.post("/api/v1/bots", json={"name": "Bad Name"})
     assert r.status_code == 201

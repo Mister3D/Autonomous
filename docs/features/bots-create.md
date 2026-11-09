@@ -7,7 +7,7 @@
 - `autonomous/models/schemas.py` (`BotCreateSchema`)
 - `frontend/src/api.js` (`formatApiError` for flask-smorest 422)
 
-**Last updated**: 2026-11-09 (création : modèle obligatoire)
+**Last updated**: 2026-11-09 (modèle obligatoire : create + Details, pas d’option vide)
 
 ## User behaviour
 
@@ -28,7 +28,7 @@
 - `POST /bots`: `{ "name": "Debug Bot" }` → `label="Debug Bot"`, `name="debug-bot"`.
 - **Shared memory** checkbox (`memory_access`, default on): untick to isolate the bot (see [memory.md](./memory.md)).
 - **Manager** checkbox (`is_manager`, default off): orchestrator — lists bots and delegates without waiting (see [manager.md](./manager.md)). **Only one** Manager: if another one already exists, the checkbox is disabled (API → 409 `manager_exists`).
-- **Model** is required to create: the picker can show **Aucun modèle**, but **Créer** stays disabled until a real model is chosen. `POST /bots` rejects missing / empty `model` (`model_required`). No silent auto-pick of the first Pi model.
+- **Model** is required: the picker has **no** “Aucun modèle / No model” row. Create stays disabled until a real model is chosen; Details cannot clear the model. `POST /bots` and `PATCH /bots/:name` reject empty `model` (`model_required`). No silent auto-pick of the first Pi model. Placeholder text may still appear if a legacy bot has an empty model.
 - Optional: `{ "name": "Mon Assistant", "slug": "asst" }` to force the technical id.
 - `label` in the payload is still accepted (legacy) and overrides the display if provided.
 - `bots.name` = slug (`^[a-z0-9][a-z0-9_-]{0,31}$`); `bots.label` = free-form name; `bots.id` = stable UUID (mail / events / vault).

@@ -594,7 +594,10 @@ def add_token_usage(
     *,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Accumulate Pi usage.input / usage.output for the bot conversation."""
+    """Accumulate Pi usage.input / usage.output for the bot conversation.
+
+    Also records durable daily history (survives chat clear; purged on bot delete).
+    """
     get_bot(name, home=home)
     tin = max(0, int(tokens_in or 0))
     tout = max(0, int(tokens_out or 0))
@@ -611,6 +614,9 @@ def add_token_usage(
             """,
             (tin, tout, _now(), name),
         )
+    from autonomous.services import token_usage_history as usage_hist
+
+    usage_hist.record_usage(name, tin, tout, home=home)
     bot = get_bot(name, home=home)
     BUS.publish("bot.updated", {"bot": bot}, bot=name)
     return bot

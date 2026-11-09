@@ -20,7 +20,7 @@
   "bot.manager_exists": "Only one Manager is allowed (already: '{name}'). Turn it off before promoting another.",
   "bot.invalid_name": "Invalid technical id (slug: [a-z0-9][a-z0-9_-]{{0,31}})",
   "bot.invalid_display_name": "Invalid bot name (1–64 chars, no / or \\)",
-  "bot.model_required": "Pick a model to create the bot.",
+  "bot.model_required": "Pick a model.",
   "chat.sent": "Message sent",
   "chat.cleared": "Chat history cleared",
   "desk.creating": "Creating desktop…",

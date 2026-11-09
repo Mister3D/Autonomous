@@ -82,6 +82,7 @@ export const api = {
     }),
   logout: () => request("/auth/logout", { method: "POST", body: {} }),
   listBots: () => request("/bots"),
+  tokenUsageHistory: () => request("/bots/token-usage"),
   createBot: (body) => request("/bots", { method: "POST", body }),
   getBot: (name) => request(`/bots/${name}`),
   patchBot: (name, body) => request(`/bots/${name}`, { method: "PATCH", body }),

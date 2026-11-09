@@ -5,8 +5,7 @@
     :placeholder="t('details.modelNone')"
     :aria-label="t('details.model')"
     :field="field"
-    allow-empty
-    @update:model-value="emit('update:model', $event)"
+    @update:model-value="onPick"
   />
 </template>
 
@@ -32,6 +31,12 @@ const options = computed(() =>
     meta: m.provider || "",
   })),
 );
+
+function onPick(value) {
+  const next = String(value || "").trim();
+  if (!next) return;
+  emit("update:model", next);
+}
 
 async function load() {
   try {

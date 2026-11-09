@@ -697,6 +697,19 @@ a:focus-visible {
   overflow: auto;
   padding: var(--settings-pad-top) 1.5rem 2.5rem 0;
   background: var(--bg-sidebar);
+  min-height: 0;
+}
+
+.settings-main.settings-main-flush {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--settings-pad-top) 0 0;
+}
+
+.settings-main.settings-main-flush > .token-usage {
+  flex: 1;
+  min-height: 0;
 }
 
 .settings-block {
