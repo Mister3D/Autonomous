@@ -3003,6 +3003,32 @@ label.muted {
   flex-direction: column;
   gap: 0.8rem;
   scroll-behavior: auto;
+  /* Auto-hide: thumb fades unless scrolling / hovering (class toggled in ChatPane). */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.messages.messages-scrolling,
+.messages:hover {
+  scrollbar-color: #d6d6dc transparent;
+}
+.messages::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.messages::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.25s ease;
+}
+.messages.messages-scrolling::-webkit-scrollbar-thumb,
+.messages:hover::-webkit-scrollbar-thumb {
+  background-color: #d6d6dc;
+  background-clip: padding-box;
 }
 .messages.messages-placing {
   visibility: hidden;

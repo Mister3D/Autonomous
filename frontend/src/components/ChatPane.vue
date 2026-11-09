@@ -1771,8 +1771,21 @@ function isNearBottom(el) {
   return Math.abs(followScrollTop(el) - el.scrollTop) <= NEAR_BOTTOM_PX;
 }
 
+let messagesScrollUiTimer = 0;
+
+function pulseMessagesScrollbar() {
+  const el = scroller.value;
+  if (!el) return;
+  el.classList.add("messages-scrolling");
+  clearTimeout(messagesScrollUiTimer);
+  messagesScrollUiTimer = window.setTimeout(() => {
+    el.classList.remove("messages-scrolling");
+  }, 2000);
+}
+
 function onMessagesScroll() {
   stickToBottom.value = isNearBottom(scroller.value);
+  pulseMessagesScrollbar();
 }
 
 function followScrollTop(el) {
@@ -2023,6 +2036,8 @@ onBeforeUnmount(() => {
   setComposerPending(props.bot.name, pending.value.slice());
   pending.value = [];
   if (flashTimer) clearTimeout(flashTimer);
+  clearTimeout(messagesScrollUiTimer);
+  scroller.value?.classList.remove("messages-scrolling");
   window.removeEventListener("keydown", onLightboxKey);
   composerMq?.removeEventListener("change", onComposerMqChange);
 });

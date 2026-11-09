@@ -55,7 +55,7 @@ Pi is **not** in the VMs. It's on the host.
 ## Implementation
 
 - Markdown chat (`ChatPane.render`): after `marked` + mentions, `wrapCodeBlocks` wraps each `<pre>` in `.code-block` + `.code-copy` button; `wrapTables` → `.md-table-wrap`; delegated click (`onChatClick`) → `navigator.clipboard` (`execCommand` fallback).
-- Scroll: `stickToBottom` + ~100 px threshold; the messages watch calls `scrollMessagesToBottom(false)`. The jump is instant (`scrollTop`), including the first paint and a `?msg=` anchor.
+- Scroll: `stickToBottom` + ~100 px threshold; the messages watch calls `scrollMessagesToBottom(false)`. The jump is instant (`scrollTop`), including the first paint and a `?msg=` anchor. The `.messages` scrollbar stays hidden until scroll (or hover), then fades out **2 s** after the last scroll event.
 - Message queue: `chat.send_message` sets `meta.queued` if the bot is busy **or** a run already holds the slot (a burst must not drop the extras). The UI renders every queued bubble last in the thread, each with the badge, until that one is drained. `drain_queued_user_messages` clears the badge on the oldest + `bump_created_at` then `start_run` (Pi finally / stop / desk ready).
 - Agent backend: `agent_backend=pi` (default). pytest tests force `null`. An opt-in case (`AUTONOMOUS_LLM_TESTS=1`, `llm` mark) launches a real Pi: see [`events.md`](./events.md).
 - Long-lived RPC: `pi --mode rpc … --offline` with **always** `--exclude-tools bash` (no host shell). Bot files: `files_*` (see [`agent-files.md`](./agent-files.md)). **VM** terminal: `vm_terminal_exec` (see [`agent-vm-terminal.md`](./agent-vm-terminal.md)).

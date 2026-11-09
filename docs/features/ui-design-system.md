@@ -8,7 +8,7 @@
 - `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
 - `frontend/index.html` — Plus Jakarta Sans
 
-**Last updated**: 2026-11-09 (Manager : infobulle custom sur le switch)
+**Last updated**: 2026-11-09 (chat `.messages` scrollbar auto-hide 2 s)
 
 ## User behaviour
 
