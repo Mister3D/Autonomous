@@ -260,6 +260,15 @@ def send_message(
                         )
                     except Exception:
                         cancelled = []
+                if not cancelled:
+                    try:
+                        from autonomous.services import household as household_svc
+
+                        cancelled = household_svc.cancel_pending_for_human_message(
+                            bot, agent_prompt, home=home
+                        )
+                    except Exception:
+                        cancelled = []
                 if cancelled:
                     return message
             return _mark_queued(bot, msg_id, content, meta, home=home)

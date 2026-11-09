@@ -10,7 +10,7 @@
 - `autonomous/services/pi_rpc.py` — `_MANAGER_SYSTEM_HINT`
 - UI: `CreateBotModal`, `DetailsPane`, `HubView` (Managers rail)
 
-**Last updated**: 2026-11-09 (Details Manager tip on the switch)
+**Last updated**: 2026-11-09 (household create/delete — see household.md)
 
 ## User behaviour
 
@@ -29,7 +29,8 @@
 - Column `is_manager` (bool). Patch → restarts the Pi session (manager prompt).
 - `ensure_manager_slot` before INSERT / UPDATE that sets `is_manager=1`.
 - Manager system prompt: don't wait / don't poll; plans built around the `Tell @` callback.
-- Non-manager: `bot_tell` / `bot_ask` unchanged; `bot_list` / `bot_delegate` → 403 `manager_required`.
+- Non-manager: `bot_tell` / `bot_ask` unchanged; `bot_list` / `bot_delegate` / household tools → 403 `manager_required`.
+- Household create/delete + default model: [household.md](./household.md).
 
 ## Pitfalls / non-regressions
 

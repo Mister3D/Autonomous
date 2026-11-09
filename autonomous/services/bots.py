@@ -683,6 +683,13 @@ def delete_bot(name: str, home: Path | None = None, destroy_desk: bool = True) -
             clarify_svc.purge_for_bot(bid, home=home)
     except Exception:
         pass
+    try:
+        from autonomous.services import household as household_svc
+
+        if bid:
+            household_svc.purge_for_bot(bid, home=home)
+    except Exception:
+        pass
     with get_db(home) as conn:
         conn.execute("DELETE FROM messages WHERE bot = ?", (name,))
         conn.execute("DELETE FROM terminal_logs WHERE bot = ?", (name,))
@@ -693,6 +700,7 @@ def delete_bot(name: str, home: Path | None = None, destroy_desk: bool = True) -
             conn.execute("DELETE FROM vault_requests WHERE bot = ?", (bid,))
             conn.execute("DELETE FROM approval_requests WHERE bot = ?", (bid,))
             conn.execute("DELETE FROM clarify_requests WHERE bot = ?", (bid,))
+            conn.execute("DELETE FROM bot_delete_requests WHERE bot = ?", (bid,))
         conn.execute("DELETE FROM bots WHERE name = ?", (name,))
     # Drop Pi session jsonl + VM home — otherwise recreate leaves orphans on disk.
     try:

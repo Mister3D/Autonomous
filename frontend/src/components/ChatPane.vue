@@ -157,6 +157,9 @@
         <article v-else-if="item.kind === 'approval'" class="msg approval" :data-msg-id="item.message.id">
           <ApprovalCard :message="item.message" />
         </article>
+        <article v-else-if="item.kind === 'bot_delete'" class="msg bot-delete" :data-msg-id="item.message.id">
+          <BotDeleteCard :message="item.message" :bot-name="bot.name" />
+        </article>
         <article v-else-if="item.kind === 'clarify'" class="msg clarify" :data-msg-id="item.message.id">
           <ClarifyCard :message="item.message" />
         </article>
@@ -598,6 +601,7 @@ import ToolGroup from "./ToolGroup.vue";
 import VaultRequestCard from "./VaultRequestCard.vue";
 import MemoryProposalCard from "./MemoryProposalCard.vue";
 import ApprovalCard from "./ApprovalCard.vue";
+import BotDeleteCard from "./BotDeleteCard.vue";
 import ClarifyCard from "./ClarifyCard.vue";
 import DeskRequestCard from "./DeskRequestCard.vue";
 import AgentResumeCard from "./AgentResumeCard.vue";
@@ -1442,6 +1446,10 @@ function isApproval(m) {
   return m?.role === "event" && m?.meta?.kind === "approval_request";
 }
 
+function isBotDelete(m) {
+  return m?.role === "event" && m?.meta?.kind === "bot_delete_request";
+}
+
 function isClarify(m) {
   return m?.role === "event" && m?.meta?.kind === "clarify_request";
 }
@@ -1684,6 +1692,10 @@ const thread = computed(() => {
     }
     if (isApproval(m)) {
       items.push({ kind: "approval", id: m.id, message: m });
+      continue;
+    }
+    if (isBotDelete(m)) {
+      items.push({ kind: "bot_delete", id: m.id, message: m });
       continue;
     }
     if (isClarify(m)) {

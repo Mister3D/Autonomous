@@ -61,7 +61,8 @@ def auth_client(client):
     def post(url, *args, **kwargs):
         path = str(url or "").split("?", 1)[0].rstrip("/")
         body = kwargs.get("json")
-        if path.endswith("/bots") and isinstance(body, dict) and "model" not in body:
+        # Only the create-bot collection (not …/household/bots).
+        if path.rstrip("/").endswith("/api/v1/bots") and isinstance(body, dict) and "model" not in body:
             kwargs = {**kwargs, "json": {**body, "model": "test/provider:fixture"}}
         return orig_post(url, *args, **kwargs)
 

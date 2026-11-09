@@ -13,6 +13,15 @@
     </p>
     <p v-if="loadError" class="vault-error">{{ loadError }}</p>
 
+    <h3 class="llm-subhead">{{ t("llm.defaultModelTitle") }}</h3>
+    <p class="hint llm-providers-hint">{{ t("llm.defaultModelHint") }}</p>
+    <div class="llm-default-model">
+      <ModelPicker field :model="defaultModel" @update:model="onDefaultModel" />
+      <span v-if="defaultModelSaving" class="hint">…</span>
+      <span v-else-if="defaultModelOk" class="setup-ok">{{ defaultModelOk }}</span>
+      <span v-else-if="defaultModelError" class="vault-error">{{ defaultModelError }}</span>
+    </div>
+
     <h3 class="llm-subhead">{{ t("llm.providersTitle") }}</h3>
     <p class="hint llm-providers-hint">{{ t("llm.providersHint") }}</p>
 
@@ -282,6 +291,7 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { refreshSetup } from "../store";
 import MenuSelect from "./MenuSelect.vue";
+import ModelPicker from "./ModelPicker.vue";
 import SecretInput from "./SecretInput.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
@@ -388,6 +398,11 @@ const loadError = ref("");
 const providerDrafts = ref([]);
 const modelRows = ref([]);
 const catalogModels = ref([]);
+const defaultModel = ref("");
+const defaultModelSaving = ref(false);
+const defaultModelOk = ref("");
+const defaultModelError = ref("");
+let defaultModelTimer = 0;
 
 const savedProviders = computed(() => (view.value?.providers || []).filter((p) => p.provider));
 const providerOptions = computed(() =>
@@ -532,6 +547,33 @@ async function load() {
     applyView(await api.setupLlm());
   } catch (e) {
     loadError.value = e.message;
+  }
+  try {
+    const settings = await api.settings();
+    defaultModel.value = String(settings?.["bots.default_model"] || "").trim();
+  } catch {
+    /* optional — picker still works */
+  }
+}
+
+async function onDefaultModel(next) {
+  const model = String(next || "").trim();
+  if (!model || model === defaultModel.value) return;
+  defaultModel.value = model;
+  defaultModelSaving.value = true;
+  defaultModelOk.value = "";
+  defaultModelError.value = "";
+  try {
+    await api.putSettings({ "bots.default_model": model });
+    defaultModelOk.value = t("llm.saved");
+    clearTimeout(defaultModelTimer);
+    defaultModelTimer = window.setTimeout(() => {
+      defaultModelOk.value = "";
+    }, 1800);
+  } catch (e) {
+    defaultModelError.value = e.message || String(e);
+  } finally {
+    defaultModelSaving.value = false;
   }
 }
 

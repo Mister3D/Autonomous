@@ -192,6 +192,11 @@ export const api = {
     request(`/memory/proposals/${id}/resolve`, { method: "POST", body }),
   resolveApproval: (id, body) =>
     request(`/approvals/requests/${id}/resolve`, { method: "POST", body }),
+  resolveBotDelete: (bot, id, body) =>
+    request(`/bots/${encodeURIComponent(bot)}/household/delete-requests/${id}`, {
+      method: "POST",
+      body,
+    }),
   resolveClarify: (id, body) =>
     request(`/clarifies/requests/${id}/resolve`, { method: "POST", body }),
   clock: () => request("/clock"),

@@ -3149,6 +3149,7 @@ label.muted {
 .msg.agent-error,
 .msg.vault,
 .msg.memory,
+.msg.bot-delete,
 .msg.approval,
 .msg.clarify,
 .msg.desk-req,
@@ -3540,6 +3541,122 @@ label.muted {
 .approval-accept:hover:not(:disabled) {
   background: #265a39;
   border-color: #265a39;
+}
+
+.bot-delete-card {
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  background: #f7f7f9;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.bot-delete-card.pending {
+  border-color: #e2b4b4;
+  background: linear-gradient(180deg, #fff8f8 0%, #f7f7f9 100%);
+}
+
+.bot-delete-card.confirmed {
+  border-color: #c9d6cc;
+}
+
+.bot-delete-card.denied,
+.bot-delete-card.cancelled {
+  opacity: 0.88;
+}
+
+.bot-delete-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bot-delete-card-head strong {
+  font-size: 0.98rem;
+}
+
+.bot-delete-state {
+  font-size: 0.72rem;
+  color: #6b6b70;
+  font-weight: 550;
+}
+
+.bot-delete-prompt,
+.bot-delete-resolved {
+  margin: 0.45rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #2c2c30;
+}
+
+.bot-delete-list {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.bot-delete-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, #fff 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  cursor: pointer;
+}
+
+.bot-delete-row input {
+  flex: none;
+}
+
+.bot-delete-av {
+  width: 28px !important;
+  height: 28px !important;
+  flex: none;
+}
+
+.bot-delete-row .bot-avatar,
+.bot-delete-row .bot-avatar svg.avatar-svg {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.bot-delete-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.bot-delete-row small {
+  color: #8a8a90;
+  font-size: 0.75rem;
+}
+
+.bot-delete-error {
+  margin: 0.45rem 0 0;
+  color: #b42318;
+  font-size: 0.85rem;
+}
+
+.bot-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.bot-delete-confirm {
+  background: #a33b3b;
+  border-color: #a33b3b;
+}
+
+.bot-delete-confirm:hover:not(:disabled) {
+  background: #8c3030;
+  border-color: #8c3030;
 }
 
 .clarify-card {
@@ -6393,8 +6510,22 @@ a.bot-mention:hover,
 .llm-settings .llm-providers-hint,
 .llm-settings .setup-toolbar,
 .llm-settings .llm-provider-list,
-.llm-settings .llm-catalog {
+.llm-settings .llm-catalog,
+.llm-settings .llm-default-model {
   margin: 0;
+}
+
+.llm-settings .llm-default-model {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+}
+
+.llm-settings .llm-default-model .model-picker {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
 }
 .llm-settings h3.llm-subhead {
   margin: 0;

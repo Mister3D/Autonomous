@@ -120,7 +120,13 @@ _MANAGER_SYSTEM_HINT = (
     "bot_delegate sends the task AND tells the worker to relaunch you with "
     "« Tell @you … » when finished (success or failure). After bot_delegate, continue "
     "other work or idle; when their Dit arrives, you are relaunched automatically. "
-    "Formulate every multi-bot plan around that callback — do not poll or block."
+    "Formulate every multi-bot plan around that callback — do not poll or block. "
+    "Household: create bots with bot_create({ bots:[{name, model?}, …] }) — omit model to "
+    "use the Settings → LLM default; pass model (provider/id or a clear hint like "
+    "« gpt-4o openai ») when the user names one. Discover refs with bot_models. "
+    "To delete bots, call bot_delete({ bots:[…], prompt? }) — it shows a checkbox card "
+    "(all checked by default) and BLOCKS until the user confirms or cancels. "
+    "Never delete yourself."
 )
 
 def _events_system_hint(home) -> str:

@@ -1,6 +1,7 @@
 /**
  * Inter-bot messaging tools for Pi (Dit / Demande à @bot).
- * Managers: bot_list + bot_delegate (async, peer must relaunch).
+ * Managers: bot_list + bot_delegate (async, peer must relaunch),
+ * plus household bot_create / bot_delete / bot_models.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -186,6 +187,232 @@ export default function (pi: ExtensionAPI) {
           + `You are NOT waiting — keep going. `
           + `They will relaunch you with « Tell @${cfg.bot} … » when finished.`,
         { inbox_id: res.data?.message },
+      );
+    },
+  });
+
+  pi.registerTool({
+    name: "bot_models",
+    label: "List models",
+    description:
+      "MANAGER ONLY: list available Pi models (provider/id refs) and the Settings "
+      + "default used when bot_create omits model=. Call this before inventing a ref.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const cfg = apiConfig();
+      if (!cfg) {
+        return textResult("Bot mail API not configured.");
+      }
+      const res = await api(
+        "GET",
+        `/bots/${encodeURIComponent(cfg.bot)}/household/models`,
+      );
+      if (!res.ok) {
+        const msg =
+          res.data?.message || res.data?.error || `HTTP ${res.status}`;
+        return textResult(
+          `Cannot list models: ${msg}`
+            + (res.status === 403 ? " (Manager flag required.)" : ""),
+        );
+      }
+      const def = String(res.data?.default_model || "").trim();
+      const models = Array.isArray(res.data?.models) ? res.data.models : [];
+      if (!models.length) {
+        return textResult(
+          (def ? `Default model: ${def}\n` : "No default model set in Settings → LLM.\n")
+            + "No models listed by Pi right now.",
+        );
+      }
+      const lines = models.slice(0, 80).map((m: any) => {
+        const ref = m.ref || `${m.provider}/${m.id}`;
+        const label = m.label && m.label !== m.id ? ` — ${m.label}` : "";
+        return `- ${ref}${label}`;
+      });
+      const more =
+        models.length > 80 ? `\n…and ${models.length - 80} more.` : "";
+      return textResult(
+        (def ? `Default model: ${def}\n` : "No default model set in Settings → LLM.\n")
+          + "Available models (use ref with bot_create model=):\n"
+          + lines.join("\n")
+          + more,
+      );
+    },
+  });
+
+  pi.registerTool({
+    name: "bot_create",
+    label: "Create bots",
+    description:
+      "MANAGER ONLY: create one or more Autonomous bots. "
+      + "Pass bots:[{name, model?}]. Omit model to use Settings → LLM default; "
+      + "when the user names a model (e.g. gpt-4o / openai), set model on each bot "
+      + "or call bot_models first. Does not create another Manager.",
+    parameters: Type.Object({
+      bots: Type.Array(
+        Type.Object({
+          name: Type.String({ description: "Display name (spaces OK)" }),
+          model: Type.Optional(
+            Type.String({
+              description:
+                "Pi model ref (provider/id) or clear hint; default = Settings LLM",
+            }),
+          ),
+        }),
+        { minItems: 1 },
+      ),
+    }),
+    execute: async (_id, params) => {
+      const cfg = apiConfig();
+      if (!cfg) {
+        return textResult("Bot mail API not configured.");
+      }
+      const bots = Array.isArray(params.bots) ? params.bots : [];
+      const res = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/household/bots`,
+        { bots },
+      );
+      if (!res.ok) {
+        const msg =
+          res.data?.message || res.data?.error || `HTTP ${res.status}`;
+        return textResult(
+          `bot_create failed: ${msg}`
+            + (res.status === 403
+              ? " (Manager flag required.)"
+              : ""),
+        );
+      }
+      const created = Array.isArray(res.data?.created) ? res.data.created : [];
+      if (!created.length) {
+        return textResult("bot_create: nothing created.");
+      }
+      const lines = created.map(
+        (b: any) =>
+          `- @${b.name}`
+          + (b.label && b.label !== b.name ? ` (${b.label})` : "")
+          + (b.model ? ` · ${b.model}` : ""),
+      );
+      return textResult(
+        `Created ${created.length} bot(s):\n` + lines.join("\n"),
+        { created },
+      );
+    },
+  });
+
+  pi.registerTool({
+    name: "bot_delete",
+    label: "Delete bots",
+    description:
+      "MANAGER ONLY: propose deleting bots via a chat card with a checklist "
+      + "(all checked by default). BLOCKS until the user confirms or cancels. "
+      + "Pass the bot names to offer; the user may uncheck some before confirming. "
+      + "You cannot delete yourself.",
+    parameters: Type.Object({
+      bots: Type.Array(Type.String({ description: "Bot slug or @name" }), {
+        minItems: 1,
+      }),
+      prompt: Type.Optional(
+        Type.String({ description: "Why these bots should be deleted" }),
+      ),
+      title: Type.Optional(Type.String({ description: "Card title" })),
+    }),
+    execute: async (_id, params, signal) => {
+      const cfg = apiConfig();
+      if (!cfg) {
+        return textResult("Bot mail API not configured.");
+      }
+      const bots = Array.isArray(params.bots)
+        ? params.bots.map((b: any) => String(b || "").replace(/^@/, ""))
+        : [];
+      const body: Json = { bots };
+      if (params.prompt != null && String(params.prompt).trim()) {
+        body.prompt = String(params.prompt).trim();
+      }
+      if (params.title != null && String(params.title).trim()) {
+        body.title = String(params.title).trim();
+      }
+      const created = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/household/delete-requests`,
+        body,
+      );
+      if (!created.ok) {
+        const msg =
+          created.data?.message
+          || created.data?.error
+          || `HTTP ${created.status}`;
+        return textResult(
+          `bot_delete failed: ${msg}`
+            + (created.status === 403 ? " (Manager flag required.)" : ""),
+        );
+      }
+      let req = created.data as Json;
+      if (req.state && req.state !== "pending") {
+        const deleted = Array.isArray((req.result as Json)?.deleted)
+          ? ((req.result as Json).deleted as string[])
+          : [];
+        return textResult(
+          req.state === "confirmed"
+            ? `User confirmed. Deleted: ${deleted.join(", ") || "(none)"}.`
+            : `Delete request ${req.state}.`,
+          { request_id: req.id, state: req.state, deleted },
+        );
+      }
+
+      const started = Date.now();
+      const timeoutMs = 60 * 60 * 1000;
+      while (Date.now() - started < timeoutMs) {
+        if (signal?.aborted) {
+          return textResult("bot_delete aborted before the user responded.", {
+            request_id: req.id,
+            state: "aborted",
+            error: true,
+          });
+        }
+        try {
+          await sleep(1500, signal);
+        } catch {
+          return textResult("bot_delete aborted before the user responded.", {
+            request_id: req.id,
+            state: "aborted",
+            error: true,
+          });
+        }
+        const polled = await api(
+          "GET",
+          `/bots/${encodeURIComponent(cfg.bot)}/household/delete-requests/${req.id}`,
+        );
+        if (!polled.ok) continue;
+        req = polled.data as Json;
+        if (req.state && req.state !== "pending") {
+          const result = (req.result as Json) || {};
+          const deleted = Array.isArray(result.deleted)
+            ? (result.deleted as string[])
+            : [];
+          if (result.human_redirect || req.state === "cancelled") {
+            return textResult(
+              "User skipped the buttons and wrote in chat (not a hard refusal). "
+                + `Follow their message: ${result.message || result.guidance || ""}`,
+              { request_id: req.id, state: req.state, deleted },
+            );
+          }
+          if (req.state === "denied") {
+            return textResult(
+              "User cancelled the delete card. No bots were deleted.",
+              { request_id: req.id, state: req.state, deleted: [] },
+            );
+          }
+          const errs = Array.isArray(result.errors) ? result.errors : [];
+          return textResult(
+            `User confirmed. Deleted: ${deleted.join(", ") || "(none)"}.`
+              + (errs.length ? ` Errors: ${errs.join("; ")}` : ""),
+            { request_id: req.id, state: req.state, deleted, errors: errs },
+          );
+        }
+      }
+      return textResult(
+        `Delete request ${req.id} still pending after timeout.`,
+        { request_id: req.id, state: "pending", error: true },
       );
     },
   });

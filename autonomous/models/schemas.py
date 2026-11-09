@@ -382,6 +382,13 @@ class SettingsSchema(Schema):
         allow_none=True,
         metadata={"description": "Allow public companion pairing requests"},
     )
+    bots_default_model = fields.Str(
+        data_key="bots.default_model",
+        allow_none=True,
+        metadata={
+            "description": "Default Pi model ref (provider/id) when the Manager creates a bot without model="
+        },
+    )
 
 
 class NovncInfoSchema(Schema):
@@ -436,6 +443,53 @@ class BotMailPeerSchema(Schema):
     status = fields.Str()
     capability = fields.Str()
     is_manager = fields.Bool()
+
+
+class HouseholdBotSpecSchema(Schema):
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=64))
+    model = fields.Str(
+        load_default=None,
+        allow_none=True,
+        metadata={"description": "Pi model ref or hint; falls back to bots.default_model"},
+    )
+    label = fields.Str(load_default=None, allow_none=True)
+    slug = fields.Str(load_default=None, allow_none=True)
+    internet = fields.Bool(load_default=True)
+    memory_access = fields.Bool(load_default=True)
+    avatar = fields.Str(load_default=None, allow_none=True)
+    avatar_color = fields.Integer(load_default=None, allow_none=True)
+
+
+class HouseholdCreateSchema(Schema):
+    bots = fields.List(
+        fields.Nested(HouseholdBotSpecSchema),
+        required=True,
+        validate=validate.Length(min=1, max=20),
+    )
+
+
+class HouseholdDeleteCreateSchema(Schema):
+    bots = fields.List(
+        fields.Str(),
+        required=True,
+        validate=validate.Length(min=1, max=50),
+        metadata={"description": "Bot slugs to propose for deletion (checked by default)"},
+    )
+    prompt = fields.Str(load_default="", allow_none=True)
+    title = fields.Str(load_default="", allow_none=True)
+
+
+class HouseholdDeleteResolveSchema(Schema):
+    action = fields.Str(
+        required=True,
+        validate=validate.OneOf(["confirm", "deny", "approve", "cancel"]),
+    )
+    bots = fields.List(
+        fields.Str(),
+        load_default=None,
+        allow_none=True,
+        metadata={"description": "Checked bot slugs when action=confirm"},
+    )
 
 
 class BotMailAskSchema(Schema):

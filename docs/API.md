@@ -44,6 +44,10 @@ DELETE /bots/:name
 POST   /bots/:name/capability
 GET    /bots/:name/mail/peers          # Manager only — other bots for orchestration
 POST   /bots/:name/mail/delegate       # Manager only — async task + relaunch instructions
+GET    /bots/:name/household/models    # Manager — Pi models + bots.default_model
+POST   /bots/:name/household/bots      # Manager — create bots [{name, model?}, …]
+POST   /bots/:name/household/delete-requests           # Manager — checkbox delete card
+GET|POST /bots/:name/household/delete-requests/:id     # poll / confirm|deny (+ bots[])
 
 GET    /bots/:name/messages        # page `limit`≤200, `before`; the client pages back up to the user message
 POST   /bots/:name/messages         # {content?, attachments?, prompt?} → run Pi (prompt = agent text if set)

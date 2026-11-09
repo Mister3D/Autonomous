@@ -31,6 +31,7 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [reactions.md](./reactions.md) | Bot emoji on the user's bubble (`react`) |
 | [avatars.md](./avatars.md) | SVG companion badges (states + Vue package) |
 | [manager.md](./manager.md) | Orchestrator Manager (peers + bot_delegate) |
+| [household.md](./household.md) | Manager create/delete bots + default LLM |
 | [companion.md](./companion.md) | PC companion: pairing, Internet, MCP |
 | [setup.md](./setup.md) | First-run checklist + first conversation CTA |
 | [updates.md](./updates.md) | Self-update channel + home Check/Update + restart |

@@ -53,6 +53,9 @@ from autonomous.models.schemas import (
     BotMailDelegateSchema,
     BotMailPeerSchema,
     BotMailSendSchema,
+    HouseholdCreateSchema,
+    HouseholdDeleteCreateSchema,
+    HouseholdDeleteResolveSchema,
     MessageCreateSchema,
     ScheduleCreateSchema,
     SchedulePatchSchema,
@@ -375,6 +378,93 @@ class BotMailDelegate(MethodView):
                 origin="api",
             )
             return {"ok": True, "message": item["id"]}
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/models")
+class BotHouseholdModels(MethodView):
+    def get(self, name):
+        """Manager: list Pi models usable when creating bots."""
+        try:
+            from autonomous.services import household as household_svc
+
+            household_svc.require_manager(name, home=g.home)
+            models = household_svc.list_available_models(home=g.home)
+            return {
+                "default_model": household_svc.default_model(home=g.home),
+                "models": models,
+            }
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/bots")
+class BotHouseholdCreate(MethodView):
+    @blp.arguments(HouseholdCreateSchema)
+    def post(self, data, name):
+        """Manager: create one or more bots (model optional → Settings default)."""
+        try:
+            from autonomous.services import household as household_svc
+
+            created = household_svc.create_bots(
+                name, data.get("bots") or [], home=g.home
+            )
+            return {"ok": True, "created": created}
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/delete-requests")
+class BotHouseholdDeleteRequests(MethodView):
+    @blp.arguments(HouseholdDeleteCreateSchema)
+    def post(self, data, name):
+        """Manager: show a checkbox delete card and wait (tool polls)."""
+        try:
+            from autonomous.services import household as household_svc
+
+            return household_svc.create_delete_request(
+                name,
+                bots=data.get("bots") or [],
+                prompt=data.get("prompt") or "",
+                title=data.get("title") or "",
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/delete-requests/<string:request_id>")
+class BotHouseholdDeleteRequestItem(MethodView):
+    def get(self, name, request_id):
+        """Poll a household delete request (Manager token)."""
+        try:
+            from autonomous.services import household as household_svc
+
+            household_svc.require_manager(name, home=g.home)
+            req = household_svc.get_delete_request(request_id, home=g.home)
+            if req.get("bot") != name:
+                raise Forbidden("Not your delete request", code="bot_token_forbidden")
+            return req
+        except AutonomousError as exc:
+            _handle(exc)
+
+    @blp.arguments(HouseholdDeleteResolveSchema)
+    def post(self, data, name, request_id):
+        """Confirm (with checked bots) or deny a household delete card."""
+        try:
+            from autonomous.services import household as household_svc
+
+            # Session / admin resolve from the UI; Manager token may also poll.
+            req = household_svc.get_delete_request(request_id, home=g.home)
+            if req.get("bot") != name:
+                raise Forbidden("Not your delete request", code="bot_token_forbidden")
+            return household_svc.resolve_delete_request(
+                request_id,
+                action=data.get("action") or "",
+                selected=data.get("bots"),
+                home=g.home,
+            )
         except AutonomousError as exc:
             _handle(exc)
 

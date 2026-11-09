@@ -2,11 +2,12 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup_config.py`, `autonomous/services/chat_attachments.py`, `frontend/src/components/LlmSettings.vue`  
-**Last updated**: 2026-11-09 (rythme vertical uniforme carte LLM)
+**Last updated**: 2026-11-09 (default model for Manager-created bots)
 
 ## User behaviour
 
 - Settings → **LLM**: edit OpenAI-compatible providers written to `~/.pi/agent/models.json` (Pi schema).
+- **Default model** (top of the card): Pi ref used when the Manager creates a bot without `model=` (see [household.md](./household.md)). Saved via `PUT /settings` (`bots.default_model`).
 - Two clear blocks:
   1. **Providers** — add / edit API endpoints (id, URL, key). Save without needing a model.
   2. **Models** — same cards as providers: collapsed on arrival, trash on the row, **Add a model** opens one empty card. Fields start with the display name, then provider (placeholder until chosen; that pick fetches `/v1/models`), then the model id menu, vision, and limits.

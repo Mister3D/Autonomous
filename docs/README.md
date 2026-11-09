@@ -52,6 +52,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/reactions.md](./features/reactions.md) | Bot emoji on the user's bubble (`react`), without replacing the reply |
 | [features/avatars.md](./features/avatars.md) | SVG companion badges (work / notify / await / idle) |
 | [features/manager.md](./features/manager.md) | Manager bot: peer list + async delegation (Tell follow-up) |
+| [features/household.md](./features/household.md) | Manager: create bots + checkbox delete card; Settings default LLM |
 | [features/companion.md](./features/companion.md) | PC companion: pairing, VM Internet, local MCPs |
 | [features/setup.md](./features/setup.md) | First-run checklist + first conversation CTA |
 | [features/updates.md](./features/updates.md) | Self-update: channel main/dev, 24h check, apply + systemd restart |
