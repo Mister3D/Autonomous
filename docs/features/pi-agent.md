@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-06 (LLM limits from Pi models.json + Autonomous overlay)
+**Last updated**: 2026-11-09 (fix mid-stream navigation race)
 
 ## User behaviour
 
@@ -77,6 +77,7 @@ Pi is **not** in the VMs. It's on the host.
 - PATH: serve with `~/.local/bin` visible (the code enriches `PATH` for subprocesses).
 - Host Pi tools active (web search + vault + terminal + VM screenshot). Computer-use / click = next step.
 - `message.delta` is not replayed on refresh: the final content is in the database via `message.updated`.
+- Mid-turn navigation: `loadMessages` / mid-stream `message.updated` must not truncate SSE text already shown — `preferLiveStreamingMessage` keeps the longer body while `streaming` is true; missing bubbles are created on delta if `message.created` was missed.
 - On Pi `message_end`: don't reopen a bubble if it was already finalised at `toolcall_start` (otherwise an identical duplicate right before the tool).
 - On refresh, don't stop at the last page of tools: the `user` message (and therefore the assistant reply more recent than it) must stay in the displayed thread.
 - Old DB with `agent_backend=null`: switch to `"pi"` via `PUT /settings` or Settings / CLI.

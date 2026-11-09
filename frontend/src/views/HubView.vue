@@ -380,6 +380,7 @@ import {
   currentBotObj,
   isOptimisticMessageId,
   markBotRead,
+  preferLiveStreamingMessage,
   refreshSetup,
   setupReady,
 } from "../store";
@@ -1051,7 +1052,12 @@ async function loadMessages(name) {
     const local = state.messages[name] || [];
     const byId = new Map(remote.map((m) => [m.id, m]));
     for (const m of local) {
-      if (!m?.id || byId.has(m.id)) continue;
+      if (!m?.id) continue;
+      if (byId.has(m.id)) {
+        // Keep SSE-accumulated streaming text when the HTTP snapshot is shorter.
+        byId.set(m.id, preferLiveStreamingMessage(m, byId.get(m.id)));
+        continue;
+      }
       // Keep in-flight optimistic bubbles only if the server has not echoed them yet.
       if (isOptimisticMessageId(m.id)) {
         const echoed = remote.some(

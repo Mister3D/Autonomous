@@ -98,6 +98,45 @@ export function dropOptimisticDupes(bot, serverMsg) {
   }
 }
 
+/**
+ * Merge a live streaming bubble with a possibly-stale HTTP/SSE snapshot.
+ * Prefer the longer body while either side is still streaming so mid-turn
+ * navigation / DB flushes cannot truncate text already shown via deltas.
+ * A finished remote message (`streaming: false`) always wins.
+ */
+export function preferLiveStreamingMessage(local, remote) {
+  if (!local) return remote;
+  if (!remote) return local;
+  const remoteDone = remote.meta && remote.meta.streaming === false;
+  if (remoteDone && !local.meta?.streaming) return remote;
+  if (remoteDone && String(remote.content || "").length >= String(local.content || "").length) {
+    return remote;
+  }
+  const localStreaming = !!local.meta?.streaming;
+  const remoteStreaming = !!remote.meta?.streaming;
+  if (!localStreaming && !remoteStreaming) return remote;
+  const localLen = String(local.content || "").length;
+  const remoteLen = String(remote.content || "").length;
+  if (localLen > remoteLen) {
+    return {
+      ...remote,
+      content: local.content,
+      meta: {
+        ...(remote.meta || {}),
+        ...(local.meta || {}),
+        streaming: true,
+      },
+    };
+  }
+  return {
+    ...remote,
+    meta: {
+      ...(remote.meta || {}),
+      streaming: localStreaming || remoteStreaming || !!remote.meta?.streaming,
+    },
+  };
+}
+
 export function pushNotification(text, kind = "info") {
   const id = uid();
   state.notifications.unshift({ id, text, kind, ts: Date.now() });
@@ -166,7 +205,8 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
     }
   }
   if (type === "message.delta" && data.id && data.bot) {
-    const list = state.messages[data.bot] || [];
+    if (!state.messages[data.bot]) state.messages[data.bot] = [];
+    const list = state.messages[data.bot];
     const i = list.findIndex((m) => m.id === data.id);
     if (i >= 0) {
       const prev = list[i];
@@ -175,6 +215,16 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
         content: (prev.content || "") + (data.delta || ""),
         meta: { ...(prev.meta || {}), streaming: true },
       };
+    } else {
+      // Entering a bot mid-stream can miss message.created — don't drop deltas.
+      list.push({
+        id: data.id,
+        bot: data.bot,
+        role: "assistant",
+        content: data.delta || "",
+        created_at: new Date().toISOString(),
+        meta: { streaming: true },
+      });
     }
   }
   if (type === "message.updated" && data.message) {
@@ -193,7 +243,8 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
         list.splice(i, 1);
         list.push(data.message);
       } else {
-        list[i] = data.message;
+        // Mid-stream DB flush can lag behind SSE deltas already applied.
+        list[i] = preferLiveStreamingMessage(list[i], data.message);
       }
     } else if (!data.message.meta?.queued) {
       list.push(data.message);
