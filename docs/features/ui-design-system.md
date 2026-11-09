@@ -8,7 +8,7 @@
 - `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
 - `frontend/index.html` — Plus Jakarta Sans
 
-**Last updated**: 2026-11-09 (stage tabs right-align with chat card)
+**Last updated**: 2026-11-09 (mobile stage tabs stay a compact pill)
 
 ## User behaviour
 
@@ -19,6 +19,7 @@
 - Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (arm → check; tooltip = « Confirmer ? »).
 - Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
 - Stage tabs / split toolbar (`right: 0.35rem`) share the chat card’s right edge (same as `.stage-body` horizontal padding) — not a deeper inset.
+- Mobile chat (`≤720px`): stage tabs stay a compact pill (`flex: none` + `margin-left: auto`) before the inspector toggle — never stretch full-width between Back and the panel button.
 - Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane.
 - Settings: `.settings-main` has no left padding (nav already pads); top/right/bottom stay.
 - Labels: Conversation / Terminal / Écran; inspector Files tab = « Fichiers »; settings nav keys under `settings.tab*`.

@@ -6182,15 +6182,19 @@ a.bot-mention:hover,
     z-index: 5;
   }
 
+  /* Keep the Soft UI pill compact — do not stretch edge-to-edge between back + inspector. */
   .app-shell.is-mobile-chat .stage-tabs.seg {
-    flex: 1;
+    flex: none;
+    width: auto;
+    max-width: calc(100% - 5.5rem);
     min-width: 0;
+    margin-left: auto;
     justify-content: center;
   }
 
   .app-shell.is-mobile-chat .stage-tabs.seg button {
-    flex: 1;
-    padding: 0.28rem 0.4rem;
+    flex: none;
+    padding: 0.28rem 0.55rem;
     font-size: 0.74rem;
   }
 
