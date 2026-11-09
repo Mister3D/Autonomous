@@ -68,6 +68,7 @@ from autonomous.models.schemas import (
     ReactionCreateSchema,
     NovncInfoSchema,
     OkSchema,
+    RetryUnprocessedSchema,
     ScreenshotCreateSchema,
     ScreenshotSchema,
     TerminalExecSchema,
@@ -670,6 +671,17 @@ class BotResume(MethodView):
         """Resume the agent after an interrupted wait (vault/desk approval)."""
         try:
             return chat_svc.resume_run(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/retry")
+class BotRetryUnprocessed(MethodView):
+    @blp.response(200, RetryUnprocessedSchema)
+    def post(self, name):
+        """Relaunch queued / unfinished work after an LLM outage (keeps chat + Pi session)."""
+        try:
+            return chat_svc.retry_unprocessed(name, home=g.home)
         except AutonomousError as exc:
             _handle(exc)
 

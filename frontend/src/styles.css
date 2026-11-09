@@ -5349,6 +5349,55 @@ label.muted {
   text-align: center;
 }
 
+.composer-retry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin: 0 0.85rem 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+  background: #f7f4ee;
+  border: 1px dashed #e0d4bc;
+}
+
+.composer-retry-hint {
+  margin: 0;
+  flex: 1 1 12rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #5c5244;
+}
+
+.composer-retry-btn {
+  appearance: none;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  background: #1c1c22;
+  color: #fff;
+  cursor: pointer;
+}
+
+.composer-retry-btn:hover:not(:disabled) {
+  background: #33333a;
+}
+
+.composer-retry-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.composer-retry-feedback {
+  margin: 0;
+  flex: 1 1 100%;
+  font-size: 0.78rem;
+  color: #6a5a40;
+}
+
 .composer {
   display: flex;
   align-items: center;

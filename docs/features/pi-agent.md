@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-10 (recover stale busy runs after serve restart)
+**Last updated**: 2026-11-10 (Relancer = retry unprocessed after LLM outage)
 
 ## User behaviour
 
@@ -25,6 +25,7 @@
 - Model **per bot** (creation + Details); if an RPC session is running, `set_model` mid-session.
 - During a run: the send button becomes the **Working orb** ([thinking-orbs](https://libraries.dev/orbs), canvas engine `thinking-orbs/engine` via `WorkingOrb.vue`) — click = Pi `abort`. In the Conversation thread, the same orb appears **as long as no assistant text has started** (waiting for the model / between tool turns); from the first token, it disappears in favour of the bubble.
 - If the Pi session dies while waiting for the user (vault / desktop): status `idle`, **Resume** chat card (`meta.kind=agent_interrupted`) → `POST /bots/:name/resume` relaunches the agent on the original task (without a new user bubble).
+- **Retry** bar above the composer (when there is a queue, a failed/unfinished last turn, a stuck busy orb, or a pending Resume card — not during a real human wait): **Relancer** → `POST /bots/:name/retry`. Soft-clears a dead worker (tools / streaming), keeps `pi_session_id` and the chat history, then drains the oldest queued user/webhook **or** resumes the last unfinished turn. Refuses with `waiting_for_user` if a vault/approval/clarify/desk card is still open.
 - Desk ready while a run is still going: **no** second `resume_run` (avoids "Agent is already processing"). Always set `status=busy` back for the Working orb — don't leave a forced `idle` at the end of desk boot.
 - On `tool_execution_end`, Pi often sends `args={}`: Autonomous keeps the args from the start and enriches `meta` (click/drag coords, `duration_ms`, `timed_out`) for the UI.
 - **Actions** guard-rail (Settings, saved as soon as the field changes — no button), counter **since the last `user` message** (user, webhook or cron) — **not** the whole conversation, and **not** reset by a desk/vault resume:
@@ -71,7 +72,7 @@ Pi is **not** in the VMs. It's on the host.
 - Pi instructions (`pi_rpc.py`): `_VAULT_SYSTEM_HINT` (secret rules) and `_VM_SYSTEM_HINT` (desktop + browser) are **structured in numbered sections** — 1 Desk/shell, 2 Tools (read / wait / see / act / locate), 3 Action loop, 4 Block pages, 5 Login — one rule = one place only (no vault/VM duplicates). Generic: putting site-specific or captcha-vendor-specific recipes there is forbidden. Tool descriptions (`vm.ts`, `browser.ts`, `vault.ts`) must stay consistent with them (coordinates = snapshot or `vm_ground`, never `vm_look`).
 - `vm_look` tool: the agent **never** has the PNG; `vm_look` = capture + host multimodal model → text. Rule: never announce an error that hasn't been read (`browser_text` / `vm_look`).
 - `--append-system-prompt` at session start: core memory + hints (vault, files, VM, botmail, manager, events, memory, approval, clarification, search, vision). No more `bots.role` persona.
-- API: `GET /pi/status`, `GET /pi/models`, `POST /bots/:name/stop`, `POST /bots/:name/resume`.
+- API: `GET /pi/status`, `GET /pi/models`, `POST /bots/:name/stop`, `POST /bots/:name/resume`, `POST /bots/:name/retry`.
 - Resume a session outside the UI:  
   `cd data/bots/<name>/pi && pi --session-id <pi_session_id>`  
   (or `--session-dir …/sessions`).
@@ -107,5 +108,5 @@ pi --list-models
 curl -s -b cookies http://127.0.0.1:8787/api/v1/pi/status
 # Send a web message → streaming assistant bubbles; Stop cuts the run.
 python3 -m pytest tests/test_bot_api_token.py tests/test_chat.py::test_openapi_generated -q
-python3 -m pytest tests/test_recover_stale_runs.py -q
+python3 -m pytest tests/test_recover_stale_runs.py tests/test_retry_unprocessed.py -q
 ```

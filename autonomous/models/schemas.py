@@ -420,6 +420,17 @@ class OkSchema(Schema):
     message = fields.Str()
 
 
+class RetryUnprocessedSchema(Schema):
+    ok = fields.Bool(required=True)
+    action = fields.Str(
+        metadata={
+            "description": "drained | resumed | noop — what the retry did",
+        }
+    )
+    queued = fields.Int()
+    started = fields.Bool()
+
+
 class BotMailSendSchema(Schema):
     to = fields.Str(required=True, metadata={"description": "Target bot name or @name"})
     content = fields.Str(

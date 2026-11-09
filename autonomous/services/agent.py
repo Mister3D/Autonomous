@@ -80,7 +80,7 @@ _RESTART_CARD = (
 )
 
 
-def _has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
+def has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
     """True when a vault / approval / clarify / desk card still needs the user."""
     try:
         from autonomous.services import approvals as approval_svc
@@ -114,7 +114,7 @@ def _has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
     return False
 
 
-def _abort_streaming_assistants(bot: str, *, home: Path | None = None) -> int:
+def abort_streaming_assistants(bot: str, *, home: Path | None = None) -> int:
     """Seal leftover streaming assistant bubbles after a dead process."""
     import json
 
@@ -163,7 +163,7 @@ def recover_stale_runs(*, home: Path | None = None) -> list[str]:
         status = str(bot.get("status") or "idle").strip()
         if status == "waiting":
             clear_active_run(name)
-            if _has_pending_human_wait(name, home=home):
+            if has_pending_human_wait(name, home=home):
                 continue
         elif status != "busy":
             continue
@@ -188,7 +188,7 @@ def recover_stale_runs(*, home: Path | None = None) -> list[str]:
         except Exception:
             log.exception("recover: close_running_tools failed for %s", name)
         try:
-            _abort_streaming_assistants(name, home=home)
+            abort_streaming_assistants(name, home=home)
         except Exception:
             log.exception("recover: abort streaming failed for %s", name)
         try:

@@ -498,6 +498,18 @@
     <p v-if="secretRefuseHint" class="composer-secret-refuse" role="alert">
       {{ secretRefuseHint }}
     </p>
+    <div v-if="showRetryBar" class="composer-retry" role="status">
+      <p class="composer-retry-hint">{{ retryHint }}</p>
+      <button
+        type="button"
+        class="composer-retry-btn"
+        :disabled="retrying || waitingHuman"
+        @click="retryPending"
+      >
+        {{ retrying ? t("chat.retrying") : t("chat.retry") }}
+      </button>
+      <p v-if="retryFeedback" class="composer-retry-feedback">{{ retryFeedback }}</p>
+    </div>
     <form class="composer" @submit.prevent="send">
       <button
         class="icon-btn"
@@ -1951,6 +1963,108 @@ const hasQueued = computed(() =>
     (m) => m?.meta?.queued && !m?.meta?.hidden_prompt
   )
 );
+
+const hasPendingResume = computed(() =>
+  (state.messages[props.bot.name] || []).some(
+    (m) =>
+      m?.role === "event" &&
+      m?.meta?.kind === "agent_interrupted" &&
+      m?.meta?.state === "pending"
+  )
+);
+
+function lastUserIndex(all) {
+  for (let i = all.length - 1; i >= 0; i--) {
+    const m = all[i];
+    if (m?.role !== "user" || m?.meta?.hidden_prompt || m?.meta?.queued) continue;
+    return i;
+  }
+  return -1;
+}
+
+const hasRunningTools = computed(() =>
+  (state.messages[props.bot.name] || []).some(
+    (m) => m?.meta?.kind === "tool" && m?.meta?.status === "running"
+  )
+);
+
+/** Idle bot: last user turn never got a successful assistant reply. */
+const lastTurnFailed = computed(() => {
+  const all = state.messages[props.bot.name] || [];
+  const lastUser = lastUserIndex(all);
+  if (lastUser < 0) return false;
+  for (let i = lastUser + 1; i < all.length; i++) {
+    const m = all[i];
+    if (m?.role === "user") break;
+    if (m?.role !== "assistant") continue;
+    const meta = m.meta || {};
+    const text = String(m.content || "").trim();
+    if (meta.streaming || meta.aborted || meta.error) return true;
+    if (!text || text.startsWith("⚠️") || /^⏹\s*Stopped\.?$/i.test(text)) return true;
+    return false;
+  }
+  return true;
+});
+
+/** Busy bot: empty streaming / error bubble and no live tool — likely LLM hung. */
+const stuckBusy = computed(() => {
+  if (!busy.value || waitingHuman.value || hasRunningTools.value) return false;
+  const all = state.messages[props.bot.name] || [];
+  const lastUser = lastUserIndex(all);
+  if (lastUser < 0) return true;
+  for (let i = all.length - 1; i > lastUser; i--) {
+    const m = all[i];
+    if (m?.role !== "assistant") continue;
+    const meta = m.meta || {};
+    const text = String(m.content || "").trim();
+    if (meta.streaming && !text) return true;
+    if (meta.aborted || meta.error || text.startsWith("⚠️")) return true;
+    if (meta.streaming && text) return false;
+    return false;
+  }
+  return true;
+});
+
+const showRetryBar = computed(
+  () =>
+    !waitingHuman.value &&
+    (hasQueued.value ||
+      hasPendingResume.value ||
+      stuckBusy.value ||
+      (!busy.value && lastTurnFailed.value))
+);
+
+const retryHint = computed(() => {
+  if (hasQueued.value) return t("chat.retryHintQueued");
+  if (stuckBusy.value) return t("chat.retryHintStuck");
+  if (hasPendingResume.value || lastTurnFailed.value) return t("chat.retryHintFailed");
+  return t("chat.retryHint");
+});
+
+const retrying = ref(false);
+const retryFeedback = ref("");
+let retryFeedbackTimer = 0;
+
+async function retryPending() {
+  if (retrying.value || waitingHuman.value) return;
+  retrying.value = true;
+  retryFeedback.value = "";
+  clearTimeout(retryFeedbackTimer);
+  try {
+    const out = await api.retryBot(props.bot.name);
+    const action = out?.action || "noop";
+    if (action === "drained") retryFeedback.value = t("chat.retryDoneDrained");
+    else if (action === "resumed") retryFeedback.value = t("chat.retryDoneResumed");
+    else retryFeedback.value = t("chat.retryDoneNone");
+  } catch (e) {
+    retryFeedback.value = e?.message || String(e);
+  } finally {
+    retrying.value = false;
+    retryFeedbackTimer = window.setTimeout(() => {
+      retryFeedback.value = "";
+    }, 4000);
+  }
+}
 
 function isNearBottom(el) {
   if (!el) return true;

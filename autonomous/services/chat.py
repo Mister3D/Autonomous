@@ -861,7 +861,142 @@ def resume_run(bot: str, home: Path | None = None) -> dict[str, Any]:
 
     backend = str(settings_svc.get("agent_backend", home=home, default="pi") or "pi")
     get_agent(backend, home=home).start_run(bot, prompt, home=home)
-    return {"ok": True}
+    return {"ok": True, "action": "resumed"}
+
+
+_ABORT_ASSISTANT_MARKERS = (
+    "⏹ Stopped.",
+    "⏹ Stopped",
+    "This operation was aborted",
+)
+
+
+def _assistant_turn_looks_failed(msg: dict[str, Any]) -> bool:
+    meta = msg.get("meta") or {}
+    if meta.get("streaming") or meta.get("aborted") or meta.get("error"):
+        return True
+    content = (msg.get("content") or "").strip()
+    if not content:
+        return True
+    if content.startswith("⚠️"):
+        return True
+    if content in _ABORT_ASSISTANT_MARKERS:
+        return True
+    return False
+
+
+def unfinished_user_turn(
+    bot: str, *, home: Path | None = None
+) -> dict[str, Any] | None:
+    """Last user bubble whose turn never got a successful assistant reply."""
+    msgs = list_messages(bot, limit=80, home=home)
+    last_user: dict[str, Any] | None = None
+    last_user_i = -1
+    for i in range(len(msgs) - 1, -1, -1):
+        m = msgs[i]
+        if m.get("role") != "user":
+            continue
+        if (m.get("meta") or {}).get("hidden_prompt"):
+            continue
+        if (m.get("meta") or {}).get("queued"):
+            continue
+        last_user = m
+        last_user_i = i
+        break
+    if last_user is None:
+        return None
+    saw_ok_assistant = False
+    for m in msgs[last_user_i + 1 :]:
+        role = m.get("role")
+        if role == "user":
+            break
+        if role != "assistant":
+            continue
+        if _assistant_turn_looks_failed(m):
+            continue
+        saw_ok_assistant = True
+        break
+    if saw_ok_assistant:
+        return None
+    return last_user
+
+
+def pending_resume_card(bot: str, *, home: Path | None = None) -> dict[str, Any] | None:
+    for msg in reversed(list_messages(bot, limit=40, home=home)):
+        meta = msg.get("meta") or {}
+        if (
+            msg.get("role") == "event"
+            and meta.get("kind") == "agent_interrupted"
+            and meta.get("state") == "pending"
+        ):
+            return msg
+    return None
+
+
+def retry_unprocessed(bot: str, *, home: Path | None = None) -> dict[str, Any]:
+    """Relaunch unfinished work without wiping chat or rotating the Pi session.
+
+    Use after an LLM outage / stuck busy / queued webhook: soft-clears a dead
+    worker, drains the oldest queued user message, otherwise resumes the last
+    unfinished turn. Refuses while a real human wait (vault / approval / …) is open.
+    """
+    from autonomous.services import agent as agent_svc
+    from autonomous.services.errors import Conflict
+
+    row = bots_svc.get_bot(bot, home=home)
+    status = str(row.get("status") or "idle").strip()
+
+    if status == "waiting" and agent_svc.has_pending_human_wait(bot, home=home):
+        raise Conflict(
+            "L’agent attend encore votre réponse (coffre / approbation / bureau).",
+            code="waiting_for_user",
+        )
+
+    # Soft clear — keep pi_session_id so the conversation context stays intact.
+    agent_svc.clear_active_run(bot)
+    try:
+        MANAGER.abort(bot)
+    except Exception:
+        pass
+    try:
+        MANAGER.stop(bot)
+    except Exception:
+        pass
+    try:
+        close_running_tools(
+            bot,
+            error="Outil interrompu (relance).",
+            home=home,
+            hint_resume=False,
+        )
+    except Exception:
+        log.exception("retry: close_running_tools failed for %s", bot)
+    try:
+        agent_svc.abort_streaming_assistants(bot, home=home)
+    except Exception:
+        log.exception("retry: abort streaming failed for %s", bot)
+
+    if status in ("busy", "waiting"):
+        try:
+            bots_svc.patch_bot(bot, {"status": "idle"}, home=home)
+        except Exception:
+            log.exception("retry: idle patch failed for %s", bot)
+
+    queued = list_queued_user_messages(bot, home=home)
+    if queued:
+        started = drain_queued_user_messages(bot, home=home)
+        return {
+            "ok": True,
+            "action": "drained",
+            "queued": len(queued),
+            "started": bool(started),
+        }
+
+    if pending_resume_card(bot, home=home) or unfinished_user_turn(bot, home=home):
+        out = resume_run(bot, home=home)
+        return {**out, "action": "resumed"}
+
+    return {"ok": True, "action": "noop"}
 
 
 def clear_messages(bot: str, home: Path | None = None) -> int:

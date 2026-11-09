@@ -173,6 +173,7 @@ export const api = {
   piModels: () => request("/pi/models"),
   stopBot: (name) => request(`/bots/${name}/stop`, { method: "POST", body: {} }),
   resumeBot: (name) => request(`/bots/${name}/resume`, { method: "POST", body: {} }),
+  retryBot: (name) => request(`/bots/${name}/retry`, { method: "POST", body: {} }),
   vaultEntries: () => request("/vault/entries"),
   createVaultEntry: (body) => request("/vault/entries", { method: "POST", body }),
   deleteVaultEntry: (id) => request(`/vault/entries/${id}`, { method: "DELETE" }),

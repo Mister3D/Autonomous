@@ -58,6 +58,7 @@ DELETE /bots/:name/messages         # + Pi session rotation
 GET    /bots/:name/messages/export.pdf  # discussion PDF (tool names, no args/results)
 POST   /bots/:name/stop             # abort run Pi
 POST   /bots/:name/resume           # resume after session died during approval
+POST   /bots/:name/retry            # relaunch queued / unfinished work (LLM outage); keeps chat + Pi session
 POST   /bots/:name/mail/tell        # {to, content?, attachments?, expect_reply?} → one-way (+ files; Manager expect_reply = async footer)
 POST   /bots/:name/mail/ask         # {to, content?, attachments?} → question; the reply relaunches the asker
 GET    /bots/:name/mail/asks/:id    # poll ask state (open|answered)
