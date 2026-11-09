@@ -6,7 +6,7 @@
 - `autonomous/paths.py` (`serve.pid`, `vite-watch.pid`)
 - `autonomous/wsproxy.py` (`MuxServer` in front of Werkzeug)
 
-**Last updated**: 2026-11-05 (bind public guard + WS auth)
+**Last updated**: 2026-11-10 (stale busy recovery on serve start)
 
 ## Behaviour
 
@@ -22,6 +22,7 @@ autonomous serve --host 127.0.0.1 --port 8787 --dev
   - `vite build --watch` → writes to `autonomous/static/`
   - signals only on the **main thread** (avoids reloader crash)
   - on stop: clean up the Vite process group (`killpg` / `pkill`)
+- On every `_serve_loop` start (including reloader re-exec): `agent.recover_stale_runs` — bots stuck `busy` after the previous process died go idle, tools/streaming are sealed, queued messages drain (or a Resume card is posted). See [pi-agent.md](./pi-agent.md).
 
 ## Mux
 
@@ -36,6 +37,7 @@ A single TCP port:
 
 - Two `serve` instances: check `serve.pid` / "already running" message.
 - In `--dev`, an orphan Vite may serve old assets: `serve stop` then relaunch.
+- Before recovery, a mid-run `--dev` reload left `status=busy` forever (Working orb, webhooks queued). Do not remove `recover_stale_runs` from `_serve_loop`.
 - Don't install system packages without asking the user.
 - The WebSocket sniff (5 s timeout, `MSG_PEEK`) must **not** stay on the HTTP socket, nor block the thread that does `accept`. Otherwise `GET /api/v1/events` (SSE, ping every 15 s) is cut; the browser retries and shows `net::ERR_EMPTY_RESPONSE`. The bus drops the subscription as soon as the client sends FIN (a successful write in `CLOSE-WAIT` is not enough to detect the close).
 - Don't send `Connection: keep-alive` on the SSE: Werkzeug already adds `Connection: close`. Two `Connection` headers make the stream fail on the browser side.

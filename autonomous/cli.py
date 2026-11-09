@@ -250,6 +250,18 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
     from autonomous.wsproxy import MuxServer
 
     app = create_app(home)
+    try:
+        # Dev reloader / crash leaves bots.busy with no live Pi worker.
+        from autonomous.services import agent as agent_svc
+
+        recovered = agent_svc.recover_stale_runs(home=home)
+        if recovered:
+            print(
+                f"Recovered stale runs: {', '.join(recovered)}",
+                file=sys.stderr,
+            )
+    except Exception as exc:  # never block serve
+        print(f"[agent] stale-run recovery failed: {exc}", file=sys.stderr)
     scheduler_svc.start(home)
     try:  # compile the companion in the background (cached by source hash)
         from autonomous.services import companion_build as companion_build_svc

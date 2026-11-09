@@ -73,6 +73,147 @@ def clear_active_run(bot: str) -> None:
             ev.set()
 
 
+_RESTART_TOOL_ERROR = "Agent session interrupted (server restart)."
+_RESTART_CARD = (
+    "The agent was interrupted by a server restart. "
+    "Click Resume to continue, or send a new message."
+)
+
+
+def _has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
+    """True when a vault / approval / clarify / desk card still needs the user."""
+    try:
+        from autonomous.services import approvals as approval_svc
+
+        if approval_svc.list_pending_for_bot(bot, home=home):
+            return True
+    except Exception:
+        pass
+    try:
+        from autonomous.services import clarifies as clarify_svc
+
+        if clarify_svc.list_pending_for_bot(bot, home=home):
+            return True
+    except Exception:
+        pass
+    try:
+        from autonomous.services import vault as vault_svc
+
+        if vault_svc.list_pending_for_bot(bot, home=home):
+            return True
+    except Exception:
+        pass
+    try:
+        from autonomous.services import desk as desk_svc
+
+        flags = desk_svc._desk_request_flags(bot, home=home)
+        if flags.get("pending_state") == "pending":
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _abort_streaming_assistants(bot: str, *, home: Path | None = None) -> int:
+    """Seal leftover streaming assistant bubbles after a dead process."""
+    import json
+
+    from autonomous.db import get_db
+
+    n = 0
+    with get_db(home) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, content, meta_json FROM messages
+            WHERE bot = ? AND role = 'assistant'
+            ORDER BY created_at DESC LIMIT 5
+            """,
+            (bot,),
+        ).fetchall()
+    for row in rows:
+        meta = json.loads(row["meta_json"] or "{}")
+        if not meta.get("streaming"):
+            continue
+        chat_svc.finalize_assistant(
+            bot,
+            row["id"],
+            row["content"] or "⏹ Stopped.",
+            home=home,
+            meta={**meta, "aborted": True, "restart": True},
+        )
+        n += 1
+    return n
+
+
+def recover_stale_runs(*, home: Path | None = None) -> list[str]:
+    """Clean bots left ``busy`` (or orphan ``waiting``) after process restart.
+
+    Dev reloader / crash kills in-memory Pi workers while SQLite still says
+    ``busy``. Without this, the Working orb stays forever and queued
+    webhooks/messages never drain.
+
+    ``waiting`` with a pending vault/approval/clarify/desk card is kept so the
+    user can finish the form; otherwise it is treated as stale.
+    """
+    recovered: list[str] = []
+    for bot in bots_svc.list_bots(home=home):
+        name = str(bot.get("name") or "")
+        if not name:
+            continue
+        status = str(bot.get("status") or "idle").strip()
+        if status == "waiting":
+            clear_active_run(name)
+            if _has_pending_human_wait(name, home=home):
+                continue
+        elif status != "busy":
+            continue
+        else:
+            clear_active_run(name)
+
+        try:
+            MANAGER.abort(name)
+        except Exception:
+            pass
+        try:
+            MANAGER.stop(name)
+        except Exception:
+            pass
+        try:
+            chat_svc.close_running_tools(
+                name,
+                error=_RESTART_TOOL_ERROR,
+                home=home,
+                hint_resume=True,
+            )
+        except Exception:
+            log.exception("recover: close_running_tools failed for %s", name)
+        try:
+            _abort_streaming_assistants(name, home=home)
+        except Exception:
+            log.exception("recover: abort streaming failed for %s", name)
+        try:
+            bots_svc.patch_bot(name, {"status": "idle"}, home=home)
+        except Exception:
+            log.exception("recover: idle patch failed for %s", name)
+
+        drained = False
+        try:
+            drained = bool(chat_svc.drain_queued_user_messages(name, home=home))
+        except Exception:
+            log.exception("recover: drain queued failed for %s", name)
+        if not drained:
+            try:
+                chat_svc.post_agent_interrupted(
+                    name, reason=_RESTART_CARD, home=home
+                )
+            except Exception:
+                log.exception("recover: resume card failed for %s", name)
+
+        recovered.append(name)
+        log.info("recovered stale run for bot %s (was %s)", name, status)
+    return recovered
+
+
 def _register_run(bot: str, settled: threading.Event) -> bool:
     """Claim the active-run slot. False if another run still owns it."""
     with _ACTIVE_LOCK:

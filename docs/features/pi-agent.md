@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-10 (tool duration before Done; orange on timeout)
+**Last updated**: 2026-11-10 (recover stale busy runs after serve restart)
 
 ## User behaviour
 
@@ -34,6 +34,7 @@
   - **Gate**: after the review milestone, further tools are blocked until `GUARD:CONTINUE` / `STOP`. The gate opens as soon as `GUARD:CONTINUE` streams (same-turn tools are allowed). If CONTINUE arrives after a gate abort, settle kicks a **task resume** run (so the bot does not stay idle). Tool-only replies without the token get a silent abort + gate follow-up — **no** “outils bloqués” chat card.
 - After a `stop`, a user message left "queued" is relaunched (immediate drain + delayed retry at 1.5 s / 6 s if the old worker was still holding the slot).
 - `stop_run` also clears the in-memory `_ACTIVE_RUNS` slot (`clear_active_run`). Without that, DB went `idle` while the next `start_run` kept logging « run already in progress » and the chat looked frozen (user bubble only). `start_run` also reclaim a stale slot once when DB status is already `idle`/`waiting`.
+- **Serve restart / `--dev` reload**: `recover_stale_runs` (from `_serve_loop`) finds bots left `busy` with no live Pi worker — closes running tool cards, seals streaming assistant bubbles, sets `idle`, then drains queued user/webhook messages. If nothing was queued, posts an **Resume** card (`agent_interrupted`). Orphan `waiting` (no pending vault/approval/clarify/desk) is recovered the same way; a real human wait stays `waiting`.
 - **No** run duration limit in the product (any timeout stays on the Cursor / manual test side).
 - Vision: budget from the bot’s Pi model (`inputLimits.images.maxPerRequest` in `models.json`); fallback `guard.max_images_per_prompt` (**2**). Only this budget goes into `images[]`; the rest is listed as paths for later turns. If the provider returns "At most N image(s)", retry + persist N on that model (and the guard fallback). See [`llm-settings.md`](./llm-settings.md).
 - Clear history = SQLite purge + **wipe** `pi/sessions/*.jsonl` + new `pi_session_id` (`autonomous-<uuid>`). Details asks first: a check icon at the end of the row (no confirm card). The button also empties `state.messages[name]` (no SSE on delete, otherwise the thread and the rail keep the old bubbles until a full reload).
@@ -106,4 +107,5 @@ pi --list-models
 curl -s -b cookies http://127.0.0.1:8787/api/v1/pi/status
 # Send a web message → streaming assistant bubbles; Stop cuts the run.
 python3 -m pytest tests/test_bot_api_token.py tests/test_chat.py::test_openapi_generated -q
+python3 -m pytest tests/test_recover_stale_runs.py -q
 ```
