@@ -143,6 +143,12 @@
       <path d="M5.5 6.5v11c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6v-11" />
       <path d="M5.5 12c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6" />
     </template>
+    <template v-else-if="name === 'harddrive'">
+      <rect x="4" y="6" width="16" height="12" rx="2.2" />
+      <path d="M4 12.5h16" />
+      <circle cx="8" cy="15.4" r="1" fill="currentColor" stroke="none" />
+      <path d="M11 15.4h5" />
+    </template>
     <template v-else-if="name === 'tag'">
       <path d="M3.8 12.2 11.4 4.6A1.6 1.6 0 0 1 12.5 4.2H18a1.2 1.2 0 0 1 1.2 1.2v5.5a1.6 1.6 0 0 1-.5 1.1l-7.6 7.6a1.2 1.2 0 0 1-1.7 0l-5.6-5.6a1.2 1.2 0 0 1 0-1.7Z" />
       <circle cx="15.6" cy="8.4" r="1.15" />

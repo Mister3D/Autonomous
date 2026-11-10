@@ -10,6 +10,7 @@ from flask_smorest import Blueprint, abort
 
 from autonomous.models.schemas import (
     BotCreateSchema,
+    BotPackageUsageSchema,
     BotPatchSchema,
     BotSchema,
     BrowserClickSelectorSchema,
@@ -710,6 +711,19 @@ class BotEvents(MethodView):
             _handle(exc)
 
         return sse_response(name)
+
+
+@blp.route("/<string:name>/package")
+class BotPackage(MethodView):
+    @blp.response(200, BotPackageUsageSchema)
+    def get(self, name):
+        """Disk footprint for this bot (VM layer + ~/shared + chat + Pi session)."""
+        from autonomous.services import bot_package as package_svc
+
+        try:
+            return package_svc.package_usage(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
 
 
 @blp.route("/<string:name>/desk")

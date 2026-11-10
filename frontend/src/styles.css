@@ -2429,6 +2429,67 @@ a:focus-visible {
   font-size: 0.8rem;
 }
 
+.package-usage {
+  padding: 0.55rem 0.05rem 0.35rem;
+}
+
+.package-usage-head {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+
+.package-usage-aside {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+}
+
+.package-total {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.package-refresh {
+  width: 28px;
+  height: 28px;
+}
+
+.package-breakdown {
+  list-style: none;
+  margin: 0.15rem 0 0.25rem;
+  padding: 0 0 0 2.15rem;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.package-breakdown li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.package-breakdown li > span:last-child {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  flex: none;
+}
+
+.package-breakdown small {
+  display: inline;
+  margin-left: 0.35rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.package-error {
+  margin: 0.25rem 0 0.35rem 2.15rem;
+}
+
 .toggle-row strong,
 .info-row strong {
   display: block;

@@ -39,6 +39,7 @@ GET    /bots
 POST   /bots                        # free-form {name} (spaces/CAPS OK) → label + auto slug; slug?; is_manager? (only one → 409 manager_exists)
 GET    /bots/token-usage            # daily cumulative token series per living bot (Settings chart)
 GET    /bots/:name                  # :name = technical slug
+GET    /bots/:name/package          # disk footprint (VM layer + ~/shared + chat + Pi)
 PATCH  /bots/:name                  # incl. companion_id, companion_egress, companion_killswitch
 DELETE /bots/:name
 POST   /bots/:name/capability

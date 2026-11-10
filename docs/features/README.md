@@ -23,6 +23,7 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [browser-nav.md](./browser-nav.md) | CDP web nav + VNC scroll (generic) |
 | [botmail.md](./botmail.md) | Tell / Ask @bot, queue, follow-up |
 | [bots-create.md](./bots-create.md) | Slug identifier, 422, CreateBotModal |
+| [bot-package.md](./bot-package.md) | Package size in Details (VM + files + chat) |
 | [chat-files.md](./chat-files.md) | Attach files (picker + drop → ~/shared/upload) |
 | [composer-drafts.md](./composer-drafts.md) | Per-bot composer drafts (sessionStorage, per tab) |
 | [events.md](./events.md) | UTC cron + webhooks, Events inspector |

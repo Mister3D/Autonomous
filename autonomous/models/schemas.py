@@ -420,6 +420,24 @@ class OkSchema(Schema):
     message = fields.Str()
 
 
+class BotPackageUsageSchema(Schema):
+    """Disk footprint of one bot package (Details panel)."""
+
+    bot = fields.Str(required=True)
+    total_bytes = fields.Integer(required=True)
+    host_bytes = fields.Integer(required=True)
+    files_bytes = fields.Integer(required=True)
+    screenshots_bytes = fields.Integer(required=True)
+    browser_bytes = fields.Integer(required=True)
+    shared_bytes = fields.Integer(required=True)
+    chat_bytes = fields.Integer(required=True)
+    messages = fields.Integer(required=True)
+    agent_bytes = fields.Integer(required=True)
+    downloads_bytes = fields.Integer(required=True)
+    vm_bytes = fields.Integer(allow_none=True)
+    vm_state = fields.Str(required=True)
+
+
 class RetryUnprocessedSchema(Schema):
     ok = fields.Bool(required=True)
     action = fields.Str(

@@ -134,6 +134,8 @@ export const api = {
       : `discussion-${name}.pdf`;
     return { blob, filename };
   },
+  /** Disk footprint: VM layer + ~/shared + chat + Pi session. */
+  botPackage: (name) => request(`/bots/${name}/package`),
   deskStatus: (name) => request(`/bots/${name}/desk`),
   deskRequest: (name, body = { mode: "screen", reason: "" }) =>
     request(`/bots/${name}/desk/request`, { method: "POST", body }),

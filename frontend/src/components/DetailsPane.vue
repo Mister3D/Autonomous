@@ -53,12 +53,72 @@
       </template>
     </UiToggleRow>
     <BotMcpGrants :bot="bot" />
+
+    <div class="package-usage" aria-live="polite">
+      <div class="package-usage-head info-row">
+        <span class="ui-toggle-main">
+          <UiIconBadge size="sm">
+            <UiIcon name="harddrive" :size="16" />
+          </UiIconBadge>
+          <span class="ui-toggle-copy">
+            <strong>{{ t("details.package") }}</strong>
+            <small>{{ t("details.packageHint") }}</small>
+          </span>
+        </span>
+        <span class="package-usage-aside">
+          <strong class="package-total">{{ totalLabel }}</strong>
+          <button
+            type="button"
+            class="icon-btn package-refresh"
+            :disabled="pkgLoading"
+            :aria-label="t('details.packageRefresh')"
+            :title="t('details.packageRefresh')"
+            @click="loadPackage"
+          >
+            <UiIcon name="refresh" :size="14" />
+          </button>
+        </span>
+      </div>
+      <ul v-if="pkg && !pkgError" class="package-breakdown">
+        <li>
+          <span>{{ t("details.packageFiles") }}</span>
+          <span>{{ formatBytes(pkg.files_bytes) }}</span>
+        </li>
+        <li v-if="(pkg.screenshots_bytes || 0) > 0">
+          <span>{{ t("details.packageScreenshots") }}</span>
+          <span>{{ formatBytes(pkg.screenshots_bytes) }}</span>
+        </li>
+        <li v-if="(pkg.browser_bytes || 0) > 0">
+          <span>{{ t("details.packageBrowser") }}</span>
+          <span>{{ formatBytes(pkg.browser_bytes) }}</span>
+        </li>
+        <li>
+          <span>
+            {{ t("details.packageChat") }}
+            <small v-if="pkg.messages">{{
+              t("details.packageChatCount", { n: pkg.messages })
+            }}</small>
+          </span>
+          <span>{{ formatBytes(pkg.chat_bytes) }}</span>
+        </li>
+        <li v-if="(pkg.agent_bytes || 0) > 0">
+          <span>{{ t("details.packageAgent") }}</span>
+          <span>{{ formatBytes(pkg.agent_bytes) }}</span>
+        </li>
+        <li>
+          <span>{{ t("details.packageVm") }}</span>
+          <span>{{ vmLabel }}</span>
+        </li>
+      </ul>
+      <p v-else-if="pkgError" class="package-error hint">{{ t("details.packageError") }}</p>
+    </div>
+
     <ManageMenu :bot="bot" />
   </div>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
@@ -73,6 +133,10 @@ import UiToggleRow from "./ui/UiToggleRow.vue";
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
 
+const pkg = ref(null);
+const pkgLoading = ref(false);
+const pkgError = ref(false);
+
 const otherManager = computed(
   () => state.bots.find((b) => b.is_manager && b.name !== props.bot.name) || null
 );
@@ -80,6 +144,54 @@ const otherManager = computed(
 const managerLocked = computed(() => !!otherManager.value && !props.bot.is_manager);
 const managerLockReason = computed(() =>
   managerLocked.value ? t("details.isManagerTaken") : "",
+);
+
+const totalLabel = computed(() => {
+  if (pkgLoading.value && !pkg.value) return t("details.packageLoading");
+  if (pkgError.value) return "—";
+  if (!pkg.value) return "—";
+  return formatBytes(pkg.value.total_bytes);
+});
+
+const vmLabel = computed(() => {
+  if (!pkg.value) return "—";
+  const state = pkg.value.vm_state || "absent";
+  if (state === "absent") return t("details.packageVmAbsent");
+  if (pkg.value.vm_bytes == null) return t("details.packageVmUnknown");
+  return formatBytes(pkg.value.vm_bytes);
+});
+
+function formatBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return `${v} B`;
+  if (v < 1024 * 1024) return `${(v / 1024).toFixed(v < 10 * 1024 ? 1 : 0)} KB`;
+  if (v < 1024 * 1024 * 1024) {
+    return `${(v / (1024 * 1024)).toFixed(v < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  }
+  return `${(v / (1024 * 1024 * 1024)).toFixed(v < 10 * 1024 * 1024 * 1024 ? 1 : 0)} GB`;
+}
+
+async function loadPackage() {
+  const name = props.bot?.name;
+  if (!name) return;
+  pkgLoading.value = true;
+  pkgError.value = false;
+  try {
+    pkg.value = await api.botPackage(name);
+  } catch {
+    pkgError.value = true;
+  } finally {
+    pkgLoading.value = false;
+  }
+}
+
+watch(
+  () => props.bot?.name,
+  () => {
+    pkg.value = null;
+    loadPackage();
+  },
+  { immediate: true },
 );
 
 async function onModel(next) {

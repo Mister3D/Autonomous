@@ -44,6 +44,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/browser-nav.md](./features/browser-nav.md) | Generic web nav: CDP + iframes (`frames_snapshot`) + VNC drag + Pi tools |
 | [features/botmail.md](./features/botmail.md) | Tell / Ask @bot, queue if busy, follow-up on reply |
 | [features/bots-create.md](./features/bots-create.md) | Free-form name + auto technical slug |
+| [features/bot-package.md](./features/bot-package.md) | Package size in Details (VM + files + chat) |
 | [features/chat-files.md](./features/chat-files.md) | Chat attachments → ~/shared/upload |
 | [features/composer-drafts.md](./features/composer-drafts.md) | Per-bot composer drafts (sessionStorage, per tab) |
 | [features/events.md](./features/events.md) | UTC cron + tokenized webhooks, Events tab |

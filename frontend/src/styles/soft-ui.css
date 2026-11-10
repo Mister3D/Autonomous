@@ -402,7 +402,8 @@ body {
 .details .field-block,
 .details .toggle-row,
 .details .info-row,
-.details .mcp-grants {
+.details .mcp-grants,
+.details .package-usage {
   border-radius: var(--radius-sm);
   padding-left: 0.55rem;
   padding-right: 0.55rem;
@@ -416,7 +417,8 @@ body {
 
 .details .field-block:hover,
 .details .toggle-row:hover,
-.details .info-row:hover {
+.details .info-row:hover,
+.details .package-usage:hover {
   background: rgba(255, 255, 255, 0.7);
 }
 
