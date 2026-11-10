@@ -10,7 +10,7 @@
 - `autonomous/services/pi_rpc.py` — `_MANAGER_SYSTEM_HINT`
 - UI: `CreateBotModal`, `DetailsPane`, `HubView` (Managers rail)
 
-**Last updated**: 2026-11-09 (household create/delete — see household.md)
+**Last updated**: 2026-11-09 (one mail path: bot_tell + attachments + expect_reply)
 
 ## User behaviour
 
@@ -19,17 +19,20 @@
 - To change Manager: disable the current one (Details), then enable / create the other.
 - **Rail**: Managers are **featured at the top** (md avatar + name below, centred); the other bots stay in the list below.
 - It can **list** the other bots (`bot_list` / `GET /bots/:name/mail/peers`): name, label, status, capability. No persona.
-- For a multi-bot task: it **delegates** with `bot_delegate` (or the `mail/delegate` API) — **without waiting**.
-- The message to the worker includes the instruction to **relaunch** it via `Tell @manager …` when done (success or failure).
-- When the worker does `Tell @manager`, the Manager is relaunched like a regular tell.
-- `bot_ask` (blocking) is **refused** on the tool side if the bot is a Manager — use `bot_delegate`.
+- For a multi-bot task: **one mail tool** — `bot_tell(to, content, attachments?, expect_reply?)`.
+  - `expect_reply` (Manager only) wraps the body with the async « Tell @manager … » footer (same text as legacy `bot_delegate`).
+  - **Files**: only via `attachments` on that same `bot_tell` / `bot_ask` (staging copy). No second file channel.
+- `bot_delegate` remains as **text-only sugar** over tell+expect_reply (no `attachments`). Prefer `bot_tell` when files or a callback matter.
+- When the worker does `Tell @manager`, the Manager is relaunched like a regular tell (workers attach result files with `bot_tell` too).
+- `bot_ask` (blocking) is **refused** on the tool side if the bot is a Manager.
 
 ## Implementation
 
 - Column `is_manager` (bool). Patch → restarts the Pi session (manager prompt).
 - `ensure_manager_slot` before INSERT / UPDATE that sets `is_manager=1`.
-- Manager system prompt: don't wait / don't poll; plans built around the `Tell @` callback.
-- Non-manager: `bot_tell` / `bot_ask` unchanged; `bot_list` / `bot_delegate` / household tools → 403 `manager_required`.
+- Manager system prompt: don't wait / don't poll; `bot_tell` + `expect_reply` + optional `attachments`.
+- `POST /mail/tell` accepts `attachments` and Manager-only `expect_reply`. `POST /mail/delegate` stays text-only sugar.
+- Non-manager: `bot_tell` / `bot_ask` unchanged (`expect_reply` → 403); `bot_list` / `bot_delegate` / household tools → 403 `manager_required`.
 - Household create/delete + default model: [household.md](./household.md).
 
 ## Pitfalls / non-regressions

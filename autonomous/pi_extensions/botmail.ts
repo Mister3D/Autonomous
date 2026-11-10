@@ -141,9 +141,9 @@ export default function (pi: ExtensionAPI) {
     name: "bot_delegate",
     label: "Delegate to bot",
     description:
-      "MANAGER ONLY: assign a task to another bot WITHOUT waiting. "
-      + "The message tells them to relaunch you with « Tell @you … » when done. "
-      + "Continue other work; when their Dit arrives, you are relaunched.",
+      "MANAGER ONLY: text-only async task (no files). Same as bot_tell with expect_reply. "
+      + "To send files to a worker, use bot_tell(to, content, attachments=[…], expect_reply=…) "
+      + "— that is the ONLY way to attach files. Do not invent another channel.",
     parameters: Type.Object({
       to: Type.String({ description: "Worker bot name (with or without @)" }),
       task: Type.String({ description: "What the worker must do" }),
@@ -183,9 +183,10 @@ export default function (pi: ExtensionAPI) {
         );
       }
       return textResult(
-        `Task delegated to @${to} (async). `
+        `Task delegated to @${to} (async, no files). `
           + `You are NOT waiting — keep going. `
-          + `They will relaunch you with « Tell @${cfg.bot} … » when finished.`,
+          + `They will relaunch you with « Tell @${cfg.bot} … » when finished. `
+          + `Need to send files? Use bot_tell with attachments (+ expect_reply).`,
         { inbox_id: res.data?.message },
       );
     },
@@ -427,33 +428,71 @@ export default function (pi: ExtensionAPI) {
       + "Confirming delivery is not the end of the task. "
       + "content = a self-contained brief for the peer (they lack this chat): objective, "
       + "relevant facts, constraints, expected result — not the user's raw last sentence. "
+      + "FILES (only way): attachments = paths under YOUR ~/shared; host copies them into "
+      + "the peer's .autonomous/mail-inbox staging — they place them with files_claim_mail. "
+      + "Do not paste file contents when a workspace path exists. "
+      + "Managers: for async work + callback, set expect_reply (adds « Tell @you … » footer). "
+      + "Same call carries attachments — do not use a second tool for files. "
       + "Address them as tu/you. Write content in the conversation language only "
-      + "(do not mix French and English). "
-      + "Managers assigning work should prefer bot_delegate (adds relaunch instructions).",
+      + "(do not mix French and English).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name (without or with @)" }),
       content: Type.String({
         description:
           "Self-contained brief for the peer, in the conversation language only. Not a raw user fragment.",
       }),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Optional relative paths under YOUR ~/shared to send (copied to peer staging)",
+        }),
+      ),
+      expect_reply: Type.Optional(
+        Type.String({
+          description:
+            "Manager only: ask the peer to Tell @you back with this summary when done "
+            + "(async delegation footer). Use with or without attachments.",
+        }),
+      ),
     }),
     execute: async (_id, params) => {
       const cfg = apiConfig();
       if (!cfg) {
         return textResult("Bot mail API not configured.");
       }
-      const res = await api("POST", `/bots/${encodeURIComponent(cfg.bot)}/mail/tell`, {
+      const attachments = Array.isArray(params.attachments)
+        ? params.attachments.map((p) => String(p || "").trim()).filter(Boolean)
+        : [];
+      const body: Record<string, unknown> = {
         to: String(params.to || "").replace(/^@/, ""),
         content: String(params.content || ""),
-      });
+      };
+      if (attachments.length) body.attachments = attachments;
+      if (params.expect_reply != null && String(params.expect_reply).trim()) {
+        body.expect_reply = String(params.expect_reply).trim();
+      }
+      const res = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/mail/tell`,
+        body,
+      );
       if (!res.ok) {
         return textResult(
           `bot_tell failed: ${res.data?.message || res.data?.error || res.status}`,
         );
       }
+      const peer = String(params.to).replace(/^@/, "");
+      const bits: string[] = [];
+      if (attachments.length) {
+        bits.push(
+          `${attachments.length} file${attachments.length > 1 ? "s" : ""} attached`,
+        );
+      }
+      if (body.expect_reply) bits.push("async callback requested");
+      const extra = bits.length ? ` (${bits.join(", ")})` : "";
       return textResult(
-        `Message queued/delivered to @${String(params.to).replace(/^@/, "")}.`,
-        { inbox_id: res.data?.message },
+        `Message queued/delivered to @${peer}${extra}.`,
+        { inbox_id: res.data?.message, attachments },
       );
     },
   });
@@ -476,6 +515,12 @@ export default function (pi: ExtensionAPI) {
         description:
           "Self-contained brief/question for the peer, in the conversation language only. Not a raw user fragment.",
       }),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Optional relative paths under YOUR ~/shared to send with the question",
+        }),
+      ),
       timeout_sec: Type.Optional(
         Type.Number({
           description: "Max wait seconds (default 600)",
@@ -494,10 +539,18 @@ export default function (pi: ExtensionAPI) {
         );
       }
       const to = String(params.to || "").replace(/^@/, "");
+      const attachments = Array.isArray(params.attachments)
+        ? params.attachments.map((p) => String(p || "").trim()).filter(Boolean)
+        : [];
+      const askBody: Record<string, unknown> = {
+        to,
+        content: String(params.content || ""),
+      };
+      if (attachments.length) askBody.attachments = attachments;
       const created = await api(
         "POST",
         `/bots/${encodeURIComponent(cfg.bot)}/mail/ask`,
-        { to, content: String(params.content || "") },
+        askBody,
       );
       if (!created.ok) {
         return textResult(

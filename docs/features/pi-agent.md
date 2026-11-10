@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-09 (stable tool groups + guard resume after CONTINUE)
+**Last updated**: 2026-11-09 (escape raw HTML in chat markdown so long user msgs stay intact)
 
 ## User behaviour
 
@@ -55,7 +55,7 @@ Pi is **not** in the VMs. It's on the host.
 
 ## Implementation
 
-- Markdown chat (`ChatPane.render`): after `marked` + mentions, `wrapCodeBlocks` wraps each `<pre>` in `.code-block` + `.code-copy` button; `wrapTables` → `.md-table-wrap`; delegated click (`onChatClick`) → `navigator.clipboard` (`execCommand` fallback).
+- Markdown chat (`ChatPane.render`): escape raw `<`/`>` **before** `marked` so prose like Vue `<script setup>` cannot open a real HTML tag (DOMPurify would then drop the rest of the bubble). Then mentions, `wrapCodeBlocks` (`.code-block` + copy), `wrapTables` → `.md-table-wrap`; delegated click (`onChatClick`) → `navigator.clipboard` (`execCommand` fallback).
 - Scroll: `stickToBottom` + ~100 px threshold; the messages watch coalesces follow-scroll with `requestAnimationFrame`. Do **not** toggle `messages-placing` (visibility:hidden) on live tool updates. Guard cards do **not** seal tool groups; walking backwards, only the **last** tools group stays live (earlier ones seal). Live preview is a **compact one-line** status (no args/result body) with fixed height — that stopped the thread jump on rapid tool spam. The jump is instant (`scrollTop`), including the first paint and a `?msg=` anchor. The `.messages` scrollbar stays hidden until scroll (or hover), then fades out **2 s** after the last scroll event.
 - Message queue / mid-run: `chat.send_message` calls `steer_mid_run` when a run holds the slot (busy); on success stamps `meta.mid_run` (no queue badge). Steer failure → `meta.queued` as before. `drain_queued_user_messages` clears the badge on the oldest + `bump_created_at` then `start_run` (Pi finally / stop / desk ready). Peer mail to a busy bot also steers mid-run when possible.
 - Empty assistant bubbles: `close_assistant` discards whitespace-only placeholders (`message.deleted`); the timeline also skips them for older threads.
@@ -77,6 +77,7 @@ Pi is **not** in the VMs. It's on the host.
 
 ## Pitfalls / non-regressions
 
+- Never feed raw chat text to `marked` without escaping `<`/`>` first: a literal `<script …>` (e.g. Vue SFC) opens a real tag, DOMPurify strips it, and **the rest of the bubble disappears**.
 - PATH: serve with `~/.local/bin` visible (the code enriches `PATH` for subprocesses).
 - Host Pi tools active (web search + vault + terminal + VM screenshot). Computer-use / click = next step.
 - `message.delta` is not replayed on refresh: the final content is in the database via `message.updated`.

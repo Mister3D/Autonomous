@@ -307,4 +307,45 @@ export default function (pi: ExtensionAPI) {
       );
     },
   });
+
+  pi.registerTool({
+    name: "files_claim_mail",
+    label: "Place mail attachment",
+    description:
+      "Move a file received via inter-bot mail from staging "
+      + "(.autonomous/mail-inbox/<id>/…) to a destination under YOUR ~/shared. "
+      + "Use after bot_tell/bot_ask delivered attachments — you choose the final path. "
+      + "Does not leave a copy in staging.",
+    parameters: Type.Object({
+      path: Type.String({
+        description:
+          "Staging path, e.g. '.autonomous/mail-inbox/<inbox_id>/spec.md'",
+      }),
+      dest: Type.String({
+        description:
+          "Destination relative path under ~/shared, e.g. 'projects/chat/spec.md'",
+      }),
+    }),
+    execute: async (_id, params) => {
+      const cfg = apiConfig();
+      if (!cfg) return textResult("Autonomous API not configured.");
+      const path = String(params.path || "").trim();
+      const dest = String(params.dest || "").trim();
+      if (!path || !dest) {
+        return textResult("path and dest required", { error: true });
+      }
+      const res = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/files/claim-mail`,
+        { path, dest },
+      );
+      if (!res.ok) {
+        return textResult(errMessage(res.data, res.status), { error: true });
+      }
+      return textResult(
+        `Moved mail attachment to ${res.data?.path || dest}.`,
+        { ...res.data, ok: true },
+      );
+    },
+  });
 }

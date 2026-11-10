@@ -147,15 +147,26 @@ def format_delegate_content(
     manager_slug: str,
     task: str,
     expect_reply: str | None = None,
+    has_attachments: bool = False,
 ) -> str:
     """Build a one-way task message that asks the peer to relaunch the manager."""
     body = (task or "").strip()
     if not body:
-        raise ValidationError("Empty task", code="botmail_empty")
+        if has_attachments:
+            body = "(files attached)"
+        else:
+            raise ValidationError("Empty task", code="botmail_empty")
     me = (manager_slug or "").strip().lstrip("@")
     expect = (expect_reply or "").strip() or (
         "a short summary of the result (success or failure)"
     )
+    files_note = ""
+    if has_attachments:
+        files_note = (
+            " Files for this task were copied into your ~/shared staging "
+            "(.autonomous/mail-inbox/…). Place them with files_claim_mail "
+            "(or files_list/read) wherever you need before you start."
+        )
     return (
         f"{body}\n\n"
         f"—\n"
@@ -163,6 +174,7 @@ def format_delegate_content(
         f"When you are done (success or failure), relaunch me with "
         f"« Tell @{me} … » containing {expect}. "
         f"Do not wait for further instructions from me on this thread."
+        f"{files_note}"
     )
 
 
@@ -562,11 +574,14 @@ def _record_outgoing(
     home: Path | None,
     ask_id: str | None = None,
     origin_message_id: str | None = None,
+    attachments: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """Visible « Sent to @peer » card on the sender (peer-facing body)."""
     body = (content or "").strip()
-    if not body:
+    if not body and not attachments:
         return None
+    if not body:
+        body = "(files attached)"
     meta: dict[str, Any] = {
         "kind": "botmail",
         "mail_kind": "outgoing",
@@ -580,6 +595,19 @@ def _record_outgoing(
         meta["ask_id"] = ask_id
     if origin_message_id:
         meta["origin_message_id"] = origin_message_id
+    if attachments:
+        # Sender card links download to *their* original paths when possible.
+        meta["attachments"] = [
+            {
+                **a,
+                "path": a.get("source_path") or a.get("path"),
+                "url": (
+                    f"/api/v1/bots/{from_bot}/files/download"
+                    f"?path={_quote_path(a.get('source_path') or a.get('path') or '')}"
+                ),
+            }
+            for a in attachments
+        ]
     msg = chat_svc.create_message(
         from_bot,
         body,
@@ -590,6 +618,54 @@ def _record_outgoing(
     return str(msg.get("id") or "") or None
 
 
+def _quote_path(path: str) -> str:
+    from urllib.parse import quote
+
+    return quote(str(path or ""), safe="/")
+
+
+def _stage_attachments(
+    from_bot: str,
+    to_bot: str,
+    paths: list[str] | None,
+    *,
+    inbox_id: str,
+    home: Path | None,
+) -> list[dict[str, Any]]:
+    if not paths:
+        return []
+    from autonomous.services import files as files_svc
+
+    cleaned = [str(p).strip() for p in paths if str(p or "").strip()]
+    if not cleaned:
+        return []
+    return files_svc.stage_mail_attachments(
+        from_bot,
+        to_bot,
+        cleaned,
+        inbox_id=inbox_id,
+        home=home,
+    )
+
+
+def _attachments_prompt_block(attachments: list[dict[str, Any]] | None) -> str:
+    """English agent note listing staged files (recipient places them freely)."""
+    if not attachments:
+        return ""
+    lines = [
+        "Attached files were copied into your ~/shared staging area. "
+        "Place each where you want with files_claim_mail(path, dest) "
+        "(or files_list/read + write). Staging paths:"
+    ]
+    for a in attachments:
+        name = a.get("name") or "?"
+        size = a.get("size")
+        path = a.get("path") or "?"
+        size_s = f"{int(size)} bytes" if isinstance(size, int) else "?"
+        lines.append(f"- {name} ({size_s}) → {path}")
+    return "\n".join(lines)
+
+
 def tell(
     from_bot: str,
     to_bot: str,
@@ -598,13 +674,21 @@ def tell(
     home: Path | None = None,
     origin: str = "api",
     origin_message_id: str | None = None,
+    attachments: list[str] | None = None,
 ) -> dict[str, Any]:
     to_bot = resolve_bot(to_bot, home=home, exclude=from_bot)
     content = (content or "").strip()
-    if not content:
+    attach_paths = [str(p).strip() for p in (attachments or []) if str(p or "").strip()]
+    if not content and not attach_paths:
         raise ValidationError("Empty message", code="botmail_empty")
+    if not content:
+        content = "(files attached)"
     origin_message_id = _resolve_origin_message_id(
         from_bot, origin_message_id=origin_message_id, home=home
+    )
+    item_id = str(uuid.uuid4())
+    staged = _stage_attachments(
+        from_bot, to_bot, attach_paths, inbox_id=item_id, home=home
     )
     outgoing_id = _record_outgoing(
         from_bot,
@@ -613,12 +697,15 @@ def tell(
         mode="tell",
         home=home,
         origin_message_id=origin_message_id,
+        attachments=staged or None,
     )
     meta: dict[str, Any] = {"origin": origin}
     if origin_message_id:
         meta["origin_message_id"] = origin_message_id
     if outgoing_id:
         meta["outgoing_message_id"] = outgoing_id
+    if staged:
+        meta["attachments"] = staged
     return _enqueue(
         to_bot,
         from_bot=from_bot,
@@ -627,6 +714,7 @@ def tell(
         correlation_id=None,
         home=home,
         meta=meta,
+        item_id=item_id,
     )
 
 
@@ -638,15 +726,23 @@ def ask(
     home: Path | None = None,
     origin: str = "api",
     origin_message_id: str | None = None,
+    attachments: list[str] | None = None,
 ) -> dict[str, Any]:
     to_bot = resolve_bot(to_bot, home=home, exclude=from_bot)
     content = (content or "").strip()
-    if not content:
+    attach_paths = [str(p).strip() for p in (attachments or []) if str(p or "").strip()]
+    if not content and not attach_paths:
         raise ValidationError("Empty question", code="botmail_empty")
+    if not content:
+        content = "(files attached)"
     ask_id = str(uuid.uuid4())
     now = _now()
     origin_message_id = _resolve_origin_message_id(
         from_bot, origin_message_id=origin_message_id, home=home
+    )
+    item_id = str(uuid.uuid4())
+    staged = _stage_attachments(
+        from_bot, to_bot, attach_paths, inbox_id=item_id, home=home
     )
     outgoing_id = _record_outgoing(
         from_bot,
@@ -656,12 +752,15 @@ def ask(
         home=home,
         ask_id=ask_id,
         origin_message_id=origin_message_id,
+        attachments=staged or None,
     )
     meta: dict[str, Any] = {"origin": origin}
     if origin_message_id:
         meta["origin_message_id"] = origin_message_id
     if outgoing_id:
         meta["outgoing_message_id"] = outgoing_id
+    if staged:
+        meta["attachments"] = staged
     inbox = _enqueue(
         to_bot,
         from_bot=from_bot,
@@ -671,6 +770,7 @@ def ask(
         home=home,
         meta=meta,
         defer_deliver=True,
+        item_id=item_id,
     )
     from_id = bots_svc.bot_uuid(from_bot, home=home)
     to_id = bots_svc.bot_uuid(to_bot, home=home)
@@ -897,9 +997,10 @@ def _enqueue(
     home: Path | None,
     meta: dict[str, Any] | None = None,
     defer_deliver: bool = False,
+    item_id: str | None = None,
 ) -> dict[str, Any]:
     """Enqueue mail. ``bot`` / ``from_bot`` may be slug or UUID; stored as UUID."""
-    item_id = str(uuid.uuid4())
+    item_id = (item_id or "").strip() or str(uuid.uuid4())
     now = _now()
     meta = dict(meta or {})
     bot_id = bots_svc.bot_uuid(bot, home=home)
@@ -1073,25 +1174,31 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
         if outgoing_message_id:
             _patch_message_meta(from_bot, outgoing_message_id, patch, home=home)
 
+    attachments = list(item_meta.get("attachments") or [])
+
     if kind == "ask":
         visible = body
+        recv_meta: dict[str, Any] = {
+            "kind": "botmail",
+            "mail_kind": "ask",
+            "direction": "received",
+            "from_bot": from_bot,
+            "ask_id": ask_id,
+            "body": body,
+            "link_bot": from_bot,
+            "link_message_id": outgoing_message_id or origin_message_id,
+        }
+        if attachments:
+            recv_meta["attachments"] = attachments
         msg = chat_svc.create_message(
             bot,
             visible,
             role="system",
-            meta={
-                "kind": "botmail",
-                "mail_kind": "ask",
-                "direction": "received",
-                "from_bot": from_bot,
-                "ask_id": ask_id,
-                "body": body,
-                "link_bot": from_bot,
-                "link_message_id": outgoing_message_id or origin_message_id,
-            },
+            meta=recv_meta,
             home=home,
         )
         _link_sender_cards(msg["id"], extra={"ask_id": ask_id})
+        attach_note = _attachments_prompt_block(attachments)
         prompt = (
             f"@{from_bot} is asking you a question (inter-bot message). "
             f"You do NOT have @{from_bot}'s conversation thread — act only on "
@@ -1100,6 +1207,7 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
             f"forwarded to them.\n"
             f"{_INBOUND_LANG_RULE}\n\n"
             f"Question:\n{body}"
+            + (f"\n\n{attach_note}" if attach_note else "")
         )
         _start_agent(bot, prompt, home=home, mid_run=mid_run)
         return True
@@ -1107,50 +1215,59 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
     if kind == "reply":
         answer = body
         visible = answer
+        recv_meta = {
+            "kind": "botmail",
+            "mail_kind": "ask_answered",
+            "direction": "received",
+            "from_bot": from_bot,
+            "ask_id": ask_id,
+            "answer": answer,
+            "link_bot": from_bot,
+            "link_message_id": link_answer_id,
+        }
+        if attachments:
+            recv_meta["attachments"] = attachments
         chat_svc.create_message(
             bot,
             visible,
             role="system",
-            meta={
-                "kind": "botmail",
-                "mail_kind": "ask_answered",
-                "direction": "received",
-                "from_bot": from_bot,
-                "ask_id": ask_id,
-                "answer": answer,
-                "link_bot": from_bot,
-                "link_message_id": link_answer_id,
-            },
+            meta=recv_meta,
             home=home,
         )
+        attach_note = _attachments_prompt_block(attachments)
         prompt = (
             f"@{from_bot} replied (async Ask return):\n{answer}\n\n"
             "Continue with this information for the user if you promised to "
             "bring the result back here. Do not ask the same thing again. "
             "Tell the user in the language of your conversation with them "
             "(one language only; do not mix French and English)."
+            + (f"\n\n{attach_note}" if attach_note else "")
         )
         _start_agent(bot, prompt, home=home, mid_run=mid_run)
         return True
 
     # tell
     visible = body
+    recv_meta = {
+        "kind": "botmail",
+        "mail_kind": "tell",
+        "direction": "received",
+        "from_bot": from_bot,
+        "body": body,
+        "link_bot": from_bot,
+        "link_message_id": outgoing_message_id or origin_message_id,
+    }
+    if attachments:
+        recv_meta["attachments"] = attachments
     msg = chat_svc.create_message(
         bot,
         visible,
         role="system",
-        meta={
-            "kind": "botmail",
-            "mail_kind": "tell",
-            "direction": "received",
-            "from_bot": from_bot,
-            "body": body,
-            "link_bot": from_bot,
-            "link_message_id": outgoing_message_id or origin_message_id,
-        },
+        meta=recv_meta,
         home=home,
     )
     _link_sender_cards(msg["id"])
+    attach_note = _attachments_prompt_block(attachments)
     prompt = (
         f"@{from_bot} wrote to you (inter-bot, one-way). "
         f"You do NOT have @{from_bot}'s conversation thread — act only on "
@@ -1158,6 +1275,7 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
         f"(standing rules, memory, etc.).\n"
         f"{_INBOUND_LANG_RULE}\n\n"
         f"{body}"
+        + (f"\n\n{attach_note}" if attach_note else "")
     )
     _start_agent(bot, prompt, home=home, mid_run=mid_run)
     return True

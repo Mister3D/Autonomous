@@ -260,6 +260,7 @@
   "chat.mailReceivedFrom": "Reçu de",
   "chat.mailExpand": "Afficher le message",
   "chat.mailCollapse": "Replier le message",
+  "chat.mailFile": "Fichier",
   "chat.notifyLabel": "Notification",
   "chat.notifyFailed": "La notification n’a pas été affichée.",
   "chat.webhookLabel": "Webhook",

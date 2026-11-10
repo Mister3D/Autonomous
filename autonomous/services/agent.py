@@ -119,6 +119,7 @@ _HIDDEN_TOOL_CARDS = frozenset(
         # Inline markdown / attach card — no tool card noise.
         "files_share_image",
         "files_attach",
+        "files_claim_mail",
         # Shared memory: MemoryProposalCard only (no 🔧 dump in chat).
         "memory_propose",
         "memory_list",

@@ -422,7 +422,33 @@ class OkSchema(Schema):
 
 class BotMailSendSchema(Schema):
     to = fields.Str(required=True, metadata={"description": "Target bot name or @name"})
-    content = fields.Str(required=True, validate=validate.Length(min=1))
+    content = fields.Str(
+        load_default="",
+        allow_none=True,
+        metadata={"description": "Peer-facing brief (optional if attachments are set)"},
+    )
+    attachments = fields.List(
+        fields.Str(),
+        load_default=None,
+        allow_none=True,
+        validate=validate.Length(max=10),
+        metadata={
+            "description": (
+                "Optional paths under the sender's ~/shared to copy into the "
+                "recipient's .autonomous/mail-inbox staging area"
+            )
+        },
+    )
+    expect_reply = fields.Str(
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Manager only: wrap content as an async delegation and ask the peer "
+                "to Tell @you back with this summary when done"
+            )
+        },
+    )
 
 
 class BotMailDelegateSchema(Schema):

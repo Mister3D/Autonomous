@@ -43,7 +43,7 @@ PATCH  /bots/:name                  # incl. companion_id, companion_egress, comp
 DELETE /bots/:name
 POST   /bots/:name/capability
 GET    /bots/:name/mail/peers          # Manager only — other bots for orchestration
-POST   /bots/:name/mail/delegate       # Manager only — async task + relaunch instructions
+POST   /bots/:name/mail/delegate       # Manager only — text-only sugar {to, task, expect_reply?}
 GET    /bots/:name/household/models    # Manager — Pi models + bots.default_model
 POST   /bots/:name/household/bots      # Manager — create bots [{name, model?}, …]
 POST   /bots/:name/household/delete-requests           # Manager — checkbox delete card
@@ -58,8 +58,8 @@ DELETE /bots/:name/messages         # + Pi session rotation
 GET    /bots/:name/messages/export.pdf  # discussion PDF (tool names, no args/results)
 POST   /bots/:name/stop             # abort run Pi
 POST   /bots/:name/resume           # resume after session died during approval
-POST   /bots/:name/mail/tell        # {to, content} → one-way message to another bot
-POST   /bots/:name/mail/ask         # {to, content} → question; the reply relaunches the asker
+POST   /bots/:name/mail/tell        # {to, content?, attachments?, expect_reply?} → one-way (+ files; Manager expect_reply = async footer)
+POST   /bots/:name/mail/ask         # {to, content?, attachments?} → question; the reply relaunches the asker
 GET    /bots/:name/mail/asks/:id    # poll ask state (open|answered)
 GET|POST /bots/:name/schedules      # cron entered in host local time; cron_utc + next_run_at in UTC
 PATCH|DELETE /bots/:name/schedules/:id
@@ -130,6 +130,7 @@ PUT    /bots/:name/files/content         # JSON {path, content}
 GET    /bots/:name/files/raw?path=       # inline bytes (chat images)
 POST   /bots/:name/files/share           # JSON {path, caption?} → markdown image
 POST   /bots/:name/files/attach          # JSON {path} → bubble attachment (PDF/zip, not images)
+POST   /bots/:name/files/claim-mail      # JSON {path, dest} → move mail-inbox staging file into ~/shared
 DELETE /bots/:name/files?path=
 
 GET    /jobs/:id

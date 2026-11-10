@@ -337,15 +337,36 @@ class BotMailTell(MethodView):
     @blp.arguments(BotMailSendSchema)
     @blp.response(201, OkSchema)
     def post(self, data, name):
-        """Send a one-way message to another bot (Dit à @…)."""
+        """Send a one-way message to another bot (Dit à @…).
+
+        Optional ``attachments`` copy files into the peer's mail-inbox staging.
+        Managers may set ``expect_reply`` to wrap the body as an async delegation
+        (same footer as ``/mail/delegate``) — one mail path for files + callback.
+        """
         try:
-            bots_svc.get_bot(name, home=g.home)
+            me = bots_svc.get_bot(name, home=g.home)
+            content = data.get("content") or ""
+            attachments = data.get("attachments") or None
+            expect_reply = data.get("expect_reply")
+            if expect_reply is not None and str(expect_reply).strip() != "":
+                if not me.get("is_manager"):
+                    raise Forbidden(
+                        "Only a Manager bot can set expect_reply on tell.",
+                        code="manager_required",
+                    )
+                content = botmail_svc.format_delegate_content(
+                    manager_slug=name,
+                    task=content,
+                    expect_reply=expect_reply,
+                    has_attachments=bool(attachments),
+                )
             item = botmail_svc.tell(
                 name,
                 data["to"],
-                data["content"],
+                content,
                 home=g.home,
                 origin="api",
+                attachments=attachments,
             )
             return {"ok": True, "message": item["id"]}
         except AutonomousError as exc:
@@ -357,7 +378,11 @@ class BotMailDelegate(MethodView):
     @blp.arguments(BotMailDelegateSchema)
     @blp.response(201, OkSchema)
     def post(self, data, name):
-        """Manager: assign a task without waiting; peer must Dit-à back to relaunch."""
+        """Manager: assign a task without waiting; peer must Dit-à back to relaunch.
+
+        Sugar over ``/mail/tell`` with ``expect_reply``. For files, use ``/mail/tell``
+        with ``attachments`` (+ optional ``expect_reply``) — do not invent a second path.
+        """
         try:
             me = bots_svc.get_bot(name, home=g.home)
             if not me.get("is_manager"):
@@ -369,6 +394,7 @@ class BotMailDelegate(MethodView):
                 manager_slug=name,
                 task=data["task"],
                 expect_reply=data.get("expect_reply"),
+                has_attachments=False,
             )
             item = botmail_svc.tell(
                 name,
@@ -480,9 +506,10 @@ class BotMailAsk(MethodView):
             return botmail_svc.ask(
                 name,
                 data["to"],
-                data["content"],
+                data.get("content") or "",
                 home=g.home,
                 origin="api",
+                attachments=data.get("attachments") or None,
             )
         except AutonomousError as exc:
             _handle(exc)
@@ -1323,6 +1350,25 @@ class BotFileAttach(MethodView):
             abort(400, message="Missing path")
         try:
             return files_svc.attach_file(name, path, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/files/claim-mail")
+class BotFileClaimMail(MethodView):
+    @blp.response(200, FileEntrySchema)
+    @blp.doc(summary="Move a staged inter-bot mail attachment into ~/shared")
+    def post(self, name):
+        """JSON ``{path, dest}`` — ``path`` under ``.autonomous/mail-inbox/…``."""
+        body = request.get_json(silent=True) or {}
+        path = (body.get("path") or "").strip()
+        dest = (body.get("dest") or "").strip()
+        if not path or not dest:
+            abort(400, message="Missing path or dest")
+        try:
+            return files_svc.claim_mail_attachment(
+                name, path, dest, home=g.home
+            )
         except AutonomousError as exc:
             _handle(exc)
 

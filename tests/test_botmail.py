@@ -126,19 +126,90 @@ def test_tell_delivers_when_idle(home):
     assert sent[-1]["meta"].get("link_message_id")
 
 
-def test_tell_queues_when_busy(home):
+def test_tell_delivers_card_when_busy(home):
+    """Busy recipient still gets the received card (mid-run steer best-effort)."""
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
     bots_svc.patch_bot("bob", {"status": "busy"}, home=home)
     botmail_svc.tell("alice", "bob", "later", home=home, origin="test")
-    assert not any(
+    assert any(
         m["role"] == "system" and "later" in (m.get("content") or "")
         for m in chat_svc.list_messages("bob", home=home)
     )
-    bots_svc.patch_bot("bob", {"status": "idle"}, home=home)
-    botmail_svc.on_run_finished("bob", assistant_content="done", home=home)
-    assert any(
-        m["role"] == "system" and "later" in m["content"]
+
+
+def test_tell_with_attachments_stages_for_peer(home):
+    from pathlib import Path
+
+    from autonomous.services import files as files_svc
+
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    files_svc.write_text("alice", "brief/note.txt", "hello peer\n", home=home)
+    item = botmail_svc.tell(
+        "alice",
+        "bob",
+        "Voici le brief.",
+        home=home,
+        origin="test",
+        attachments=["brief/note.txt"],
+    )
+    atts = (item.get("meta") or {}).get("attachments") or []
+    assert len(atts) == 1
+    staging = atts[0]["path"]
+    assert staging.startswith(".autonomous/mail-inbox/")
+    assert staging.endswith("note.txt")
+    staged = files_svc.resolve("bob", staging, home=home)
+    assert staged.is_file()
+    assert staged.read_text(encoding="utf-8") == "hello peer\n"
+
+    bob_msgs = chat_svc.list_messages("bob", home=home)
+    recv = [
+        m
+        for m in bob_msgs
+        if m["role"] == "system" and (m.get("meta") or {}).get("mail_kind") == "tell"
+    ]
+    assert recv
+    recv_atts = (recv[-1].get("meta") or {}).get("attachments") or []
+    assert recv_atts and recv_atts[0]["name"] == "note.txt"
+
+    alice_msgs = chat_svc.list_messages("alice", home=home)
+    sent = [
+        m
+        for m in alice_msgs
+        if (m.get("meta") or {}).get("mail_kind") == "outgoing"
+    ]
+    assert sent and (sent[-1].get("meta") or {}).get("attachments")
+
+    claimed = files_svc.claim_mail_attachment(
+        "bob", staging, "inbox/from-alice/note.txt", home=home
+    )
+    assert claimed["path"] == "inbox/from-alice/note.txt"
+    assert files_svc.resolve("bob", claimed["path"], home=home).read_text(
+        encoding="utf-8"
+    ) == "hello peer\n"
+    assert not Path(staged).exists()
+
+
+def test_tell_attachment_missing_fails(home):
+    from autonomous.services.errors import NotFound
+
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    try:
+        botmail_svc.tell(
+            "alice",
+            "bob",
+            "oops",
+            home=home,
+            origin="test",
+            attachments=["nope/missing.txt"],
+        )
+        assert False, "expected NotFound"
+    except NotFound:
+        pass
+    assert not any(
+        (m.get("meta") or {}).get("kind") == "botmail"
         for m in chat_svc.list_messages("bob", home=home)
     )
 
@@ -325,7 +396,8 @@ def test_delete_purges_queued_mail(home):
     """Deleting the sender must drop queued mail so a recreated peer stays clean."""
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    bots_svc.patch_bot("bob", {"status": "busy"}, home=home)
+    # waiting keeps mail queued (busy would mid-run-deliver the card).
+    bots_svc.patch_bot("bob", {"status": "waiting"}, home=home)
     botmail_svc.tell("alice", "bob", "zombie message", home=home, origin="test")
     bots_svc.delete_bot("alice", home=home, destroy_desk=False)
     bots_svc.patch_bot("bob", {"status": "idle"}, home=home)
@@ -343,7 +415,7 @@ def test_drain_skips_ghost_sender_after_recreate(home):
     bots_svc.create_bot("horloge", home=home)
     bots_svc.create_bot("test", home=home)
     old_test_id = bots_svc.get_bot("test", home=home)["id"]
-    bots_svc.patch_bot("test", {"status": "busy"}, home=home)
+    bots_svc.patch_bot("test", {"status": "waiting"}, home=home)
     botmail_svc.tell("horloge", "test", "It is 4:30pm", home=home, origin="test")
     with get_db(home) as conn:
         conn.execute("DELETE FROM bots WHERE name IN ('horloge', 'test')")
@@ -510,7 +582,7 @@ def test_drain_cancels_orphan_queued_without_purge(home):
 
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    bots_svc.patch_bot("bob", {"status": "busy"}, home=home)
+    bots_svc.patch_bot("bob", {"status": "waiting"}, home=home)
     botmail_svc.tell("alice", "bob", "still here", home=home, origin="test")
     with get_db(home) as conn:
         conn.execute("DELETE FROM bots WHERE name = ?", ("alice",))

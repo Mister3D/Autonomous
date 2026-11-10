@@ -92,3 +92,34 @@ def test_api_peers_and_delegate(auth_client, home):
         and "Count up to 3" in (m.get("content") or "")
         for m in helper_msgs
     )
+
+
+def test_manager_tell_attachments_with_expect_reply(auth_client, home):
+    """One path: Manager bot_tell + attachments + expect_reply (not delegate)."""
+    from autonomous.paths import bot_dir
+
+    auth_client.post("/api/v1/bots", json={"name": "Mgr", "is_manager": True})
+    auth_client.post("/api/v1/bots", json={"name": "Helper"})
+    root = bot_dir("mgr", home) / "home" / "specs"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "brief.txt").write_text("do the thing\n", encoding="utf-8")
+    d = auth_client.post(
+        "/api/v1/bots/mgr/mail/tell",
+        json={
+            "to": "helper",
+            "content": "Read the brief and implement.",
+            "attachments": ["specs/brief.txt"],
+            "expect_reply": "short status",
+        },
+    )
+    assert d.status_code == 201, d.data
+    helper_msgs = auth_client.get("/api/v1/bots/helper/messages").json
+    recv = [
+        m
+        for m in helper_msgs
+        if (m.get("meta") or {}).get("mail_kind") == "tell"
+    ][-1]
+    assert "Tell @mgr" in (recv.get("content") or "")
+    assert "files_claim_mail" in (recv.get("content") or "")
+    atts = (recv.get("meta") or {}).get("attachments") or []
+    assert atts and atts[0]["name"] == "brief.txt"

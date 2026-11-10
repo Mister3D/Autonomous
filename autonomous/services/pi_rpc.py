@@ -70,7 +70,7 @@ _CHAT_SEARCH_SYSTEM_HINT = (
 _FILES_SYSTEM_HINT = (
     "Bot files (~/shared = ~/workspace, same as the Files inspector): use "
     "files_list, files_read, files_write, files_mkdir, files_delete, "
-    "files_share_image, files_attach. "
+    "files_share_image, files_attach, files_claim_mail. "
     "These work WITHOUT host bash and WITHOUT a running desk. "
     "IMAGES (mandatory): call files_share_image(path) for each file, then paste the "
     "EXACT returned markdown line (![](/api/v1/bots/…/files/raw?path=…)) into your reply. "
@@ -80,6 +80,8 @@ _FILES_SYSTEM_HINT = (
     "Do NOT use attachments for images. Do NOT request a screen desk or vm_screenshot "
     "just to show a workspace image. "
     "Do NOT overwrite images with files_write. "
+    "Inter-bot mail files land under .autonomous/mail-inbox/<id>/ — place them with "
+    "files_claim_mail(path, dest) wherever you want in ~/shared. "
     "There is no host bash: shell commands run in the bot VM via vm_terminal_exec."
 )
 
@@ -89,7 +91,10 @@ _BOTMAIL_SYSTEM_HINT = (
     "need an explicit user instruction (action verb + bot + precise ask), e.g. "
     "« Demande à X de faire Y… », or a standing rule you were given "
     "(« quand un mail d’achat arrive, donne-le à @achat »). Then you MUST call "
-    "bot_tell / bot_ask (or bot_delegate if Manager). "
+    "bot_tell / bot_ask (Managers: bot_tell with expect_reply for async workers). "
+    "ONE way to share files: bot_tell / bot_ask attachments=[paths under YOUR ~/shared]. "
+    "The host copies them into the peer's mail-inbox staging (they place them with "
+    "files_claim_mail). There is no other file-share tool. "
     "bot_tell = one-way async; bot_ask = ask and WAIT for a reply (blocks this "
     "run). Confirming transmission is NOT the end of the task. If the user said "
     "« rapporte-moi sa réponse ici », prefer bot_ask (or follow up when the "
@@ -114,13 +119,17 @@ _BOTMAIL_SYSTEM_HINT = (
 )
 
 _MANAGER_SYSTEM_HINT = (
-    "MANAGER / ORCHESTRATOR: you may list peers with bot_list and assign work with "
-    "bot_delegate(to, task, expect_reply?). "
+    "MANAGER / ORCHESTRATOR: list peers with bot_list. "
     "CRITICAL: you do NOT stay waiting for workers. Never use bot_ask for orchestration. "
-    "bot_delegate sends the task AND tells the worker to relaunch you with "
-    "« Tell @you … » when finished (success or failure). After bot_delegate, continue "
-    "other work or idle; when their Dit arrives, you are relaunched automatically. "
-    "Formulate every multi-bot plan around that callback — do not poll or block. "
+    "ONE mail tool for workers: bot_tell(to, content, attachments?, expect_reply?). "
+    "Set expect_reply so the worker relaunches you with « Tell @you … » when done "
+    "(success or failure). Put files in the SAME bot_tell via attachments=['path/…'] "
+    "(copied to their mail-inbox staging; they use files_claim_mail). "
+    "Do NOT paste file contents when a ~/shared path exists. "
+    "Do NOT use a second channel for files. bot_delegate is text-only sugar "
+    "(no attachments) — prefer bot_tell when files or a callback matter. "
+    "After sending, continue other work or idle; when their Dit arrives, you are "
+    "relaunched automatically — do not poll or block. "
     "Household: create bots with bot_create({ bots:[{name, model?}, …] }) — omit model to "
     "use the Settings → LLM default; pass model (provider/id or a clear hint like "
     "« gpt-4o openai ») when the user names one. Discover refs with bot_models. "

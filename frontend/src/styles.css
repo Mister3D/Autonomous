@@ -5124,6 +5124,47 @@ label.muted {
   flex: none;
 }
 
+.botmail-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0 0 0.55rem;
+}
+
+.botmail-file {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid rgba(47, 111, 237, 0.35);
+  border-radius: 999px;
+  background: #fff;
+  color: #1c2a44;
+  text-decoration: none;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.botmail-file:hover {
+  border-color: #2f6fed;
+  background: #eef4ff;
+}
+
+.botmail-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.botmail-file-size {
+  flex: none;
+  color: #5a6b88;
+  font-size: 0.72rem;
+}
+
 .bubble.botmail.botmail-collapsible {
   cursor: pointer;
   user-select: text;

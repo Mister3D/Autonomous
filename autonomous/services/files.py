@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO
+from urllib.parse import quote
 
 from autonomous.i18n import t
 from autonomous.paths import bot_dir
 from autonomous.services import bots as bots_svc
-from autonomous.services.errors import AutonomousError, Forbidden, NotFound
+from autonomous.services.errors import AutonomousError, Forbidden, NotFound, ValidationError
 from autonomous.services.events import BUS
 
 # Shown in the UI as ~/shared — host path bots/<name>/home
 SHARED_LABEL = "shared"
 CHAT_UPLOAD_DIR = "upload"
+MAIL_INBOX_DIR = ".autonomous/mail-inbox"
 MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024
+MAX_MAIL_ATTACHMENTS = 10
+MAX_MAIL_ATTACHMENT_BYTES = MAX_CHAT_FILE_BYTES
+MAX_MAIL_ATTACHMENTS_TOTAL_BYTES = 100 * 1024 * 1024
 
 _SAFE_NAME = re.compile(r"^[^/\x00]{1,255}$")
 
@@ -488,8 +495,6 @@ def save_chat_upload(
         os.chown(target, 1000, 1000)
     except OSError:
         pass
-    from urllib.parse import quote
-
     rel_path = f"{rel_dir}/{safe}".replace("\\", "/")
     _notify_changed(bot, op="upload", path=rel_path, is_dir=False)
     return {
@@ -499,3 +504,223 @@ def save_chat_upload(
         "url": f"/api/v1/bots/{bot}/files/download?path={quote(rel_path, safe='/')}",
         "size": total,
     }
+
+
+def _unique_child(directory: Path, name: str) -> Path:
+    """Return ``directory/name``, adding ``_2``, ``_3``… on collision."""
+    safe = _safe_filename(name)
+    candidate = directory / safe
+    if not candidate.exists():
+        return candidate
+    stem = Path(safe).stem
+    suffix = Path(safe).suffix
+    n = 2
+    while True:
+        alt = directory / f"{stem}_{n}{suffix}"
+        if not alt.exists():
+            return alt
+        n += 1
+        if n > 10_000:
+            raise AutonomousError("Could not allocate unique filename", code="name_collision")
+
+
+def stage_mail_attachments(
+    from_bot: str,
+    to_bot: str,
+    paths: list[str],
+    *,
+    inbox_id: str,
+    home: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Copy sender ``~/shared`` files into the recipient mail-inbox staging area.
+
+    Staging path: ``.autonomous/mail-inbox/<inbox_id>/<filename>``.
+    The recipient may then claim/move them wherever they want.
+    """
+    if not paths:
+        return []
+    if len(paths) > MAX_MAIL_ATTACHMENTS:
+        raise ValidationError(
+            f"Too many attachments (max {MAX_MAIL_ATTACHMENTS})",
+            code="mail_too_many_attachments",
+        )
+    inbox_id = (inbox_id or "").strip()
+    if not inbox_id or "/" in inbox_id or ".." in inbox_id:
+        raise ValidationError("Invalid inbox id", code="invalid_inbox_id")
+
+    bots_svc.get_bot(from_bot, home=home)
+    bots_svc.get_bot(to_bot, home=home)
+    dest_root = resolve(to_bot, f"{MAIL_INBOX_DIR}/{inbox_id}", home=home)
+    dest_root.mkdir(parents=True, exist_ok=True)
+    try:
+        # Own as desktop user when possible (bind-mount).
+        os.chown(dest_root, 1000, 1000)
+        for parent in (dest_root.parent, dest_root.parent.parent):
+            try:
+                os.chown(parent, 1000, 1000)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+    staged: list[dict[str, Any]] = []
+    total = 0
+    try:
+        for raw in paths:
+            rel = (raw or "").strip()
+            if not rel:
+                raise ValidationError("Empty attachment path", code="mail_empty_path")
+            src = resolve(from_bot, rel, home=home)
+            if not src.is_file():
+                raise NotFound(
+                    f"Attachment not found: {rel}",
+                    code="mail_attachment_missing",
+                )
+            size = src.stat().st_size
+            if size <= 0:
+                raise ValidationError(
+                    f"Empty attachment: {rel}",
+                    code="mail_empty_file",
+                )
+            if size > MAX_MAIL_ATTACHMENT_BYTES:
+                raise ValidationError(
+                    f"Attachment too large (max {MAX_MAIL_ATTACHMENT_BYTES // (1024 * 1024)} Mo): {rel}",
+                    code="mail_file_too_large",
+                )
+            total += size
+            if total > MAX_MAIL_ATTACHMENTS_TOTAL_BYTES:
+                raise ValidationError(
+                    f"Attachments total too large (max {MAX_MAIL_ATTACHMENTS_TOTAL_BYTES // (1024 * 1024)} Mo)",
+                    code="mail_total_too_large",
+                )
+            target = _unique_child(dest_root, src.name)
+            shutil.copy2(src, target)
+            try:
+                os.chown(target, 1000, 1000)
+            except OSError:
+                pass
+            digest = hashlib.sha256()
+            with open(target, "rb") as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+            dest_rel = str(target.relative_to(_root(to_bot, home))).replace(os.sep, "/")
+            source_rel = str(src.relative_to(_root(from_bot, home))).replace(os.sep, "/")
+            staged.append(
+                {
+                    "name": target.name,
+                    "path": dest_rel,
+                    "source_path": source_rel,
+                    "size": size,
+                    "sha256": digest.hexdigest(),
+                    "url": (
+                        f"/api/v1/bots/{to_bot}/files/download"
+                        f"?path={quote(dest_rel, safe='/')}"
+                    ),
+                }
+            )
+    except Exception:
+        # Roll back partial staging for this inbox id.
+        try:
+            shutil.rmtree(dest_root, ignore_errors=True)
+        except Exception:
+            pass
+        raise
+
+    _notify_changed(to_bot, op="mail_stage", path=f"{MAIL_INBOX_DIR}/{inbox_id}", is_dir=True)
+    return staged
+
+
+def claim_mail_attachment(
+    bot: str,
+    staging_path: str,
+    dest: str,
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Move a staged mail-inbox file to ``dest`` under the bot's ``~/shared``."""
+    src_rel = (staging_path or "").replace("\\", "/").strip().lstrip("/")
+    for prefix in ("~/shared/", "shared/", "~/shared", "shared"):
+        if src_rel == prefix.rstrip("/") or src_rel.startswith(
+            prefix if prefix.endswith("/") else prefix + "/"
+        ):
+            src_rel = (
+                src_rel[len(prefix) :].lstrip("/")
+                if src_rel != prefix.rstrip("/")
+                else ""
+            )
+            break
+    if not src_rel.startswith(f"{MAIL_INBOX_DIR}/"):
+        raise ValidationError(
+            f"path must be under {MAIL_INBOX_DIR}/",
+            code="mail_not_staging",
+        )
+    src = resolve(bot, src_rel, home=home)
+    if not src.is_file():
+        raise NotFound(t("files.not_found"))
+
+    dest_rel = (dest or "").replace("\\", "/").strip().lstrip("/")
+    for prefix in ("~/shared/", "shared/", "~/shared", "shared"):
+        if dest_rel == prefix.rstrip("/") or dest_rel.startswith(
+            prefix if prefix.endswith("/") else prefix + "/"
+        ):
+            dest_rel = (
+                dest_rel[len(prefix) :].lstrip("/")
+                if dest_rel != prefix.rstrip("/")
+                else ""
+            )
+            break
+    if not dest_rel or dest_rel in (".", "..") or ".." in dest_rel.split("/"):
+        raise ValidationError("Invalid destination path", code="invalid_path")
+    if dest_rel.endswith("/"):
+        raise ValidationError("Destination must be a file path", code="invalid_path")
+    if dest_rel.startswith(f"{MAIL_INBOX_DIR}/"):
+        raise ValidationError(
+            "Destination must be outside the mail staging area",
+            code="mail_dest_staging",
+        )
+
+    parent_rel = str(Path(dest_rel).parent).replace("\\", "/")
+    if parent_rel in (".", ""):
+        parent_rel = "."
+    name = Path(dest_rel).name
+    safe = _safe_filename(name)
+    directory = resolve(bot, parent_rel, home=home)
+    directory.mkdir(parents=True, exist_ok=True)
+    if not directory.is_dir():
+        raise AutonomousError("Destination is not a directory", code="not_a_directory")
+    target = (directory / safe).resolve()
+    root = _root(bot, home)
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise Forbidden(t("files.forbidden")) from exc
+    if target.exists():
+        raise AutonomousError("Destination already exists", code="already_exists")
+
+    shutil.move(str(src), str(target))
+    try:
+        os.chown(target, 1000, 1000)
+    except OSError:
+        pass
+    # Drop empty staging folders.
+    try:
+        parent = src.parent
+        if parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+            grand = parent.parent
+            if (
+                grand.is_dir()
+                and grand.name == "mail-inbox"
+                and not any(grand.iterdir())
+            ):
+                pass  # keep mail-inbox dir
+    except OSError:
+        pass
+
+    entry = _entry_dict(root, target)
+    _notify_changed(bot, op="mail_claim", path=entry["path"], is_dir=False)
+    _notify_changed(bot, op="delete", path=src_rel, is_dir=False)
+    return entry

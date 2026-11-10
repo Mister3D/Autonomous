@@ -340,6 +340,26 @@
                     :style="{ color: avatarColor(botmailPeer(item.message).bot) }"
                   >@{{ botmailPeer(item.message).bot }}</a>
                 </div>
+                <div
+                  v-if="botmailAttachments(item.message).length"
+                  class="botmail-files"
+                >
+                  <a
+                    v-for="(att, ai) in botmailAttachments(item.message)"
+                    :key="`${item.id}-mail-file-${ai}`"
+                    class="botmail-file"
+                    :href="botmailAttUrl(att)"
+                    :download="att.name || undefined"
+                    target="_blank"
+                    rel="noopener"
+                    @click.stop
+                  >
+                    <span class="botmail-file-name">{{ att.name || t("chat.mailFile") }}</span>
+                    <span v-if="att.size" class="botmail-file-size">{{
+                      formatBytes(att.size)
+                    }}</span>
+                  </a>
+                </div>
                 <span v-if="item.message.meta?.queued" class="msg-queued">
                   {{ t("chat.queued") }}
                 </span>
@@ -1204,6 +1224,15 @@ function rewriteWorkspaceImages(content, botName) {
   );
 }
 
+/** Escape raw HTML so marked/DOMPurify cannot swallow the rest of the message.
+ *  E.g. user text « … et <script setup>. » must not open a real <script> tag.
+ *  Only angle brackets — leave & alone so markdown URLs with query strings stay intact. */
+function escapeRawHtml(text) {
+  return String(text || "")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function render(messageOrContent) {
   const message =
     messageOrContent && typeof messageOrContent === "object"
@@ -1217,7 +1246,9 @@ function render(messageOrContent) {
       "",
     );
   }
-  const content = rewriteWorkspaceImages(raw, botName);
+  // Escape before markdown so tags in prose (Vue <script setup>, generics, …)
+  // stay visible. marked still builds <p>/<strong>/images from markdown syntax.
+  const content = rewriteWorkspaceImages(escapeRawHtml(raw), botName);
   const md = marked.parse(content || "", { breaks: true, gfm: true });
   const withMentions = colorizeMentionsInHtml(String(md), state.bots || [], {
     message,
@@ -1504,6 +1535,25 @@ function onBotmailBubbleClick(m, ev) {
   const id = m?.id;
   if (!id) return;
   botmailExpanded[id] = !botmailExpanded[id];
+}
+
+function botmailAttachments(m) {
+  const list = m?.meta?.attachments;
+  return Array.isArray(list) ? list.filter((a) => a && (a.name || a.path)) : [];
+}
+
+function botmailAttUrl(att) {
+  if (att?.url) return att.url;
+  const path = att?.path || "";
+  if (!path) return "#";
+  return api.downloadUrl(props.bot.name, path);
+}
+
+function formatBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return `${v} B`;
+  if (v < 1024 * 1024) return `${(v / 1024).toFixed(v < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(v / (1024 * 1024)).toFixed(v < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
 /** Instruction seule, sans le préambule déjà dit par la première ligne. */
