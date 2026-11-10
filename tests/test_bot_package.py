@@ -38,3 +38,15 @@ def test_package_api(home, auth_client):
     assert data["bot"] == "pkgapi"
     assert data["files_bytes"] >= 600
     assert data["total_bytes"] >= data["files_bytes"]
+
+
+def test_container_names_match():
+    assert package_svc._container_names_match(
+        ["/autonomous-abc"], "autonomous-abc"
+    )
+    assert package_svc._container_names_match(
+        ["autonomous-abc"], "autonomous-abc"
+    )
+    assert not package_svc._container_names_match(
+        ["/autonomous-other"], "autonomous-abc"
+    )

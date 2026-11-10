@@ -172,6 +172,27 @@ def send_message(
     if role == "user" and agent_prompt and agent_prompt != content:
         # Keep a short bubble in the thread; run the longer prompt when drained.
         meta["agent_prompt"] = agent_prompt
+
+    from autonomous.services.agent import run_in_progress
+
+    row = bots_svc.get_bot(bot, home=home)
+    status = str(row.get("status") or "")
+    blocked = role == "user" and trigger_agent and bot_run_blocked(bot, home=home)
+    slot_held = role == "user" and trigger_agent and run_in_progress(bot)
+    already_queued = False
+    if role == "user" and trigger_agent and status != "waiting":
+        already_queued = bool(list_queued_user_messages(bot, home=home))
+    # Stamp queued on INSERT when we already know the bubble will wait.
+    # ``waiting`` is special: a chat reply may cancel a vault/approval card instead.
+    pre_queue = bool(
+        role == "user"
+        and trigger_agent
+        and status != "waiting"
+        and (blocked or slot_held or already_queued)
+    )
+    if pre_queue:
+        meta["queued"] = True
+
     with get_db(home) as conn:
         conn.execute(
             """
@@ -192,13 +213,32 @@ def send_message(
         "meta": meta,
         "created_at": now,
     }
-    BUS.publish("message.created", {"message": message}, bot=bot)
-    try:
-        from autonomous.services import search as search_svc
+    # Defer ``message.created`` until queue/start is decided so SSE never paints
+    # a normal blue bubble that later flips to « En file ».
+    defer_created = bool(role == "user" and trigger_agent)
+    created_published = False
 
-        search_svc.index_message(message, home=home)
-    except Exception:
-        pass
+    def _publish_created(msg: dict[str, Any]) -> dict[str, Any]:
+        nonlocal created_published
+        if created_published:
+            return msg
+        BUS.publish("message.created", {"message": msg}, bot=bot)
+        created_published = True
+        try:
+            from autonomous.services import search as search_svc
+
+            search_svc.index_message(msg, home=home)
+        except Exception:
+            pass
+        return msg
+
+    def _finish(msg: dict[str, Any]) -> dict[str, Any]:
+        if defer_created:
+            return _publish_created(msg)
+        return msg
+
+    if not defer_created:
+        _publish_created(message)
 
     if role == "user" and trigger_agent:
         from autonomous.services import botmail as botmail_svc
@@ -208,7 +248,15 @@ def send_message(
         )
         if routed is not None:
             if routed.get("skip_agent"):
-                return message
+                if meta.get("queued"):
+                    clear_meta = dict(meta)
+                    clear_meta.pop("queued", None)
+                    return _finish(
+                        update_message(
+                            bot, msg_id, content, home=home, meta=clear_meta
+                        )
+                    )
+                return _finish(message)
             # Dit/Demande : l’agent local rédige le message peer (pas de bypass).
             agent_prompt = str(routed.get("agent_prompt") or agent_prompt)
             # Keep route_intent fields if we later stamp queued=True.
@@ -223,17 +271,18 @@ def send_message(
                     "agent_prompt": agent_prompt,
                 }
             )
+            if pre_queue:
+                meta["queued"] = True
             message["meta"] = meta
 
-        # Agent already working → prefer mid-run steer (answer now, then continue);
-        # fall back to FIFO queue if steer is unavailable.
-        if bot_run_blocked(bot, home=home):
+        # Agent already working → always FIFO queue from the composer.
+        # Mid-run steer is reserved for botmail/peers — a rapid 7/8/9/10 must
+        # never let a later bubble jump into the live turn.
+        if blocked:
             # Waiting on a vault form: a chat reply cancels the form and guides
             # the agent (e.g. « validate on another device », not an OTP code).
             # Do not park the message in the queue — that loses the intent if the
             # the user later hits « Refuser » on the card.
-            row = bots_svc.get_bot(bot, home=home)
-            status = row.get("status") or ""
             if status == "waiting":
                 cancelled: list = []
                 try:
@@ -272,32 +321,28 @@ def send_message(
                     except Exception:
                         cancelled = []
                 if cancelled:
-                    return message
-                return _mark_queued(bot, msg_id, content, meta, home=home)
-            steered = _try_mid_run_steer(bot, agent_prompt, home=home)
-            if steered:
-                mid_meta = dict(meta)
-                mid_meta["mid_run"] = True
-                return update_message(bot, msg_id, content, home=home, meta=mid_meta)
-            return _mark_queued(bot, msg_id, content, meta, home=home)
-
-        from autonomous.services.agent import run_in_progress
+                    return _finish(message)
+                return _finish(
+                    _mark_queued(bot, msg_id, content, meta, home=home)
+                )
+            return _finish(
+                _park_queued(bot, msg_id, content, meta, message, home=home)
+            )
 
         # Status can still say idle for a moment after a run has claimed the slot.
-        # Prefer steer; otherwise park so a second start_run does not drop the message.
-        if run_in_progress(bot):
-            steered = _try_mid_run_steer(bot, agent_prompt, home=home)
-            if steered:
-                mid_meta = dict(meta)
-                mid_meta["mid_run"] = True
-                return update_message(bot, msg_id, content, home=home, meta=mid_meta)
-            return _mark_queued(bot, msg_id, content, meta, home=home)
+        if slot_held:
+            return _finish(
+                _park_queued(bot, msg_id, content, meta, message, home=home)
+            )
 
         started = _start_agent_for_user_message(
             bot, agent_prompt, stored, home=home, message_id=msg_id
         )
         if started == "busy":
-            return _mark_queued(bot, msg_id, content, meta, home=home)
+            return _finish(
+                _mark_queued(bot, msg_id, content, meta, home=home)
+            )
+        return _finish(message)
     return message
 
 
@@ -314,16 +359,22 @@ def _mark_queued(
     return update_message(bot, msg_id, content, home=home, meta=queued_meta)
 
 
-def _try_mid_run_steer(
+def _park_queued(
     bot: str,
-    prompt: str,
+    msg_id: str,
+    content: str,
+    meta: dict[str, Any],
+    message: dict[str, Any],
     *,
     home: Path | None = None,
-) -> bool:
-    """Inject a busy-bot message into the live Pi turn (answer now, then continue)."""
-    from autonomous.services.agent import steer_mid_run
-
-    return bool(steer_mid_run(bot, prompt, home=home))
+) -> dict[str, Any]:
+    """Keep or stamp ``meta.queued`` (composer FIFO — no mid-run)."""
+    if meta.get("queued"):
+        if meta.get("mail_kind") == "route_intent":
+            return update_message(bot, msg_id, content, home=home, meta=meta)
+        message["meta"] = meta
+        return message
+    return _mark_queued(bot, msg_id, content, meta, home=home)
 
 
 def _start_agent_for_user_message(
@@ -372,15 +423,19 @@ def _start_agent_for_user_message(
 def list_queued_user_messages(
     bot: str, *, home: Path | None = None
 ) -> list[dict[str, Any]]:
-    """User bubbles still marked ``meta.queued`` (oldest first)."""
-    out: list[dict[str, Any]] = []
-    for msg in list_messages(bot, limit=200, home=home):
-        if msg.get("role") != "user":
-            continue
-        if (msg.get("meta") or {}).get("queued"):
-            out.append(msg)
-    out.sort(key=lambda m: m.get("created_at") or "")
-    return out
+    """User bubbles still marked ``meta.queued`` (oldest first, stable by id)."""
+    bots_svc.get_bot(bot, home=home)
+    with get_db(home) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM messages
+            WHERE bot = ? AND conversation_id = 'main' AND role = 'user'
+              AND json_extract(meta_json, '$.queued') = 1
+            ORDER BY created_at ASC, id ASC
+            """,
+            (bot,),
+        ).fetchall()
+    return [_decode(r) for r in rows]
 
 
 def clear_queued_flags(
@@ -696,6 +751,34 @@ def discard_message(
         except Exception:
             pass
     return deleted
+
+
+def delete_queued_message(
+    bot: str,
+    msg_id: str,
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Remove a still-queued user/webhook bubble so it will never drain."""
+    from autonomous.services.errors import NotFound, ValidationError
+
+    bots_svc.get_bot(bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            "SELECT id, meta_json FROM messages WHERE id = ? AND bot = ?",
+            (msg_id, bot),
+        ).fetchone()
+    if not row:
+        raise NotFound("Message not found", code="message_not_found")
+    meta = json.loads(row["meta_json"] or "{}")
+    if not meta.get("queued"):
+        raise ValidationError(
+            "Only queued messages can be cancelled.",
+            code="not_queued",
+        )
+    if not discard_message(bot, msg_id, home=home):
+        raise NotFound("Message not found", code="message_not_found")
+    return {"ok": True, "message": "queued message deleted"}
 
 
 def stop_run(bot: str, home: Path | None = None) -> None:

@@ -9,11 +9,11 @@
 - `autonomous/wsproxy.py` (WS → websockify)
 - `docker/desktop/*`
 
-**Last updated**: 2026-11-05 (desk_request card centered like vault/approval)
+**Last updated**: 2026-11-10 (split toggle only when VM exists)
 
 ## User behaviour
 
-- **Two panes** (off by default, per bot): two-frame button to the left of the tabs. When active, it keeps the same grey border as the other round buttons. Once enabled, the tabs give way to two lists (Conversation, Terminal, Screen) — the left one then the right one — plus a button to swap them. No "Left / Right" label. The same pane cannot be on both sides: choosing it on the other side **swaps**. The URL follows the left pane (`/discussion`, `/terminal` or `/screen`). Right pane width adjustable (handle, 28–62%). Preference in `localStorage` (`autonomous.splitScreen`: `{ bot: { on, left, right } }`). Showing the screen **wakes** the desk, like the Screen tab. Below 900 px, the panes stack.
+- **Two panes** (off by default, per bot): two-frame button to the left of the tabs — **hidden when the bot has no VM** (`desk.state` not in creating/running/sleeping/error); a saved split preference stays inert until a desk exists again. When active, it keeps the same grey border as the other round buttons. Once enabled, the tabs give way to two lists (Conversation, Terminal, Screen) — the left one then the right one — plus a button to swap them. No "Left / Right" label. The same pane cannot be on both sides: choosing it on the other side **swaps**. The URL follows the left pane (`/discussion`, `/terminal` or `/screen`). Right pane width adjustable (handle, 28–62%) — the drag strip matches `--bg-sidebar` at rest (accent only on hover/focus). Split screen/terminal cards use `height: calc(100% - chrome offset)` so `margin-top` does not clip the bottom Soft radius. Preference in `localStorage` (`autonomous.splitScreen`: `{ bot: { on, left, right } }`). Showing the screen **wakes** the desk, like the Screen tab. Below 900 px, the panes stack.
 
 - **Sleep** (default ON at creation): if the bot is idle and the desktop unused for **5 minutes**, the Docker container is **stopped** (`desk.state=sleeping`). The `~/shared` files stay on the host. **Wake**: opening Terminal/Screen calls `POST /desk/wake` ("Waking desktop…" message, **not** "create a desktop"); VM tools / `novnc` / starting an agent run too. Can be disabled in **Details** (long scripts).
 - **A single VM**: creating the VM always publishes noVNC. The Terminal and Screen tabs open on it. There is no longer a "terminal only" option (the desktop was already running, the port was just hidden). Internet on/off remains the only choice. An old VM without a noVNC port: the Screen tab reopens creation, which replaces the container (`~/shared` kept).
@@ -50,7 +50,7 @@
 - Don't force the frame to fixed `1920×1200` px (go back to fill + `scaleViewport`).
 - Don't enable `resizeSession`: it would change the remote geometry and break grounding.
 - Don't reintroduce a "release" button: release = outside click + cooldown.
-- Don't enable two panes by default, nor for all bots: per-bot opt-in. Without this button, Conversation / Terminal / Screen stay a single pane.
+- Don't enable two panes by default, nor for all bots: per-bot opt-in. Without this button, Conversation / Terminal / Screen stay a single pane. Don't show the split control when there is no desktop — dual pane is useless without a VM.
 - Don't re-centre a large opaque label over the whole viewport: the desktop must stay readable in view-only mode.
 - Keep the connect/disconnect `postMessage` in the injection (otherwise the UI thinks it's "stuck" with no feedback).
 - Containers created **before** the double mount: `~/shared` may be a symlink to `workspace` (hot-patch); new desks have both binds.

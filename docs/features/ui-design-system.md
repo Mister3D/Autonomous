@@ -8,7 +8,7 @@
 - `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
 - `frontend/index.html` — Plus Jakarta Sans
 
-**Last updated**: 2026-11-09 (mobile stage tabs stay a compact pill)
+**Last updated**: 2026-11-10 (split handle + screen bottom radius)
 
 ## User behaviour
 
@@ -20,7 +20,7 @@
 - Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
 - Stage tabs / split toolbar (`right: 0.35rem`) share the chat card’s right edge (same as `.stage-body` horizontal padding) — not a deeper inset.
 - Mobile chat (`≤720px`): stage tabs stay a compact pill (`flex: none` + `margin-left: auto`) before the inspector toggle — never stretch full-width between Back and the panel button.
-- Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane.
+- Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane. Split resize handle stays on that plane at rest (no grey rule); screen/terminal cards keep a full bottom radius in split (height accounts for chrome `margin-top`).
 - Settings: `.settings-main` has no left padding (nav already pads); top/right/bottom stay.
 - Labels: Conversation / Terminal / Écran; inspector Files tab = « Fichiers »; settings nav keys under `settings.tab*`.
 

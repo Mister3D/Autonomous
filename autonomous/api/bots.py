@@ -271,6 +271,17 @@ class BotMessages(MethodView):
             _handle(exc)
 
 
+@blp.route("/<string:name>/messages/<string:message_id>")
+class BotMessageDetail(MethodView):
+    @blp.response(200, OkSchema)
+    def delete(self, name, message_id):
+        """Cancel a still-queued chat message (user / webhook / schedule)."""
+        try:
+            return chat_svc.delete_queued_message(name, message_id, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
 @blp.route("/<string:name>/reactions")
 class BotReactions(MethodView):
     @blp.arguments(ReactionCreateSchema)

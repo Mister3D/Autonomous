@@ -63,11 +63,26 @@ def _docker_client():
     return docker.from_env()
 
 
+def _container_names_match(entry_names: Any, want: str) -> bool:
+    """Docker df Names look like ``['/autonomous-…']``."""
+    want = (want or "").strip()
+    if not want:
+        return False
+    for raw in entry_names or []:
+        n = str(raw).lstrip("/")
+        if n == want or str(raw) == want or str(raw).endswith("/" + want):
+            return True
+    return False
+
+
 def _vm_layer_bytes(bot: str, home: Path | None) -> tuple[int | None, str]:
     """Docker writable layer (SizeRw). Base image is shared — not counted per bot.
 
     Returns ``(bytes_or_None, state)`` where state is absent|creating|running|
     sleeping|error|unknown.
+
+    Note: current docker-py ``inspect_container`` has no ``size=`` kwarg; sizes
+    come from ``client.df()`` (same source as ``docker system df -v``).
     """
     from autonomous.services import desk as desk_svc
 
@@ -81,11 +96,17 @@ def _vm_layer_bytes(bot: str, home: Path | None) -> tuple[int | None, str]:
     if not name:
         return None, state
     try:
-        data = _docker_client().api.inspect_container(name, size=True)
-        raw = data.get("SizeRw")
-        if raw is None:
-            return None, state
-        return max(0, int(raw)), state
+        client = _docker_client()
+        for entry in client.df().get("Containers") or []:
+            if not _container_names_match(entry.get("Names"), name):
+                continue
+            raw = entry.get("SizeRw")
+            if raw is None:
+                return None, state
+            return max(0, int(raw)), state
+        # Container known to desk but missing from df → still report state.
+        client.containers.get(name)
+        return None, state
     except Exception:
         return None, state
 

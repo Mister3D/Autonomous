@@ -114,6 +114,11 @@ export const api = {
     });
   },
   clearMessages: (name) => request(`/bots/${name}/messages`, { method: "DELETE" }),
+  /** Cancel a still-queued bubble so it never drains. */
+  deleteQueuedMessage: (name, messageId) =>
+    request(`/bots/${name}/messages/${encodeURIComponent(messageId)}`, {
+      method: "DELETE",
+    }),
   /** Download discussion PDF (tools named without args/results). */
   async exportDiscussionPdf(name) {
     const res = await fetch(`${BASE}/bots/${encodeURIComponent(name)}/messages/export.pdf`, {

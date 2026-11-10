@@ -1818,6 +1818,14 @@ a:focus-visible {
   overflow: hidden;
 }
 
+/* Screen/terminal cards use margin-top for chrome align — subtract it or
+   height:100% + margin overflows the grid cell and clips the bottom radius. */
+.stage-body.is-split > .screen-pane,
+.stage-body.is-split > .terminal-pane {
+  height: calc(100% - (var(--control-h-sm) + 0.45rem));
+  box-sizing: border-box;
+}
+
 .stage-body.is-split > .pane-left {
   order: 0;
 }
@@ -1849,7 +1857,8 @@ a:focus-visible {
   width: 2px;
   transform: translateX(-50%);
   border-radius: 2px;
-  background: var(--line);
+  /* Same plane as the stage — visible only on hover/focus while dragging. */
+  background: var(--bg-sidebar);
 }
 
 .split-handle:hover::before,
@@ -2430,38 +2439,40 @@ a:focus-visible {
 }
 
 .package-usage {
-  padding: 0.55rem 0.05rem 0.35rem;
+  padding: 0.7rem 0.05rem 0.2rem;
 }
 
 .package-usage-head {
-  padding-top: 0.35rem;
-  padding-bottom: 0.35rem;
-}
-
-.package-usage-aside {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.package-total {
-  font-variant-numeric: tabular-nums;
+.package-usage-head .ui-toggle-main {
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.package-usage-head .ui-toggle-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.package-usage-head strong {
+  display: block;
+  font-weight: 600;
   font-size: 0.92rem;
-  white-space: nowrap;
-}
-
-.package-refresh {
-  width: 28px;
-  height: 28px;
 }
 
 .package-breakdown {
   list-style: none;
-  margin: 0.15rem 0 0.25rem;
-  padding: 0 0 0 2.15rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
   display: grid;
   gap: 0.28rem;
+  width: 100%;
 }
 
 .package-breakdown li {
@@ -2486,8 +2497,14 @@ a:focus-visible {
   font-size: 0.74rem;
 }
 
-.package-error {
-  margin: 0.25rem 0 0.35rem 2.15rem;
+.package-total-row {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 0.2rem;
+  padding-top: 0.4rem;
+}
+
+.package-status {
+  margin: 0.35rem 0 0;
 }
 
 .toggle-row strong,
@@ -4420,7 +4437,43 @@ label.muted {
 }
 
 .bubble.user.queued {
-  opacity: 0.78;
+  opacity: 0.7;
+}
+
+/* Queued: timestamp slot → « En file » + red « Supprimer » under it. */
+.msg-time.msg-queued-meta {
+  gap: 0.08rem;
+}
+
+.msg-queued-label {
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--muted, #8a8a90);
+  line-height: 1.1;
+}
+
+button.msg-queued-cancel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  color: var(--danger, #c62828);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+button.msg-queued-cancel:hover,
+button.msg-queued-cancel:focus-visible {
+  color: color-mix(in srgb, var(--danger, #c62828) 82%, #000);
+  text-decoration: underline;
+  outline: none;
 }
 
 /* Message user effacé : secret détecté (placeholder, hors historique utile). */
@@ -4463,19 +4516,6 @@ label.muted {
 .bubble.user.event .event-payload pre {
   text-align: left;
   background: rgba(240, 140, 18, 0.12);
-  color: inherit;
-}
-
-.msg-queued {
-  display: inline-block;
-  margin: 0 0 0.35rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.22);
   color: inherit;
 }
 

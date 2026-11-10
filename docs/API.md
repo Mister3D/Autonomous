@@ -56,6 +56,7 @@ POST   /bots/:name/reactions        # {emoji, message_id?} — emoji on the turn
 GET    /bots/:name/chat/attachments/:file  # pasted image
 POST   /bots/:name/chat/files       # multipart → ~/shared/upload/<uuid>/<name>
 DELETE /bots/:name/messages         # + Pi session rotation
+DELETE /bots/:name/messages/:id     # cancel a still-queued bubble (meta.queued)
 GET    /bots/:name/messages/export.pdf  # discussion PDF (tool names, no args/results)
 POST   /bots/:name/stop             # abort run Pi
 POST   /bots/:name/resume           # resume after session died during approval

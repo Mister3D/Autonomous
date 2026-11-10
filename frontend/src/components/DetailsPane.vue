@@ -55,62 +55,53 @@
     <BotMcpGrants :bot="bot" />
 
     <div class="package-usage" aria-live="polite">
-      <div class="package-usage-head info-row">
+      <div class="package-usage-head">
         <span class="ui-toggle-main">
           <UiIconBadge size="sm">
             <UiIcon name="harddrive" :size="16" />
           </UiIconBadge>
           <span class="ui-toggle-copy">
             <strong>{{ t("details.package") }}</strong>
-            <small>{{ t("details.packageHint") }}</small>
+            <ul v-if="pkg && !pkgError" class="package-breakdown">
+              <li>
+                <span>{{ t("details.packageFiles") }}</span>
+                <span>{{ formatBytes(pkg.files_bytes) }}</span>
+              </li>
+              <li v-if="(pkg.screenshots_bytes || 0) > 0">
+                <span>{{ t("details.packageScreenshots") }}</span>
+                <span>{{ formatBytes(pkg.screenshots_bytes) }}</span>
+              </li>
+              <li v-if="(pkg.browser_bytes || 0) > 0">
+                <span>{{ t("details.packageBrowser") }}</span>
+                <span>{{ formatBytes(pkg.browser_bytes) }}</span>
+              </li>
+              <li>
+                <span>
+                  {{ t("details.packageChat") }}
+                  <small v-if="pkg.messages">{{
+                    t("details.packageChatCount", { n: pkg.messages })
+                  }}</small>
+                </span>
+                <span>{{ formatBytes(pkg.chat_bytes) }}</span>
+              </li>
+              <li v-if="(pkg.agent_bytes || 0) > 0">
+                <span>{{ t("details.packageAgent") }}</span>
+                <span>{{ formatBytes(pkg.agent_bytes) }}</span>
+              </li>
+              <li>
+                <span>{{ t("details.packageVm") }}</span>
+                <span>{{ vmLabel }}</span>
+              </li>
+              <li class="package-total-row">
+                <span>{{ t("details.packageTotal") }}</span>
+                <span>{{ totalLabel }}</span>
+              </li>
+            </ul>
+            <p v-else-if="pkgLoading" class="package-status hint">{{ t("details.packageLoading") }}</p>
+            <p v-else-if="pkgError" class="package-status hint">{{ t("details.packageError") }}</p>
           </span>
-        </span>
-        <span class="package-usage-aside">
-          <strong class="package-total">{{ totalLabel }}</strong>
-          <button
-            type="button"
-            class="icon-btn package-refresh"
-            :disabled="pkgLoading"
-            :aria-label="t('details.packageRefresh')"
-            :title="t('details.packageRefresh')"
-            @click="loadPackage"
-          >
-            <UiIcon name="refresh" :size="14" />
-          </button>
         </span>
       </div>
-      <ul v-if="pkg && !pkgError" class="package-breakdown">
-        <li>
-          <span>{{ t("details.packageFiles") }}</span>
-          <span>{{ formatBytes(pkg.files_bytes) }}</span>
-        </li>
-        <li v-if="(pkg.screenshots_bytes || 0) > 0">
-          <span>{{ t("details.packageScreenshots") }}</span>
-          <span>{{ formatBytes(pkg.screenshots_bytes) }}</span>
-        </li>
-        <li v-if="(pkg.browser_bytes || 0) > 0">
-          <span>{{ t("details.packageBrowser") }}</span>
-          <span>{{ formatBytes(pkg.browser_bytes) }}</span>
-        </li>
-        <li>
-          <span>
-            {{ t("details.packageChat") }}
-            <small v-if="pkg.messages">{{
-              t("details.packageChatCount", { n: pkg.messages })
-            }}</small>
-          </span>
-          <span>{{ formatBytes(pkg.chat_bytes) }}</span>
-        </li>
-        <li v-if="(pkg.agent_bytes || 0) > 0">
-          <span>{{ t("details.packageAgent") }}</span>
-          <span>{{ formatBytes(pkg.agent_bytes) }}</span>
-        </li>
-        <li>
-          <span>{{ t("details.packageVm") }}</span>
-          <span>{{ vmLabel }}</span>
-        </li>
-      </ul>
-      <p v-else-if="pkgError" class="package-error hint">{{ t("details.packageError") }}</p>
     </div>
 
     <ManageMenu :bot="bot" />
@@ -118,7 +109,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
@@ -136,6 +127,8 @@ const { t } = useI18n();
 const pkg = ref(null);
 const pkgLoading = ref(false);
 const pkgError = ref(false);
+let pollTimer = 0;
+let loadSeq = 0;
 
 const otherManager = computed(
   () => state.bots.find((b) => b.is_manager && b.name !== props.bot.name) || null
@@ -155,8 +148,8 @@ const totalLabel = computed(() => {
 
 const vmLabel = computed(() => {
   if (!pkg.value) return "—";
-  const state = pkg.value.vm_state || "absent";
-  if (state === "absent") return t("details.packageVmAbsent");
+  const st = pkg.value.vm_state || "absent";
+  if (st === "absent") return t("details.packageVmAbsent");
   if (pkg.value.vm_bytes == null) return t("details.packageVmUnknown");
   return formatBytes(pkg.value.vm_bytes);
 });
@@ -174,14 +167,18 @@ function formatBytes(n) {
 async function loadPackage() {
   const name = props.bot?.name;
   if (!name) return;
+  const seq = ++loadSeq;
   pkgLoading.value = true;
   pkgError.value = false;
   try {
-    pkg.value = await api.botPackage(name);
+    const next = await api.botPackage(name);
+    if (seq !== loadSeq) return;
+    pkg.value = next;
   } catch {
+    if (seq !== loadSeq) return;
     pkgError.value = true;
   } finally {
-    pkgLoading.value = false;
+    if (seq === loadSeq) pkgLoading.value = false;
   }
 }
 
@@ -193,6 +190,29 @@ watch(
   },
   { immediate: true },
 );
+
+watch(
+  () => [
+    props.bot?.desk?.state,
+    props.bot?.desk?.container_name,
+    state.filesFeed?.bot === props.bot?.name ? state.filesFeed?.at : 0,
+  ],
+  () => {
+    loadPackage();
+  },
+);
+
+onMounted(() => {
+  pollTimer = window.setInterval(() => {
+    loadPackage();
+  }, 20000);
+});
+
+onBeforeUnmount(() => {
+  if (pollTimer) window.clearInterval(pollTimer);
+  pollTimer = 0;
+  loadSeq += 1;
+});
 
 async function onModel(next) {
   const model = String(next || "").trim();

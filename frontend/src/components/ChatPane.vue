@@ -201,8 +201,23 @@
             {{ sourceOf(item.message) }}
           </p>
           <div class="msg-row" :class="[item.message.role, { event: isEventTrigger(item.message) }]">
+            <div
+              v-if="item.message.role === 'user' && item.message.meta?.queued"
+              class="msg-time msg-queued-meta"
+            >
+              <span class="msg-queued-label">{{ t("chat.queued") }}</span>
+              <button
+                type="button"
+                class="msg-queued-cancel"
+                :title="t('chat.queuedCancel')"
+                :aria-label="t('chat.queuedCancel')"
+                @click.stop="cancelQueued(item.message)"
+              >
+                {{ t("chat.queuedCancel") }}
+              </button>
+            </div>
             <time
-              v-if="item.message.role === 'user' && msgStamp(item.message).time"
+              v-else-if="item.message.role === 'user' && msgStamp(item.message).time"
               class="msg-time"
               :datetime="item.message.created_at"
             >
@@ -360,9 +375,6 @@
                     }}</span>
                   </a>
                 </div>
-                <span v-if="item.message.meta?.queued" class="msg-queued">
-                  {{ t("chat.queued") }}
-                </span>
                 <div
                   v-if="isEventTrigger(item.message)"
                   class="event-trigger"
@@ -486,7 +498,7 @@
       class="chat-jump-bottom"
       :aria-label="t('chat.jumpBottom')"
       :title="t('chat.jumpBottom')"
-      @click="scrollMessagesToBottom(true)"
+      @click="scrollMessagesToBottom(true, true)"
     >
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path
@@ -1067,6 +1079,30 @@ function showBubbleShell(message) {
   if (isEventTrigger(message)) return true;
   if (message?.meta?.streaming) return true;
   return showBubbleText(message);
+}
+
+async function cancelQueued(message) {
+  const bot = props.bot.name;
+  const id = message?.id;
+  if (!bot || !id || !message?.meta?.queued) return;
+  const list = state.messages[bot] || [];
+  const idx = list.findIndex((m) => m.id === id);
+  const snapshot = idx >= 0 ? list[idx] : null;
+  state.messages[bot] = list.filter((m) => m.id !== id);
+  if (String(id).startsWith("tmp-")) return;
+  try {
+    await api.deleteQueuedMessage(bot, id);
+  } catch (e) {
+    if (snapshot) {
+      const cur = state.messages[bot] || [];
+      if (!cur.some((m) => m.id === id)) {
+        const next = cur.slice();
+        next.splice(Math.min(idx, next.length), 0, snapshot);
+        state.messages[bot] = next;
+      }
+    }
+    alert(e.message || String(e));
+  }
 }
 
 function pendingImageCount() {
@@ -1834,7 +1870,20 @@ const thread = computed(() => {
   const queued = all
     .filter((m) => m?.meta?.queued)
     .slice()
-    .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    .sort((a, b) => {
+      // Stable send order: client ``queue_ord`` beats server/client created_at mix
+      // (optimistic ISO vs server ISO was reshuffling the file before it settled).
+      const oa = Number(a?.meta?.queue_ord);
+      const ob = Number(b?.meta?.queue_ord);
+      const aOrd = Number.isFinite(oa);
+      const bOrd = Number.isFinite(ob);
+      if (aOrd && bOrd && oa !== ob) return oa - ob;
+      if (aOrd && !bOrd) return -1;
+      if (!aOrd && bOrd) return 1;
+      const byTime = String(a.created_at || "").localeCompare(String(b.created_at || ""));
+      if (byTime) return byTime;
+      return String(a.id || "").localeCompare(String(b.id || ""));
+    });
   const msgs = all.filter((m) => !m?.meta?.queued);
   const items = [];
   let lastKey = "";
@@ -2087,23 +2136,66 @@ watch(
   { immediate: true }
 );
 
+/** Live work even if bot.status briefly lags behind SSE (streaming / tools / orb). */
+const agentLive = computed(
+  () =>
+    busy.value ||
+    waitingForReply.value ||
+    hasRunningTools.value ||
+    (state.messages[props.bot.name] || []).some(
+      (m) => m?.role === "assistant" && m?.meta?.streaming
+    )
+);
+
+/**
+ * Queue left while truly idle — Relancer only after auto-drain had a chance.
+ * Between two drained turns status flickers ``idle`` with messages still « En file »;
+ * without this grace the bar flashes « Des messages sont en file » mid-burst.
+ */
+const IDLE_QUEUE_GRACE_MS = 2000;
+const idleQueuedStuck = ref(false);
+let idleQueuedTimer = 0;
+watch(
+  () =>
+    !waitingHuman.value &&
+    !agentLive.value &&
+    !stuckBusy.value &&
+    hasQueued.value,
+  (idleWithQueue) => {
+    clearTimeout(idleQueuedTimer);
+    idleQueuedTimer = 0;
+    if (!idleWithQueue) {
+      idleQueuedStuck.value = false;
+      return;
+    }
+    idleQueuedStuck.value = false;
+    idleQueuedTimer = window.setTimeout(() => {
+      idleQueuedStuck.value =
+        !waitingHuman.value &&
+        !agentLive.value &&
+        !stuckBusy.value &&
+        hasQueued.value;
+    }, IDLE_QUEUE_GRACE_MS);
+  },
+  { immediate: true }
+);
+
 const showRetryBar = computed(() => {
   if (waitingHuman.value) return false;
-  // Active run waiting for tokens = Working orb, not Relancer.
-  if (busy.value && !stuckBusy.value && !hasQueued.value && !hasPendingResume.value) {
-    return false;
-  }
+  // Healthy live run (busy / streaming / tools): Working orb drains the queue after
+  // the turn — never Relancer. Soft/hard stuck is the only busy exception.
+  if (agentLive.value && !stuckBusy.value) return false;
   return (
-    hasQueued.value ||
+    idleQueuedStuck.value ||
     hasPendingResume.value ||
     stuckBusy.value ||
-    (!busy.value && lastTurnFailed.value)
+    (!agentLive.value && lastTurnFailed.value)
   );
 });
 
 const retryHint = computed(() => {
-  if (hasQueued.value) return t("chat.retryHintQueued");
   if (stuckBusy.value) return t("chat.retryHintStuck");
+  if (idleQueuedStuck.value) return t("chat.retryHintQueued");
   if (hasPendingResume.value || lastTurnFailed.value) return t("chat.retryHintFailed");
   return t("chat.retryHint");
 });
@@ -2133,9 +2225,15 @@ async function retryPending() {
   }
 }
 
+function absoluteScrollTop(el) {
+  return Math.max(0, el.scrollHeight - el.clientHeight);
+}
+
 function isNearBottom(el) {
   if (!el) return true;
-  return Math.abs(followScrollTop(el) - el.scrollTop) <= NEAR_BOTTOM_PX;
+  // One target only: the real bottom (incl. « En file »). A second “peek”
+  // target used to fight manual scroll and saccade near the queue.
+  return Math.abs(absoluteScrollTop(el) - el.scrollTop) <= NEAR_BOTTOM_PX;
 }
 
 let messagesScrollUiTimer = 0;
@@ -2155,28 +2253,24 @@ function onMessagesScroll() {
   pulseMessagesScrollbar();
 }
 
-function followScrollTop(el) {
-  const max = Math.max(0, el.scrollHeight - el.clientHeight);
-  const firstQueued = el.querySelector('[data-queued="1"]');
-  if (!firstQueued) return max;
-  const liveBottom =
-    el.scrollTop +
-    (firstQueued.getBoundingClientRect().top - el.getBoundingClientRect().top);
-  const queueHeight = Math.max(0, el.scrollHeight - liveBottom);
-  // Keep the bot's latest update on screen, with the queue peeking under it.
-  const reserved = Math.min(queueHeight, Math.round(el.clientHeight * 0.34));
-  return Math.max(0, Math.min(max, liveBottom - (el.clientHeight - reserved)));
-}
-
-function scrollMessagesToBottom(force = false) {
+/** @param {boolean} force ignore stickToBottom
+ *  @param {boolean} [_absolute] kept for call sites; follow is always the true end */
+function scrollMessagesToBottom(force = false, _absolute = false) {
   const el = scroller.value;
   if (!el) return;
   if (!force && !stickToBottom.value) return;
   stickToBottom.value = true;
-  const top = followScrollTop(el);
+  const top = absoluteScrollTop(el);
   if (Math.abs(top - el.scrollTop) > 1) el.scrollTop = top;
   threadPlaced.value = true;
 }
+
+/** Serialize composer POSTs so rapid 7/8/9/10 hit the API in type order. */
+let sendChain = Promise.resolve();
+/** In-flight composer sends (incl. waiting on the chain) — forces « En file » UI. */
+let sendsPending = 0;
+/** Monotonic order for queued bubbles (survives optimistic → server created_at swap). */
+let queueOrdSeq = 0;
 
 async function send() {
   const content = text.value.trim();
@@ -2199,11 +2293,25 @@ async function send() {
   clearComposerPending(bot);
   closeMentions();
   const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const alreadyWaiting = (state.messages[bot] || []).some(
+  const msgsNow = state.messages[bot] || [];
+  const alreadyWaiting = msgsNow.some(
     (m) =>
       m?.role === "user" &&
       (m?.meta?.queued || String(m?.id || "").startsWith("tmp-"))
   );
+  // Match server pre-queue: show « En file » immediately (no blue→queued flash).
+  const agentLooksBusy =
+    runLocked.value ||
+    hasRunningTools.value ||
+    msgsNow.some(
+      (m) =>
+        m?.role === "assistant" &&
+        (m?.meta?.streaming || m?.meta?.status === "running")
+    );
+  // Another send already in flight → this one will park behind it.
+  const optimisticQueued = agentLooksBusy || alreadyWaiting || sendsPending > 0;
+  sendsPending += 1;
+  const queueOrd = ++queueOrdSeq;
   const optimistic = {
     id: tempId,
     bot,
@@ -2213,64 +2321,103 @@ async function send() {
     attachments: attachments.map((a) =>
       typeof a === "string" ? { type: "image", url: a } : a
     ),
-    meta: runLocked.value || alreadyWaiting ? { queued: true } : {},
+    meta: optimisticQueued
+      ? { queued: true, queue_ord: queueOrd }
+      : { queue_ord: queueOrd },
     created_at: new Date().toISOString(),
   };
   if (!state.messages[bot]) state.messages[bot] = [];
   state.messages[bot].push(optimistic);
   await nextTick();
   autosize();
-  scrollMessagesToBottom(true);
-  try {
-    const saved = await api.sendMessage(bot, content, attachments);
-    const list = state.messages[bot] || [];
-    // Remove every optimistic twin (SSE may already have inserted the real id).
-    for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i]?.id === tempId) list.splice(i, 1);
-    }
-    if (saved?.id) {
-      const existingIdx = list.findIndex((m) => m.id === saved.id);
-      if (existingIdx >= 0) list[existingIdx] = saved;
-      else list.push(saved);
-      // Same content under another tmp- id (setup / double-tap).
+  // True bottom so the just-sent bubble (incl. « En file ») is fully on screen.
+  scrollMessagesToBottom(true, true);
+
+  const run = async () => {
+    try {
+      const saved = await api.sendMessage(bot, content, attachments);
+      const list = state.messages[bot] || [];
+      // Remove every optimistic twin (SSE may already have inserted the real id).
       for (let i = list.length - 1; i >= 0; i--) {
-        const m = list[i];
-        if (!m?.id || m.id === saved.id) continue;
-        if (!String(m.id).startsWith("tmp-")) continue;
-        if (m.role === saved.role && String(m.content || "") === String(saved.content || "")) {
-          list.splice(i, 1);
+        if (list[i]?.id === tempId) list.splice(i, 1);
+      }
+      if (saved?.id) {
+        // Keep send-order stamp so the file does not jump when created_at swaps.
+        const stamped = {
+          ...saved,
+          meta: {
+            ...(saved.meta || {}),
+            queue_ord:
+              Number.isFinite(Number(saved.meta?.queue_ord))
+                ? saved.meta.queue_ord
+                : queueOrd,
+          },
+        };
+        const existingIdx = list.findIndex((m) => m.id === stamped.id);
+        if (existingIdx >= 0) {
+          const prev = list[existingIdx];
+          const prevOrd = Number(prev?.meta?.queue_ord);
+          list[existingIdx] = {
+            ...stamped,
+            meta: {
+              ...stamped.meta,
+              queue_ord: Number.isFinite(Number(stamped.meta?.queue_ord))
+                ? stamped.meta.queue_ord
+                : Number.isFinite(prevOrd)
+                  ? prevOrd
+                  : queueOrd,
+            },
+          };
+        } else list.push(stamped);
+        // Same content under another tmp- id (setup / double-tap).
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          if (!m?.id || m.id === stamped.id) continue;
+          if (!String(m.id).startsWith("tmp-")) continue;
+          if (m.role === stamped.role && String(m.content || "") === String(stamped.content || "")) {
+            list.splice(i, 1);
+          }
         }
       }
-    }
-    for (const p of keptPending) {
-      if (p.preview) URL.revokeObjectURL(p.preview);
-    }
-  } catch (e) {
-    const list = state.messages[bot] || [];
-    const tempIdx = list.findIndex((m) => m.id === tempId);
-    if (tempIdx >= 0) list.splice(tempIdx, 1);
-    const code = e?.code || e?.data?.code || e?.data?.error_code || "";
-    const isSecretRefuse =
-      code === "secret_disclosure" ||
-      /divulgation|vault secret|secret_disclosure/i.test(String(e?.message || ""));
-    if (!text.value.trim()) text.value = content;
-    if (!pending.value.length) pending.value = keptPending;
-    else {
       for (const p of keptPending) {
-        if (p.preview && !pending.value.includes(p)) URL.revokeObjectURL(p.preview);
+        if (p.preview) URL.revokeObjectURL(p.preview);
       }
-    }
-    if (isSecretRefuse) {
-      secretRefuseHint.value = t("chat.secretDisclosureRefuse");
-    } else {
-      alert(e.message || String(e));
+    } catch (e) {
+      const list = state.messages[bot] || [];
+      const tempIdx = list.findIndex((m) => m.id === tempId);
+      if (tempIdx >= 0) list.splice(tempIdx, 1);
+      const code = e?.code || e?.data?.code || e?.data?.error_code || "";
+      const isSecretRefuse =
+        code === "secret_disclosure" ||
+        /divulgation|vault secret|secret_disclosure/i.test(String(e?.message || ""));
+      if (!text.value.trim()) text.value = content;
+      if (!pending.value.length) pending.value = keptPending;
+      else {
+        for (const p of keptPending) {
+          if (p.preview && !pending.value.includes(p)) URL.revokeObjectURL(p.preview);
+        }
+      }
+      if (isSecretRefuse) {
+        secretRefuseHint.value = t("chat.secretDisclosureRefuse");
+      } else {
+        alert(e.message || String(e));
+      }
+      await nextTick();
+      autosize();
+    } finally {
+      sendsPending = Math.max(0, sendsPending - 1);
     }
     await nextTick();
-    autosize();
-  }
-  await nextTick();
-  scrollMessagesToBottom(true);
-  composer.value?.focus();
+    scrollMessagesToBottom(true, true);
+    composer.value?.focus();
+  };
+
+  const wait = sendChain.then(run, run);
+  sendChain = wait.then(
+    () => undefined,
+    () => undefined
+  );
+  await wait;
 }
 
 async function stop() {
@@ -2404,6 +2551,7 @@ onBeforeUnmount(() => {
   if (flashTimer) clearTimeout(flashTimer);
   clearTimeout(messagesScrollUiTimer);
   clearTimeout(stuckBusyTimer);
+  clearTimeout(idleQueuedTimer);
   scroller.value?.classList.remove("messages-scrolling");
   window.removeEventListener("keydown", onLightboxKey);
   composerMq?.removeEventListener("change", onComposerMqChange);

@@ -150,7 +150,7 @@
               </svg>
             </button>
             <button
-              v-if="!mobileLayout"
+              v-if="!mobileLayout && deskOn"
               type="button"
               class="split-toggle"
               :class="{ active: splitWanted }"
@@ -648,6 +648,12 @@ const screenReady = computed(() => {
   return !!desk.vnc_port;
 });
 
+/** A desktop exists — same rule as ManageMenu. No VM → no two-pane control. */
+const deskOn = computed(() => {
+  const st = bot.value?.desk?.state;
+  return st === "creating" || st === "running" || st === "sleeping" || st === "error";
+});
+
 function layoutOf(name) {
   if (!name) return { on: false, left: "discussion", right: "screen" };
   return splitLayouts.value[name] || { on: false, left: "discussion", right: "screen" };
@@ -656,8 +662,11 @@ function layoutOf(name) {
 const splitWanted = computed(() => layoutOf(bot.value?.name).on);
 
 /** Opt-in. Each side is chosen independently; single-pane tabs stay the default.
- *  Split is desktop-only — on mobile we always show one pane. */
-const splitActive = computed(() => splitWanted.value && !mobileLayout.value);
+ *  Split is desktop-only — on mobile we always show one pane. Without a VM the
+ *  control is hidden and any saved preference stays inert. */
+const splitActive = computed(
+  () => splitWanted.value && !mobileLayout.value && deskOn.value
+);
 
 const leftPane = computed(() => layoutOf(bot.value?.name).left);
 const rightPane = computed(() => layoutOf(bot.value?.name).right);

@@ -82,20 +82,59 @@ export function isOptimisticMessageId(id) {
 /**
  * Drop optimistic bubbles that match a server message (same role + content).
  * Prevents doubles when SSE / loadMessages arrive before the HTTP replace.
+ * Returns ``{ hadQueued, queueOrd }`` from the twin so the file order stays stable
+ * when server ``created_at`` would otherwise reshuffle the queue.
  */
 export function dropOptimisticDupes(bot, serverMsg) {
-  if (!bot || !serverMsg?.id || isOptimisticMessageId(serverMsg.id)) return;
+  const empty = { hadQueued: false, queueOrd: null };
+  if (!bot || !serverMsg?.id || isOptimisticMessageId(serverMsg.id)) return empty;
   const list = state.messages[bot];
-  if (!Array.isArray(list) || !list.length) return;
+  if (!Array.isArray(list) || !list.length) return empty;
   const role = serverMsg.role;
   const content = String(serverMsg.content || "");
+  let hadQueued = false;
+  let queueOrd = null;
   for (let i = list.length - 1; i >= 0; i--) {
     const m = list[i];
     if (!isOptimisticMessageId(m?.id)) continue;
     if (m.role !== role) continue;
     if (String(m.content || "") !== content) continue;
+    if (m.meta?.queued) hadQueued = true;
+    const ord = Number(m.meta?.queue_ord);
+    if (Number.isFinite(ord)) queueOrd = ord;
     list.splice(i, 1);
   }
+  return { hadQueued, queueOrd };
+}
+
+/** Keep « En file » + stable ``queue_ord`` from the optimistic twin. */
+export function withInheritedQueued(serverMsg, inherit) {
+  const hadQueued = !!inherit?.hadQueued;
+  const queueOrd = inherit?.queueOrd;
+  if (!serverMsg) return serverMsg;
+  const meta = { ...(serverMsg.meta || {}) };
+  let changed = false;
+  if (hadQueued && !meta.queued && !meta.mid_run) {
+    meta.queued = true;
+    changed = true;
+  }
+  if (Number.isFinite(queueOrd) && !Number.isFinite(Number(meta.queue_ord))) {
+    meta.queue_ord = queueOrd;
+    changed = true;
+  }
+  return changed ? { ...serverMsg, meta } : serverMsg;
+}
+
+/** Preserve local ``queue_ord`` across SSE/HTTP merges. */
+export function withPreservedQueueOrd(local, remote) {
+  if (!remote) return remote;
+  const ord = Number(local?.meta?.queue_ord);
+  if (!Number.isFinite(ord)) return remote;
+  if (Number.isFinite(Number(remote.meta?.queue_ord))) return remote;
+  return {
+    ...remote,
+    meta: { ...(remote.meta || {}), queue_ord: ord },
+  };
 }
 
 /**
@@ -181,12 +220,14 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
   if (type === "message.created" && data.message) {
     const bot = data.message.bot;
     if (!state.messages[bot]) state.messages[bot] = [];
-    dropOptimisticDupes(bot, data.message);
-    if (!state.messages[bot].some((m) => m.id === data.message.id)) {
-      state.messages[bot].push(data.message);
+    const inherit = dropOptimisticDupes(bot, data.message);
+    const incoming = withInheritedQueued(data.message, inherit);
+    data.message = incoming;
+    if (!state.messages[bot].some((m) => m.id === incoming.id)) {
+      state.messages[bot].push(incoming);
     }
     // Queued drafts stay out of "last activity" until they actually fire.
-    if (!data.message.meta?.queued) {
+    if (!incoming.meta?.queued) {
       const i = state.bots.findIndex((b) => b.name === bot);
       if (i >= 0 && data.message.created_at) {
         const prev = state.bots[i].last_message_at || "";
@@ -231,25 +272,27 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
     const bot = data.message.bot;
     if (!state.messages[bot]) state.messages[bot] = [];
     const list = state.messages[bot];
-    dropOptimisticDupes(bot, data.message);
-    const i = list.findIndex((m) => m.id === data.message.id);
+    const inherit = dropOptimisticDupes(bot, data.message);
+    let incoming = withInheritedQueued(data.message, inherit);
+    data.message = incoming;
+    const i = list.findIndex((m) => m.id === incoming.id);
     const released =
       i >= 0 &&
       list[i].meta?.queued &&
-      !data.message.meta?.queued;
+      !incoming.meta?.queued;
     if (i >= 0) {
+      incoming = withPreservedQueueOrd(list[i], incoming);
+      data.message = incoming;
       if (released) {
         // Leave the early "draft" slot and append as a real turn.
         list.splice(i, 1);
-        list.push(data.message);
+        list.push(incoming);
       } else {
         // Mid-stream DB flush can lag behind SSE deltas already applied.
-        list[i] = preferLiveStreamingMessage(list[i], data.message);
+        list[i] = preferLiveStreamingMessage(list[i], incoming);
       }
-    } else if (!data.message.meta?.queued) {
-      list.push(data.message);
     } else {
-      list.push(data.message);
+      list.push(incoming);
     }
     if (released || !data.message.meta?.queued) {
       const bi = state.bots.findIndex((b) => b.name === bot);
