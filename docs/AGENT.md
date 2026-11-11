@@ -5,9 +5,10 @@ Complement to [`README.md`](./README.md) (the README remains the **first** file 
 ## Obligations
 
 1. **Read** `docs/README.md` then the `features/` notes for the topic.
-2. **Document** every behaviour change in `docs/features/` (even a "small" one).
-3. HTTP API changed → also `docs/API.md` (summary); runtime truth = `/api/openapi.json`.
-4. Doc backlog: if tasks had already been given → catch up on the notes before piling on new vague work.
+2. **Discover the Vue UI**: skim [`features/vue-components.md`](./features/vue-components.md) on every docs onboarding. UI work → open the listed components / feature notes before adding files under `frontend/src/components/`.
+3. **Document** every behaviour change in `docs/features/` (even a "small" one). New/renamed/removed Vue component → update `vue-components.md` in the same change.
+4. HTTP API changed → also `docs/API.md` (summary); runtime truth = `/api/openapi.json`.
+5. Doc backlog: if tasks had already been given → catch up on the notes before piling on new vague work.
 
 ## `features/*.md` note format
 

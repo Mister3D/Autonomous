@@ -7,8 +7,9 @@
 - `frontend/src/styles.css` — legacy layout / feature CSS (consumes tokens)
 - `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
 - `frontend/index.html` — Plus Jakarta Sans
+- Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-10 (split handle + screen bottom radius)
+**Last updated**: 2026-11-11 (cross-link Vue catalogue)
 
 ## User behaviour
 

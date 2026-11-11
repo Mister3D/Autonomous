@@ -38,3 +38,4 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [updates.md](./updates.md) | Self-update channel + home Check/Update + restart |
 | [auth-secrets.md](./auth-secrets.md) | Session secret ≠ Bearer, TRUST_PROXY, companion pre-101 |
 | [ui-design-system.md](./ui-design-system.md) | Soft UI design system, reusable UI primitives, settings cards |
+| [vue-components.md](./vue-components.md) | Full Vue catalogue (HubView, panes, chat cards, modals, `ui/*`) |
