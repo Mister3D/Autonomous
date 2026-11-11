@@ -496,10 +496,50 @@ def wake_desk(bot: str, *, home: Path | None = None) -> dict[str, Any]:
     desk = {**desk, "state": "running", "slept_at": None, "last_error": None}
     bots_svc.patch_bot(bot, {"desk": desk}, home=home)
     touch_activity(bot, home=home)
-    # Re-sync helpers + ensure CDP Chrome (same race as first create if image is stale).
+    # The picture only needs websockify. Script sync and a Chrome CDP check
+    # used to block this return (often 10s+), so the Screen tab sat on
+    # "Waking…" with nothing to show.
+    _wait_vnc_port(desk.get("vnc_port"))
+    threading.Thread(
+        target=_finish_wake_background,
+        args=(bot, home),
+        name=f"desk-wake-{bot}",
+        daemon=True,
+    ).start()
+    BUS.publish("desk.updated", {"desk": desk}, bot=bot)
+    return desk
+
+
+def _wait_vnc_port(port: Any, *, timeout: float = 2.0) -> None:
+    """Return once noVNC accepts TCP, or when the short budget is spent."""
+    try:
+        port_n = int(port)
+    except (TypeError, ValueError):
+        return
+    if port_n <= 0:
+        return
+    import socket
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port_n), timeout=0.2):
+                return
+        except OSError:
+            time.sleep(0.1)
+
+
+def _finish_wake_background(bot: str, home: Path | None) -> None:
+    """Helpers and Chrome CDP after the desktop is already visible."""
     try:
         sync_desktop_scripts(bot, home=home)
-        # Only relaunch if CDP is down (xstartup may already have started Chrome).
+        _ensure_files_alias(bot, home=home)
+    except Exception:
+        pass
+    # xstartup starts Chrome on its own. Only relaunch if CDP is still down
+    # after that, so a normal wake does not kill the window the user just opened.
+    time.sleep(3)
+    try:
         probe = subprocess.run(
             [
                 "docker",
@@ -515,15 +555,12 @@ def wake_desk(bot: str, *, home: Path | None = None) -> dict[str, Any]:
             ],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=3,
         )
         if (probe.stdout or "").strip() != "200":
             restart_bot_chrome(bot, home=home)
     except Exception:
         pass
-    _ensure_files_alias(bot, home=home)
-    BUS.publish("desk.updated", {"desk": desk}, bot=bot)
-    return desk
 
 
 def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:

@@ -2208,52 +2208,24 @@ const lastTurnFailed = computed(() => {
 });
 
 /**
- * Busy with no live tool: "hard" = error/abort bubble; "soft" = waiting for
- * first token / gap between tools (normal — must not flash Relancer).
+ * Busy run with an error/abort bubble. Silence is not stuck: a thinking model
+ * can sit for minutes with no visible token. The Working orb covers that.
  */
-const stuckBusyKind = computed(() => {
-  if (!busy.value || waitingHuman.value || hasRunningTools.value) return null;
+const stuckBusy = computed(() => {
+  if (!busy.value || waitingHuman.value || hasRunningTools.value) return false;
   const all = state.messages[props.bot.name] || [];
   const lastUser = lastUserIndex(all, { includeOptimistic: false });
-  if (lastUser < 0) return "soft";
+  if (lastUser < 0) return false;
   for (let i = all.length - 1; i > lastUser; i--) {
     const m = all[i];
     if (m?.role !== "assistant") continue;
     const meta = m.meta || {};
     const text = String(m.content || "").trim();
-    if (meta.aborted || meta.error || text.startsWith("⚠️")) return "hard";
-    if (meta.streaming && text) return null;
-    if (meta.streaming && !text) return "soft";
-    return null;
+    if (meta.aborted || meta.error || text.startsWith("⚠️")) return true;
+    return false;
   }
-  return "soft";
+  return false;
 });
-
-/** Soft "looks stuck" only after a grace window — first-token wait is normal.
- *  Detection is UI-only (Relancer button). Auto-recovery lives on the server. */
-const STUCK_BUSY_GRACE_MS = 45_000;
-const stuckBusy = ref(false);
-let stuckBusyTimer = 0;
-watch(
-  stuckBusyKind,
-  (kind) => {
-    clearTimeout(stuckBusyTimer);
-    stuckBusyTimer = 0;
-    if (kind === "hard") {
-      stuckBusy.value = true;
-      return;
-    }
-    if (kind === "soft") {
-      stuckBusy.value = false;
-      stuckBusyTimer = window.setTimeout(() => {
-        stuckBusy.value = stuckBusyKind.value === "soft";
-      }, STUCK_BUSY_GRACE_MS);
-      return;
-    }
-    stuckBusy.value = false;
-  },
-  { immediate: true }
-);
 
 /** Live work even if bot.status briefly lags behind SSE (streaming / tools / orb). */
 const agentLive = computed(
@@ -2731,7 +2703,6 @@ onBeforeUnmount(() => {
   pending.value = [];
   if (flashTimer) clearTimeout(flashTimer);
   clearTimeout(messagesScrollUiTimer);
-  clearTimeout(stuckBusyTimer);
   clearTimeout(idleQueuedTimer);
   scroller.value?.classList.remove("messages-scrolling");
   window.removeEventListener("keydown", onLightboxKey);

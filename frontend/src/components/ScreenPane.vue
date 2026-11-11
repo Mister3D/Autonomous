@@ -188,6 +188,8 @@ async function refreshNovnc({ bust = false } = {}) {
     linkState.value = "idle";
     return;
   }
+  // Already showing this desktop: opening the tab again must not cover it.
+  if (!bust && linkState.value === "connected" && novncUrl.value) return;
   linkState.value = "loading";
   try {
     const info = await api.novnc(props.bot.name);
@@ -420,6 +422,20 @@ onUnmounted(() => {
   color: var(--text);
   font-size: 0.92rem;
   font-weight: 600;
+}
+.novnc-status.loading {
+  inset: auto;
+  top: 0.65rem;
+  left: 50%;
+  transform: translateX(-50%);
+  place-content: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg, #fff) 90%, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--line, #ddd) 80%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 10%, transparent);
+  font-size: 0.78rem;
+  pointer-events: none;
 }
 .novnc-status p {
   margin: 0;

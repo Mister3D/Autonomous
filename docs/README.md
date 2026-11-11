@@ -20,6 +20,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 4. Only then: answer / code according to the user's request.
 5. After any behaviour change (even a UX detail): **update** the relevant `features/` note (date + pitfalls). New Vue component or renamed pane → update `vue-components.md`. New topic → new note + a line in this README.
 6. **Test** on the local env (`serve --dev`, pytest, curl/UI) — this is not prod; don't ship by feel (details in `AGENT.md`).
+7. **Every commit** bumps the app patch (`0.1.0` → `0.1.1`) in `autonomous/__init__.py` and `pyproject.toml`, in that same commit. Details in [`AGENT.md`](./AGENT.md).
 
 
 ## 3. `features/` catalogue (actual implementation)

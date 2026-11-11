@@ -9,6 +9,7 @@ Complement to [`README.md`](./README.md) (the README remains the **first** file 
 3. **Document** every behaviour change in `docs/features/` (even a "small" one). New/renamed/removed Vue component → update `vue-components.md` in the same change.
 4. HTTP API changed → also `docs/API.md` (summary); runtime truth = `/api/openapi.json`.
 5. Doc backlog: if tasks had already been given → catch up on the notes before piling on new vague work.
+6. **Bump the patch on every commit.** In the same commit, increment the third number of the app version in both `autonomous/__init__.py` (`__version__`) and `pyproject.toml` (`[project].version`) so they stay identical. Example: `0.1.0` → `0.1.1`. Docs-only commits count. Leave minor and major alone unless the user asks. Do not bump `frontend/`, `companion/`, or `avatar/` package versions for this.
 
 ## `features/*.md` note format
 
