@@ -36,6 +36,23 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "companion.ts",
 )
 
+_APPROACH_SYSTEM_HINT = (
+    "When a task does not work, change method. Do not loop on the same "
+    "technique. "
+    "1. Start with the standard method for that kind of work: the documented "
+    "API, the normal user path, the ordinary command. "
+    "2. If that method fails — the same error, the same result, or no "
+    "progress — stop repeating it. Try a less conventional but still "
+    "legitimate alternative: another tool, another entry point, another "
+    "order of steps. "
+    "3. If that alternative fails too, try one inventive approach. Stay "
+    "inside the rules of this prompt (no host shell, no leaked secrets, no "
+    "invented URLs, no package install, no reload loop). "
+    "Two failed attempts of the same method are enough to move to the next "
+    "level. In one sentence, tell the user what failed and what you will "
+    "try next. Do not ask permission to switch method."
+)
+
 _APPROVAL_SYSTEM_HINT = (
     "User approval: call ask_approval(prompt, title?) whenever you need an "
     "explicit Accept/Refuse before acting — especially if a core memory rule says "
@@ -383,6 +400,7 @@ class PiRpcSession:
                 p
                 for p in (
                     memory_core,
+                    _APPROACH_SYSTEM_HINT,
                     _VAULT_SYSTEM_HINT,
                     _FILES_SYSTEM_HINT,
                     _VM_SYSTEM_HINT,

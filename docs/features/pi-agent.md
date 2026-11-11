@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-12 (in-thread orb + Stop; composer orb removed; stop one VM command)
+**Last updated**: 2026-11-12 (on failure: standard method, then a less usual one, then an inventive one)
 
 ## User behaviour
 
@@ -73,7 +73,7 @@ Pi is **not** in the VMs. It's on the host.
 - Inter-bot extension: `autonomous/pi_extensions/botmail.ts` → `bot_list` / `bot_tell` / `bot_ask` (see `botmail.md`). User composer: "Dit à @…" / "Demande à @…".
 - Pi instructions (`pi_rpc.py`): `_VAULT_SYSTEM_HINT` (secret rules) and `_VM_SYSTEM_HINT` (desktop + browser) are **structured in numbered sections** — 1 Desk/shell, 2 Tools (read / wait / see / act / locate), 3 Action loop, 4 Block pages, 5 Login — one rule = one place only (no vault/VM duplicates). Generic: putting site-specific or captcha-vendor-specific recipes there is forbidden. Tool descriptions (`vm.ts`, `browser.ts`, `vault.ts`) must stay consistent with them (coordinates = snapshot or `vm_ground`, never `vm_look`).
 - `vm_look` tool: the agent **never** has the PNG; `vm_look` = capture + host multimodal model → text. Rule: never announce an error that hasn't been read (`browser_text` / `vm_look`).
-- `--append-system-prompt` at session start: core memory + hints (vault, files, VM, botmail, manager, events, memory, approval, clarification, search, vision). No more `bots.role` persona. That addendum is **frozen for the life of the Pi process** — each later `prompt()` only **appends** user/tool turns (append-only transcript). Do **not** reinject wall-clock “now”, refreshed core memory, or other per-message system rewrites: that busts provider / vLLM prefix (KV) cache. Memory / timezone changes apply on the **next** Pi start. Compaction is the intentional prefix rewrite (summary + recent turns).
+- `--append-system-prompt` at session start: core memory + hints (approach, vault, files, VM, botmail, manager, events, memory, approval, clarification, search, vision). **Approach** (`_APPROACH_SYSTEM_HINT`): start with the standard method; after two failures of that same method, switch to a less conventional legitimate alternative; if that fails too, one inventive attempt that still obeys the other rules (no host shell, no secrets, no invented URLs, no install, no reload loop). Say in one sentence what failed and what comes next. Do not ask permission to switch. The desktop action loop’s “never repeat the same action more than twice” is the same idea for one click. No more `bots.role` persona. That addendum is **frozen for the life of the Pi process** — each later `prompt()` only **appends** user/tool turns (append-only transcript). Do **not** reinject wall-clock “now”, refreshed core memory, or other per-message system rewrites: that busts provider / vLLM prefix (KV) cache. Memory / timezone changes apply on the **next** Pi start. Compaction is the intentional prefix rewrite (summary + recent turns). An already-open Pi keeps the previous hint until that process restarts.
 - API: `GET /pi/status`, `GET /pi/models`, `POST /bots/:name/stop`, `POST /bots/:name/resume`, `POST /bots/:name/retry`.
 - Resume a session outside the UI:  
   `cd data/bots/<name>/pi && pi --session-id <pi_session_id>`  

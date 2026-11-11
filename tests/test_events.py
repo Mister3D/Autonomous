@@ -371,6 +371,17 @@ def test_catchup_advances_next_run(home):
     assert after.get("last_run_at")
 
 
+def test_prompt_changes_method_after_failure():
+    from autonomous.services.pi_rpc import _APPROACH_SYSTEM_HINT
+
+    hint = _APPROACH_SYSTEM_HINT
+    assert "standard method" in hint
+    assert "less conventional" in hint
+    assert "inventive approach" in hint
+    assert "Do not loop" in hint
+    assert "Two failed attempts" in hint
+
+
 def test_prompt_allows_self_relaunch_schedule(home):
     from autonomous.services.pi_rpc import _events_system_hint
 
