@@ -38,8 +38,8 @@
       </svg>
     </button>
 
-    <!-- Live: one compact line only (no args/result panel — that height thrash jumps the thread). -->
-    <div v-if="livePreview" class="tool-group-live tool-group-live-compact">
+    <!-- Folded list only. Once the list is open, the running row at the bottom is enough. -->
+    <div v-if="livePreview && !listOpen" class="tool-group-live tool-group-live-compact">
       <div class="tool-live-head">
         <span class="tool-live-name">{{ livePreview.name }}</span>
         <span

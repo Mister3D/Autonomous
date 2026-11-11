@@ -357,6 +357,8 @@ _HIDDEN_TOOL_CARDS = frozenset(
         "webhook_delete",
         # Inline markdown / attach card — no tool card noise.
         "files_share_image",
+        # Batch-order marker: not a user-visible tool.
+        "batch_sequential",
         "files_attach",
         "files_claim_mail",
         # Shared memory: MemoryProposalCard only (no 🔧 dump in chat).

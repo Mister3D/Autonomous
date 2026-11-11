@@ -371,6 +371,18 @@ def test_catchup_advances_next_run(home):
     assert after.get("last_run_at")
 
 
+def test_prompt_can_batch_tools_parallel_or_sequential():
+    from autonomous.services.pi_rpc import _BATCH_SYSTEM_HINT, _PI_EXTENSIONS
+
+    hint = _BATCH_SYSTEM_HINT
+    assert "multiple tool calls" in hint
+    assert "batch_sequential" in hint
+    assert "same time" in hint
+    assert "one after another" in hint
+    assert "Never call batch_sequential alone" in hint
+    assert any(path.name == "batch.ts" for path in _PI_EXTENSIONS)
+
+
 def test_prompt_changes_method_after_failure():
     from autonomous.services.pi_rpc import _APPROACH_SYSTEM_HINT
 

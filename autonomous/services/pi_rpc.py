@@ -26,6 +26,7 @@ _SERVE_API_BASE: str | None = None
 
 _EXTENSIONS_DIR = Path(__file__).resolve().parent.parent / "pi_extensions"
 _PI_EXTENSIONS = (
+    _EXTENSIONS_DIR / "batch.ts",
     _EXTENSIONS_DIR / "vault.ts",
     _EXTENSIONS_DIR / "vm.ts",
     _EXTENSIONS_DIR / "files.ts",
@@ -38,6 +39,26 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "approval.ts",
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
+)
+
+_BATCH_SYSTEM_HINT = (
+    "TOOL BATCHES — several tools in one response. "
+    "You may emit multiple tool calls in the same response. They run, then you "
+    "are called once with every result. There is no model call between tools "
+    "of that response. Choose the mode. "
+    "Parallel (default): independent calls whose arguments you already know and "
+    "that do not need each other's output (two lists, two lookups, two reads). "
+    "Emit them together and do not call batch_sequential. They start at the "
+    "same time. "
+    "Sequential: the calls must not overlap, and you already know every "
+    "argument (a command that must finish before the next command starts). "
+    "Emit those calls together and also call batch_sequential once in that "
+    "same response. They run one after another, still with one model call "
+    "after the batch. batch_sequential does not let a later call read an "
+    "earlier result. "
+    "Do not batch a step that needs a result you do not have yet (a click that "
+    "needs coordinates from a snapshot, a command that needs the previous "
+    "output). Emit one tool and wait. Never call batch_sequential alone."
 )
 
 _APPROACH_SYSTEM_HINT = (
@@ -261,7 +282,7 @@ DESKTOP & BROWSER (server-side; works without the web UI open)
    - control in the DOM: use its screen=x,y from browser_snapshot / browser_frames_snapshot directly (exact and fast; vm_ground only if it is [COVERED]). Off-screen (in_viewport=false): vm_scroll until visible.
    - not in the DOM: vm_ground. If ok=false, NEVER click the rejected point (it is usually another control, e.g. a « send me a code » button): re-observe, try browser_frames_snapshot, reword, or scroll.
    Only click a control whose label matches your intent.
-4. Execute the one matching tool (click → vm_click, drag → vm_drag), then VERIFY with a fresh snapshot/text. Nothing changed → change approach; never repeat the same action more than twice.
+4. Execute the matching tool (click → vm_click, drag → vm_drag), then VERIFY with a fresh snapshot/text. A gesture that depends on this result is one tool, then that check — not a batch. Independent reads you can already name may share one response (see TOOL BATCHES). Nothing changed → change approach; never repeat the same action more than twice.
 5. Text fields: click the field, then vm_type; check browser_snapshot shows [filled N chars] rather than retyping blindly or switching to another login method.
 6. Verification widgets (checkbox, slider, puzzle, retry button) are ordinary UI. browser_navigate / browser_wait_load print a « SLIDE-TO-VERIFY WIDGET » line with the exact vm_drag(x, y, x2, y2): do that ONE drag at once (no vm_look / vm_ground first), then browser_wait_load. Otherwise find the widget with browser_frames_snapshot WITHOUT query (cross-origin iframes included). Buttons/checkboxes → vm_click. Sliders → ONE vm_drag from the handle's center to the far end of its track (never click a track, never aim at a point you guessed). Verify with browser_wait_load / browser_snapshot (vm_look if unclear); if a retry control or a fresh widget appears, use it at once; at most 2 attempts, then step back.
 
@@ -419,6 +440,7 @@ class PiRpcSession:
                 p
                 for p in (
                     memory_core,
+                    _BATCH_SYSTEM_HINT,
                     _APPROACH_SYSTEM_HINT,
                     _VAULT_SYSTEM_HINT,
                     _FILES_SYSTEM_HINT,
