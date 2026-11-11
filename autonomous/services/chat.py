@@ -884,14 +884,27 @@ def post_agent_interrupted(
 
 
 def mark_interrupted_after_wait(bot: str, *, home: Path | None = None) -> None:
-    """User resolved vault/desk but Pi session is dead → idle + Reprendre card."""
+    """User resolved vault/desk but Pi session is dead → idle then auto-resume.
+
+    Does not leave a manual Resume card: the system must continue without an
+    open browser. Falls back to a Resume card only if auto-retry cannot start.
+    """
     bots_svc.patch_bot(bot, {"status": "idle"}, home=home)
-    close_running_tools(bot, home=home)
-    post_agent_interrupted(bot, home=home)
+    close_running_tools(bot, home=home, hint_resume=False)
     try:
-        drain_queued_user_messages(bot, home=home)
+        drained = bool(drain_queued_user_messages(bot, home=home))
     except Exception:
-        pass
+        drained = False
+        log.exception("mark_interrupted: drain failed for %s", bot)
+    if drained:
+        return
+    try:
+        out = retry_unprocessed(bot, home=home)
+        if (out or {}).get("action") in ("resumed", "drained"):
+            return
+    except Exception:
+        log.exception("mark_interrupted: auto-retry failed for %s", bot)
+    post_agent_interrupted(bot, home=home)
 
 
 def _mark_resume_cards(bot: str, *, state: str, home: Path | None = None) -> int:

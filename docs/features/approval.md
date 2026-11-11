@@ -23,4 +23,4 @@
 ## Pitfalls
 
 - Distinct from **clarify** (`ask_clarify` = structured question, not a yes/no), from **memory** (`memory_propose` = non-blocking) and from the **vault** (secret forms).
-- Pi session dies while waiting → "Resume" card (`mark_interrupted_after_wait`).
+- Pi session dies while waiting → `mark_interrupted_after_wait` **auto-resumes** (Resume card only if retry cannot start).

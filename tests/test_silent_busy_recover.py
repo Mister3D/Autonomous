@@ -99,3 +99,23 @@ def test_silent_busy_cooldown(home, monkeypatch):
     bots_svc.patch_bot("cool", {"status": "busy"}, home=home)
     assert agent_svc.recover_silent_busy_runs(home=home, grace_sec=0.0) == []
     assert n["c"] == 1
+
+
+def test_silent_busy_resumes_pending_interrupt_card(home, monkeypatch):
+    _reset_watchdog()
+    bots_svc.create_bot("card", home=home)
+    chat_svc.post_agent_interrupted(
+        "card",
+        reason="The agent was interrupted by a server restart.",
+        home=home,
+    )
+    called: list[str] = []
+
+    def fake_retry(bot, *, home=None):
+        called.append(bot)
+        chat_svc._mark_resume_cards(bot, state="resumed", home=home)
+        return {"ok": True, "action": "resumed"}
+
+    monkeypatch.setattr(chat_svc, "retry_unprocessed", fake_retry)
+    assert agent_svc.recover_silent_busy_runs(home=home, grace_sec=0.0) == ["card"]
+    assert called == ["card"]

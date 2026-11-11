@@ -29,7 +29,7 @@
 - Distinct from **`ask_approval`** (Accept / Decline) and from **memory** (non-blocking).
 - Only one of the two: `choice` **or** `text`. Both together → 400.
 - `allow_text` omitted: true if there are no choices, false if there are.
-- Pi session dies while waiting → "Resume" card (`mark_interrupted_after_wait`).
+- Pi session dies while waiting → `mark_interrupted_after_wait` **auto-resumes** (Resume card only if retry cannot start).
 
 ## Quick check
 

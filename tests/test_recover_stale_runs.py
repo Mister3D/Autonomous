@@ -8,9 +8,10 @@ from autonomous.services import bots as bots_svc
 from autonomous.services import chat as chat_svc
 
 
-def test_recover_busy_goes_idle_and_posts_resume(home):
+def test_recover_busy_auto_resumes_without_card(home, monkeypatch):
     bots_svc.create_bot("ghost", home=home)
     bots_svc.patch_bot("ghost", {"status": "busy"}, home=home)
+    chat_svc.create_message("ghost", "Fais X", role="user", home=home)
     chat_svc.create_message(
         "ghost",
         "",
@@ -25,12 +26,23 @@ def test_recover_busy_goes_idle_and_posts_resume(home):
         meta={"kind": "tool", "status": "running", "tool_name": "vm_look"},
         home=home,
     )
+    prompts: list[str] = []
+
+    class FakeAgent:
+        def start_run(self, name, message, *, home=None, images=None):
+            prompts.append(message)
+            return ""
+
+        def stop_run(self, name, *, home=None):
+            return None
+
+    monkeypatch.setattr(
+        "autonomous.services.agent.get_agent",
+        lambda *a, **k: FakeAgent(),
+    )
 
     recovered = agent_svc.recover_stale_runs(home=home)
     assert recovered == ["ghost"]
-
-    bot = bots_svc.get_bot("ghost", home=home)
-    assert bot["status"] == "idle"
 
     msgs = chat_svc.list_messages("ghost", home=home)
     streaming = [
@@ -47,7 +59,8 @@ def test_recover_busy_goes_idle_and_posts_resume(home):
         if (m.get("meta") or {}).get("kind") == "agent_interrupted"
         and (m.get("meta") or {}).get("state") == "pending"
     ]
-    assert resume, "expected Resume card when nothing was queued"
+    assert resume == [], "must auto-resume — no manual Resume card"
+    assert prompts and "Original task" in prompts[0]
 
 
 def test_recover_busy_drains_queued_webhook_without_resume(home, monkeypatch):

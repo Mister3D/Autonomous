@@ -313,7 +313,7 @@ def test_request_access_grant(home):
     assert again["result"].get("already_granted") is True
 
 
-def test_dead_session_after_vault_posts_resume_card(home, auth_client):
+def test_dead_session_after_vault_auto_resumes(home, auth_client, monkeypatch):
     bots_svc.create_bot("frank", label="Frank", home=home)
     chat_svc.send_message(
         "frank", "Connecte-toi au site", home=home, trigger_agent=False
@@ -335,14 +335,31 @@ def test_dead_session_after_vault_posts_resume_card(home, auth_client):
         reason="login",
         home=home,
     )
-    # No live Pi session → resolve must unstick + post Reprendre card.
+    prompts: list[str] = []
+
+    class FakeAgent:
+        def start_run(self, name, message, *, home=None, images=None):
+            prompts.append(message)
+            return ""
+
+        def stop_run(self, name, *, home=None):
+            return None
+
+    monkeypatch.setattr(
+        "autonomous.services.agent.get_agent",
+        lambda *a, **k: FakeAgent(),
+    )
+    # No live Pi session → resolve must unstick + auto-resume (no manual card).
     out = vault_svc.resolve_request(req["id"], action="approve", home=home)
     assert out["state"] == "approved"
-    bot = bots_svc.get_bot("frank", home=home)
-    assert bot["status"] == "idle"
     msgs = chat_svc.list_messages("frank", home=home)
-    resume = next(m for m in msgs if m["meta"].get("kind") == "agent_interrupted")
-    assert resume["meta"]["state"] == "pending"
+    pending = [
+        m
+        for m in msgs
+        if (m.get("meta") or {}).get("kind") == "agent_interrupted"
+        and (m.get("meta") or {}).get("state") == "pending"
+    ]
+    assert pending == []
     tool = next(
         m
         for m in msgs
@@ -350,13 +367,7 @@ def test_dead_session_after_vault_posts_resume_card(home, auth_client):
         and m["meta"].get("tool_name") == "request_vault_access"
     )
     assert tool["meta"]["status"] == "error"
-
-    r = auth_client.post("/api/v1/bots/frank/resume")
-    assert r.status_code == 200
-    assert r.get_json()["ok"] is True
-    msgs = chat_svc.list_messages("frank", home=home)
-    resume = next(m for m in msgs if m["meta"].get("kind") == "agent_interrupted")
-    assert resume["meta"]["state"] == "resumed"
+    assert prompts and "Original task" in prompts[0]
 
 
 def test_vault_http_api(home, auth_client):

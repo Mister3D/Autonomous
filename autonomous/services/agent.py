@@ -93,10 +93,6 @@ def clear_active_run(bot: str) -> None:
 
 
 _RESTART_TOOL_ERROR = "Agent session interrupted (server restart)."
-_RESTART_CARD = (
-    "The agent was interrupted by a server restart. "
-    "Click Resume to continue, or send a new message."
-)
 
 
 def has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
@@ -221,12 +217,17 @@ def recover_stale_runs(*, home: Path | None = None) -> list[str]:
         except Exception:
             log.exception("recover: drain queued failed for %s", name)
         if not drained:
+            # Auto-resume unfinished work — do not leave a manual Resume card
+            # (system must continue with no browser open).
             try:
-                chat_svc.post_agent_interrupted(
-                    name, reason=_RESTART_CARD, home=home
+                out = chat_svc.retry_unprocessed(name, home=home)
+                log.info(
+                    "recover: auto-retry bot=%s action=%s",
+                    name,
+                    (out or {}).get("action"),
                 )
             except Exception:
-                log.exception("recover: resume card failed for %s", name)
+                log.exception("recover: auto-retry failed for %s", name)
 
         recovered.append(name)
         log.info("recovered stale run for bot %s (was %s)", name, status)
@@ -238,11 +239,12 @@ def recover_silent_busy_runs(
     home: Path | None = None,
     grace_sec: float | None = None,
 ) -> list[str]:
-    """Server watchdog: ``busy`` with no Pi progress → ``retry_unprocessed``.
+    """Server watchdog: stuck work → ``retry_unprocessed`` (no browser needed).
 
-    Covers dead workers (status busy, no in-memory slot) and live workers that
-    stopped emitting tokens/tools (GPU idle after a guard rail / tool error).
-    Must not depend on a browser tab being open.
+    Covers:
+    - ``busy`` with no live worker (zombie status);
+    - live worker with no Pi progress for ``grace_sec`` (GPU idle / hung tools);
+    - leftover pending Resume cards while idle (legacy / failed auto-resume).
     """
     grace = float(
         _SILENT_BUSY_GRACE_SEC if grace_sec is None else grace_sec
@@ -253,25 +255,36 @@ def recover_silent_busy_runs(
         name = str(bot.get("name") or "")
         if not name:
             continue
-        status = str(bot.get("status") or "idle").strip()
-        if status != "busy":
-            continue
         if has_pending_human_wait(name, home=home):
             continue
+
+        status = str(bot.get("status") or "idle").strip()
+        pending_card = False
+        try:
+            pending_card = bool(chat_svc.pending_resume_card(name, home=home))
+        except Exception:
+            pending_card = False
 
         live = run_in_progress(name)
         with _PROGRESS_LOCK:
             last = _LAST_PROGRESS.get(name)
             last_retry = _LAST_SILENT_RETRY.get(name, 0.0)
-        if live:
-            if last is None:
-                # Worker just claimed the slot before the first event.
-                touch_run_progress(name)
-                continue
-            if (now - last) < grace:
-                continue
-        # else: DB busy but no worker → zombie; recover regardless of progress age.
 
+        should = False
+        if status == "busy":
+            if live:
+                if last is None:
+                    touch_run_progress(name)
+                elif (now - last) >= grace:
+                    should = True
+            else:
+                # DB busy but no worker → zombie.
+                should = True
+        elif status == "idle" and pending_card and not live:
+            should = True
+
+        if not should:
+            continue
         if (now - last_retry) < _SILENT_BUSY_COOLDOWN_SEC:
             continue
 
@@ -285,10 +298,11 @@ def recover_silent_busy_runs(
             _LAST_PROGRESS.pop(name, None)
         recovered.append(name)
         log.warning(
-            "silent-busy recovered bot=%s action=%s live_worker=%s",
+            "silent-busy recovered bot=%s action=%s live_worker=%s pending_card=%s",
             name,
             (out or {}).get("action"),
             live,
+            pending_card,
         )
     return recovered
 

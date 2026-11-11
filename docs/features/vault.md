@@ -13,7 +13,7 @@
   - the agent **defines the form fields itself** (`request_credentials`) — e.g. only an API key, or login+password, or token+endpoint;
   - a **form card** appears in the chat;
   - the bot goes into **`waiting`** status (UI: "Waiting for your answer…", not the "In progress…" orb) while the tool polls the approval;
-  - the user enters / approves / declines → if the Pi session is still alive: `busy` and the run continues; otherwise (session died during the wait): `idle` + `running` tools closed as errors + **"Resume" card** (`agent_interrupted`, `POST /bots/:name/resume`) to relaunch without resending the message;
+  - the user enters / approves / declines → if the Pi session is still alive: `busy` and the run continues; otherwise (session died during the wait): `idle` + `running` tools closed as errors + **auto-resume** (`mark_interrupted_after_wait` → `retry_unprocessed`). A Resume card is only a fallback if auto-retry cannot start;
   - **Chat message during `waiting`** (e.g. "validated on my phone, no code"): cancels `pending` vault requests (`state=cancelled`, `human_redirect`) and sends the text to the polling tool — **this is not a refusal**. The message is **not** queued.
   - **"Decline"** while a message is already queued: same `cancelled` + guidance handling (avoids the false "User denied").
   - secret values **never go through the LLM** (redacted result: ok / denied / cancelled+human_redirect / `entry_id` / public keys / names of secret fields).

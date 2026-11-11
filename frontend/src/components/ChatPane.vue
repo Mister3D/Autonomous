@@ -2183,12 +2183,13 @@ watch(
 
 const showRetryBar = computed(() => {
   if (waitingHuman.value) return false;
+  // Resume card already has Reprendre — never stack Relancer on top.
+  if (hasPendingResume.value) return false;
   // Healthy live run (busy / streaming / tools): Working orb drains the queue after
   // the turn — never Relancer. Soft/hard stuck is the only busy exception.
   if (agentLive.value && !stuckBusy.value) return false;
   return (
     idleQueuedStuck.value ||
-    hasPendingResume.value ||
     stuckBusy.value ||
     (!agentLive.value && lastTurnFailed.value)
   );
@@ -2197,7 +2198,7 @@ const showRetryBar = computed(() => {
 const retryHint = computed(() => {
   if (stuckBusy.value) return t("chat.retryHintStuck");
   if (idleQueuedStuck.value) return t("chat.retryHintQueued");
-  if (hasPendingResume.value || lastTurnFailed.value) return t("chat.retryHintFailed");
+  if (lastTurnFailed.value) return t("chat.retryHintFailed");
   return t("chat.retryHint");
 });
 
