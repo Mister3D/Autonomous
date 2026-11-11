@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -23,6 +24,13 @@ log = logging.getLogger("autonomous.agent")
 # which would also steal session.on_event and orphan tool cards.
 _ACTIVE_LOCK = threading.Lock()
 _ACTIVE_RUNS: dict[str, threading.Event] = {}
+
+# Last Pi progress (token / tool / settle) — silent-busy watchdog (server-side).
+_PROGRESS_LOCK = threading.Lock()
+_LAST_PROGRESS: dict[str, float] = {}
+_LAST_SILENT_RETRY: dict[str, float] = {}
+_SILENT_BUSY_GRACE_SEC = 45.0
+_SILENT_BUSY_COOLDOWN_SEC = 90.0
 
 # bot → True : prochain settle/abort ne doit pas poster « ⚠️ This operation was aborted »
 # (ex. report_user_secret : abort volontaire, message remis dans la saisie).
@@ -60,6 +68,15 @@ def run_in_progress(bot: str) -> bool:
         return bool(ev is not None and not ev.is_set())
 
 
+def touch_run_progress(bot: str) -> None:
+    """Mark live agent progress so the silent-busy watchdog does not fire."""
+    name = str(bot or "").strip()
+    if not name:
+        return
+    with _PROGRESS_LOCK:
+        _LAST_PROGRESS[name] = time.monotonic()
+
+
 def clear_active_run(bot: str) -> None:
     """Drop any in-memory run slot for ``bot`` (stop / crash recovery).
 
@@ -71,6 +88,8 @@ def clear_active_run(bot: str) -> None:
         ev = _ACTIVE_RUNS.pop(bot, None)
         if ev is not None and not ev.is_set():
             ev.set()
+    with _PROGRESS_LOCK:
+        _LAST_PROGRESS.pop(str(bot or "").strip(), None)
 
 
 _RESTART_TOOL_ERROR = "Agent session interrupted (server restart)."
@@ -211,6 +230,66 @@ def recover_stale_runs(*, home: Path | None = None) -> list[str]:
 
         recovered.append(name)
         log.info("recovered stale run for bot %s (was %s)", name, status)
+    return recovered
+
+
+def recover_silent_busy_runs(
+    *,
+    home: Path | None = None,
+    grace_sec: float | None = None,
+) -> list[str]:
+    """Server watchdog: ``busy`` with no Pi progress → ``retry_unprocessed``.
+
+    Covers dead workers (status busy, no in-memory slot) and live workers that
+    stopped emitting tokens/tools (GPU idle after a guard rail / tool error).
+    Must not depend on a browser tab being open.
+    """
+    grace = float(
+        _SILENT_BUSY_GRACE_SEC if grace_sec is None else grace_sec
+    )
+    recovered: list[str] = []
+    now = time.monotonic()
+    for bot in bots_svc.list_bots(home=home):
+        name = str(bot.get("name") or "")
+        if not name:
+            continue
+        status = str(bot.get("status") or "idle").strip()
+        if status != "busy":
+            continue
+        if has_pending_human_wait(name, home=home):
+            continue
+
+        live = run_in_progress(name)
+        with _PROGRESS_LOCK:
+            last = _LAST_PROGRESS.get(name)
+            last_retry = _LAST_SILENT_RETRY.get(name, 0.0)
+        if live:
+            if last is None:
+                # Worker just claimed the slot before the first event.
+                touch_run_progress(name)
+                continue
+            if (now - last) < grace:
+                continue
+        # else: DB busy but no worker → zombie; recover regardless of progress age.
+
+        if (now - last_retry) < _SILENT_BUSY_COOLDOWN_SEC:
+            continue
+
+        try:
+            out = chat_svc.retry_unprocessed(name, home=home)
+        except Exception:
+            log.exception("silent-busy retry failed for %s", name)
+            continue
+        with _PROGRESS_LOCK:
+            _LAST_SILENT_RETRY[name] = time.monotonic()
+            _LAST_PROGRESS.pop(name, None)
+        recovered.append(name)
+        log.warning(
+            "silent-busy recovered bot=%s action=%s live_worker=%s",
+            name,
+            (out or {}).get("action"),
+            live,
+        )
     return recovered
 
 
@@ -367,6 +446,7 @@ class PiAgent:
                 log.warning("start_run skipped for %s — run already in progress", bot)
                 return "busy"
 
+        touch_run_progress(bot)
         bots_svc.patch_bot(bot, {"status": "busy"}, home=home)
         # Keep desk awake while the agent runs (auto-sleep skips busy).
         try:
@@ -510,6 +590,7 @@ class PiAgent:
             state["content"] = ""
 
         def on_event(record: dict[str, Any]) -> None:
+            touch_run_progress(bot)
             rtype = record.get("type")
             if rtype == "message_update":
                 ev = record.get("assistantMessageEvent") or {}

@@ -51,6 +51,12 @@ def tick_once(*, home: Path | None = None) -> int:
         desk_svc.tick_auto_sleep(home=h)
     except Exception:
         log.exception("scheduler: auto-sleep tick failed")
+    try:
+        from autonomous.services import agent as agent_svc
+
+        agent_svc.recover_silent_busy_runs(home=h)
+    except Exception:
+        log.exception("scheduler: silent-busy recover failed")
     return fired
 
 

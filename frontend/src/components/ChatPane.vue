@@ -2111,7 +2111,8 @@ const stuckBusyKind = computed(() => {
   return "soft";
 });
 
-/** Soft "looks stuck" only after a grace window — first-token wait is normal. */
+/** Soft "looks stuck" only after a grace window — first-token wait is normal.
+ *  Detection is UI-only (Relancer button). Auto-recovery lives on the server. */
 const STUCK_BUSY_GRACE_MS = 45_000;
 const stuckBusy = ref(false);
 let stuckBusyTimer = 0;
