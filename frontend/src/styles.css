@@ -4572,6 +4572,50 @@ button.msg-queued-cancel:focus-visible {
   outline: none;
 }
 
+.msg-queued-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  margin-top: -0.1rem;
+}
+
+button.msg-queued-action {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text, #2c2c2e);
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+button.msg-queued-action.send {
+  color: #1d4f91;
+  border-color: color-mix(in srgb, #1d4f91 35%, var(--line));
+}
+
+button.msg-queued-action.edit {
+  color: #3a3a3e;
+}
+
+button.msg-queued-action:hover:not(:disabled),
+button.msg-queued-action:focus-visible:not(:disabled) {
+  background: #f6f6f8;
+  outline: none;
+}
+
+button.msg-queued-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Message user effacé : secret détecté (placeholder, hors historique utile). */
 .bubble.user.secret-scrubbed {
   background: #fff5f5;

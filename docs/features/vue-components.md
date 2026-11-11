@@ -40,7 +40,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `ChatPane.vue` | Conversation thread, composer, queue « En file », Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md) |
+| `ChatPane.vue` | Conversation thread, composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md) |
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame, wake/create desk. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). | [`pi-agent.md`](./pi-agent.md) |

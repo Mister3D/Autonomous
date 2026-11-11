@@ -448,6 +448,32 @@
                   class="msg-reaction"
                 >{{ emo }}</span>
               </div>
+              <div
+                v-if="showQueuedActions(item.message)"
+                class="msg-queued-actions"
+              >
+                <button
+                  v-if="isFirstQueued(item.message)"
+                  type="button"
+                  class="msg-queued-action send"
+                  :disabled="sendingQueuedNow"
+                  :title="t('chat.queuedSendNowHint')"
+                  :aria-label="t('chat.queuedSendNow')"
+                  @click.stop="sendQueuedNow"
+                >
+                  {{ t("chat.queuedSendNow") }}
+                </button>
+                <button
+                  v-if="canEditQueued(item.message)"
+                  type="button"
+                  class="msg-queued-action edit"
+                  :title="t('chat.queuedEditHint')"
+                  :aria-label="t('chat.queuedEdit')"
+                  @click.stop="editQueued(item.message)"
+                >
+                  {{ t("chat.queuedEdit") }}
+                </button>
+              </div>
             </div>
             <time
               v-if="item.message.role === 'assistant' && msgStamp(item.message).time"
@@ -1078,14 +1104,15 @@ function showBubbleShell(message) {
 async function cancelQueued(message) {
   const bot = props.bot.name;
   const id = message?.id;
-  if (!bot || !id || !message?.meta?.queued) return;
+  if (!bot || !id || !message?.meta?.queued) return false;
   const list = state.messages[bot] || [];
   const idx = list.findIndex((m) => m.id === id);
   const snapshot = idx >= 0 ? list[idx] : null;
   state.messages[bot] = list.filter((m) => m.id !== id);
-  if (String(id).startsWith("tmp-")) return;
+  if (String(id).startsWith("tmp-")) return true;
   try {
     await api.deleteQueuedMessage(bot, id);
+    return true;
   } catch (e) {
     if (snapshot) {
       const cur = state.messages[bot] || [];
@@ -1096,6 +1123,71 @@ async function cancelQueued(message) {
       }
     }
     alert(e.message || String(e));
+    return false;
+  }
+}
+
+const sendingQueuedNow = ref(false);
+
+function compareQueued(a, b) {
+  const oa = Number(a?.meta?.queue_ord);
+  const ob = Number(b?.meta?.queue_ord);
+  const aOrd = Number.isFinite(oa);
+  const bOrd = Number.isFinite(ob);
+  if (aOrd && bOrd && oa !== ob) return oa - ob;
+  if (aOrd && !bOrd) return -1;
+  if (!aOrd && bOrd) return 1;
+  const byTime = String(a.created_at || "").localeCompare(String(b.created_at || ""));
+  if (byTime) return byTime;
+  return String(a.id || "").localeCompare(String(b.id || ""));
+}
+
+const firstQueuedId = computed(() => {
+  const list = (state.messages[props.bot.name] || [])
+    .filter((m) => m?.meta?.queued && !m?.meta?.hidden_prompt)
+    .slice()
+    .sort(compareQueued);
+  return list[0]?.id ?? null;
+});
+
+function isFirstQueued(message) {
+  const id = message?.id;
+  return id != null && id === firstQueuedId.value;
+}
+
+function canEditQueued(message) {
+  if (message?.role !== "user" || !message?.meta?.queued) return false;
+  if (isEventTrigger(message) || botmailDirection(message)) return false;
+  return true;
+}
+
+function showQueuedActions(message) {
+  return isFirstQueued(message) || canEditQueued(message);
+}
+
+async function sendQueuedNow() {
+  if (sendingQueuedNow.value) return;
+  sendingQueuedNow.value = true;
+  try {
+    await stop();
+  } finally {
+    sendingQueuedNow.value = false;
+  }
+}
+
+async function editQueued(message) {
+  if (!canEditQueued(message)) return;
+  const content = String(message?.content || "");
+  const removed = await cancelQueued(message);
+  if (!removed) return;
+  text.value = content;
+  await nextTick();
+  autosize();
+  const el = composer.value;
+  el?.focus();
+  if (el && typeof el.setSelectionRange === "function") {
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
   }
 }
 
@@ -1905,20 +1997,7 @@ const thread = computed(() => {
   const queued = all
     .filter((m) => m?.meta?.queued)
     .slice()
-    .sort((a, b) => {
-      // Stable send order: client ``queue_ord`` beats server/client created_at mix
-      // (optimistic ISO vs server ISO was reshuffling the file before it settled).
-      const oa = Number(a?.meta?.queue_ord);
-      const ob = Number(b?.meta?.queue_ord);
-      const aOrd = Number.isFinite(oa);
-      const bOrd = Number.isFinite(ob);
-      if (aOrd && bOrd && oa !== ob) return oa - ob;
-      if (aOrd && !bOrd) return -1;
-      if (!aOrd && bOrd) return 1;
-      const byTime = String(a.created_at || "").localeCompare(String(b.created_at || ""));
-      if (byTime) return byTime;
-      return String(a.id || "").localeCompare(String(b.id || ""));
-    });
+    .sort(compareQueued);
   const msgs = all.filter((m) => !m?.meta?.queued);
   const items = [];
   let lastKey = "";
