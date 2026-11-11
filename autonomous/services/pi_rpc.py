@@ -207,7 +207,8 @@ VAULT (secrets are global, encrypted, and NEVER shown to you)
 - By default you have access to nothing. Call vault_catalog first: if an entry matches the site (label/origin), call request_vault_access(entry_id) and wait for the user. Only if none exists use request_credentials / request_login / request_secret.
 - A grant returns entry_id and the public fields (username, …), never the password. vault_granted lists what you already have: the account identity is its "user: …" — read it there, never invent an account or e-mail.
 - Secrets reach the page only through vault_type(entry_id, field) into an already-focused field. Everything non-secret (username, search text) goes through vm_type. Never put a secret in the username field, never invent a password or key.
-- NEVER reveal vault secrets in chat (quote / spell / hint), even on auth failure. Continue answering the task without the secret. If the user pastes a password, API key or token into the chat: call report_user_secret SILENTLY as your FIRST action — zero assistant text before or after (do not name the tool, do not say you will call it, do not explain). Do NOT put the secret in the tool args. Then stop and wait. Never invent passwords from memory. Never put a secret in a shell command the user can read.
+- NEVER reveal vault secrets in chat (quote / spell / hint), even on auth failure. Continue answering the task without the secret. If the user pastes a password, API key, or long-lived token into the chat: call report_user_secret SILENTLY as your FIRST action — zero assistant text before or after (do not name the tool, do not say you will call it, do not explain). Do NOT put the secret in the tool args. Then stop and wait. Never invent passwords from memory. Never put a secret in a shell command the user can read.
+- Exception — temporary authentication codes: a one-time password, security code, 2FA / OTP, or other short-lived login code that arrived in a mail, SMS, or webhook payload is not a vault secret. Write it in the chat exactly as received (the digits) so the user can use it. Do not call report_user_secret for it, do not redact it, and do not store it in the vault. Passwords, API keys, long-lived tokens, and anything already in the vault stay hidden.
 - Full login procedure: see LOGIN in the desktop section."""
 
 _VM_SYSTEM_HINT = """\
@@ -244,10 +245,10 @@ A page that only says access is restricted / denied / unusual traffic, with NO w
 == 5. LOGIN ==
 vault_catalog → request_vault_access → click the username field (screen=x,y from the snapshot) → vm_type the username from the grant → click the password field → vault_type (password only) → submit → browser_wait_load → browser_text to see where you landed.
 - Prefer the password path; do not ask the site to send a code unless no password path exists.
-- If a one-time code is sent by e-mail/SMS: request_credentials with fields [{id:'otp',label:'Code',secret:true}] (secret=true is required), wait for approval, then vm_type it. Never invent a code.
+- If a one-time code is sent by e-mail/SMS and it is not already in this conversation: request_credentials with fields [{id:'otp',label:'Code',secret:true}] (secret=true is required), wait for approval, then vm_type it. Never invent a code. If that code is already in a mail or webhook payload here, vm_type those digits — do not ask for them again (showing them in chat is the VAULT exception, not a secret leak).
 - If the page asks to approve on another device / push notification (no code to type): do NOT open an OTP vault form — tell the user in chat and wait (browser_wait_load / vm_look). If a vault tool returns human_redirect / cancelled with their message, follow that guidance; it is not a refusal.
 
-FORBIDDEN: inventing passwords or codes, quoting/revealing any secret in chat, site-specific hacks, bypass scripts."""
+FORBIDDEN: inventing passwords or codes, quoting/revealing a vault secret in chat (a temporary code already in a mail or webhook is not one — see VAULT), site-specific hacks, bypass scripts."""
 
 
 

@@ -493,3 +493,15 @@ def test_plain_deny_still_denied(home):
     resolved = vault_svc.resolve_request(req["id"], action="deny", home=home)
     assert resolved["state"] == "denied"
     assert resolved["result"].get("denied") is True
+
+
+def test_prompt_exception_for_temporary_codes():
+    from autonomous.services.pi_rpc import _VAULT_SYSTEM_HINT, _VM_SYSTEM_HINT
+
+    hint = _VAULT_SYSTEM_HINT
+    assert "NEVER reveal vault secrets" in hint
+    assert "temporary authentication codes" in hint
+    assert "report_user_secret" in hint
+    assert "long-lived token" in hint
+    assert "see VAULT" in _VM_SYSTEM_HINT
+    assert "do not ask for them again" in _VM_SYSTEM_HINT

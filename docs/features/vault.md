@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/{vault,crypto_box,vault_inject,vnc_type_worker}.py`, `autonomous/api/{vault_routes,bots}.py`, `autonomous/migrations/001_schema.sql`, `autonomous/pi_extensions/vault.ts`, `frontend/src/components/{VaultRequestCard,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-09 (FR label « Coffre », hint = secrets enregistrés par les bots)
+**Last updated**: 2026-11-11 (OTP / temporary codes from mail are shown, vault secrets stay hidden)
 
 ## User behaviour
 
@@ -18,6 +18,7 @@
   - **"Decline"** while a message is already queued: same `cancelled` + guidance handling (avoids the false "User denied").
   - secret values **never go through the LLM** (redacted result: ok / denied / cancelled+human_redirect / `entry_id` / public keys / names of secret fields).
 - The agent **must never** quote a vault secret. Hint + guard-rail:
+  - **Exception**: a one-time password, security code, 2FA / OTP, or other short-lived login code that arrived in a mail, SMS, or webhook payload is written in the chat as received. It is not reported via `report_user_secret`, not redacted, and not stored in the vault. Passwords, API keys, long-lived tokens, and anything already in the vault stay hidden. An already open Pi session keeps the previous hint until the next start.
   - stream / persist: secrets **removed**;
   - assistant leak → red card (provider) + **relaunch** to continue the reply without the secret;
   - secret **already in the vault** pasted in the composer → API refusal `secret_disclosure` (never to the LLM), text put back in the input;
@@ -71,7 +72,7 @@
 
 ## Pitfalls / non-regressions
 
-- Never put the secret in chat `content`, tool `result_json`, or Pi replies.
+- Never put the secret in chat `content`, tool `result_json`, or Pi replies. A temporary code from a mail is not a vault needle: scrub only removes values stored in the vault.
 - No add form in Settings. The entry comes through the chat card (`request_credentials` / login / secret). The list and the bin remain.
 - `report_user_secret`: the agent must **not** write "I'm calling the tool…" — hint + `hidden_prompt` masking of the turn's assistant bubbles.
 - Abort after report = `mark_silent_abort`: no `⚠️ This operation was aborted`; `restore_text` only via SSE to the composer.
@@ -91,6 +92,8 @@
 
 ```bash
 python3 -m pytest tests/test_vault.py tests/test_vault_inject.py -q
+# Prompt: temporary mail/SMS/webhook codes are shown; vault secrets stay hidden.
+# An already open Pi session keeps the old hint until that bot's Pi restarts.
 
 curl -s -b cookies -X POST http://127.0.0.1:8787/api/v1/vault/requests \
   -H 'Content-Type: application/json' \

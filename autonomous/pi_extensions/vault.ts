@@ -347,7 +347,8 @@ export default function (pi: ExtensionAPI) {
     label: "Report user secret",
     description:
       "Call SILENTLY (no chat text) as the first action when the user pastes a password, " +
-      "API key, token, or similar secret into the chat (not already handled by the vault form). " +
+      "API key, long-lived token, or similar secret into the chat (not already handled by the vault form). " +
+      "A one-time / 2FA / temporary authentication code (OTP) from a mail, SMS, or webhook is NOT this case: show those digits in the chat and do not report them. " +
       "Never announce this tool or narrate the call. Do NOT put the secret value in the arguments. " +
       "This scrubs the user message on Autonomous, shows a provider-leak warning, " +
       "and aborts the run. Then wait for the user — do not continue the task with that secret.",
