@@ -2,7 +2,7 @@
 
 **Status**: in place (localisation only — no click)  
 **Key files**: `autonomous/services/grounding{,_image,_parse}.py`, `POST /bots/:name/screen/ground`, `vm_ground` (`pi_extensions/vm.ts`), `grounding.md`  
-**Last updated**: 2026-11-09 (Enregistrer pleine largeur, sans bulle)
+**Last updated**: 2026-11-12 (grounding loop lines stay visible in the open tool list)
 
 ## User behaviour
 
@@ -10,7 +10,7 @@
 - In the **chat**, capture, loop notes (UI-TARS, verdict, nudge, failure) and contiguous tools form a `ToolGroup`.
 - **During the run** (unsealed group): **live preview of the last tool call** (any of them: `vm_*`, `browser_*`, … — args + result).
 - **As soon as a message follows** (assistant, vault, etc.): the group is **sealed** → menu **collapsed** (unless the user opened it).
-- **No** special "Target" / "Pointer actions" sections: `vm_ground`, `vm_click`, `vm_drag`, `vm_scroll` are **tool lines** like the others (collapsed). Cross / notes / overlay only appear when you **expand** that line.
+- **No** special "Target" / "Pointer actions" sections: `vm_ground`, `vm_click`, `vm_drag`, `vm_scroll` are **tool lines** like the others. The folded bar shows **Grounding · N** when the group contains `vm_ground` calls. Opening the list shows each call (instruction on the `vm_ground` row) and the loop lines (`Grounding · boucle…`, UI-TARS, verdict) as their own rows. The crosshair image stays under the expanded `vm_ground` row.
 - Tool response: `{ ok, x, y, loops[], max_loops, … }` — **no click**.
 
 ## Guard-rails (Settings)
@@ -63,7 +63,7 @@ POST /bots/:name/screen/ground
 
 - Saving `grounder_url` (and runtime `_chat_completions`) uses the same SSRF gate as LLM URLs; redirects are re-checked (`urlopen_safe`).
 - Role separation: the grounder points, the judge validates (short hollow reticle — no full-screen cross).
-- Don't redisplay capture / grounding notes as separate items: `meta.kind=grounding` and `meta.grounding` captures stay in the adjacent tool group.
+- Don't redisplay captures as their own thread items: `meta.grounding` screenshots stay under the expanded `vm_ground` row. Loop notes (`meta.kind=grounding`) stay inside that same tool group and are listed when the group is open — not hidden until the row is expanded.
 - Coords = original capture after remap.
 - `show_in_chat=false` for silent tests.
 - Restart the Pi session after changing `vm.ts`.

@@ -1,3 +1,3 @@
 """Autonomous — mono-user bot hub (Flask API + CLI + Vue UI)."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"

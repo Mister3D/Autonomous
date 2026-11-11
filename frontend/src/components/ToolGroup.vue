@@ -10,6 +10,10 @@
         :title="groupTimedOut ? t('chat.toolTimeout') : undefined"
       >{{ groupDurationLabel }}</span>
       <span
+        v-if="groundingCount"
+        class="tool-group-badge"
+      >{{ t("chat.groundingGroup") }} · {{ groundingCount }}</span>
+      <span
         v-if="statusSummary"
         class="tool-group-badge"
         :class="{ timeout: groupTimedOut }"
@@ -112,7 +116,7 @@
             >
               {{ t("chat.stopTool") }}
             </button>
-            <span v-if="pointerHint(m)" class="tool-row-pointer">{{ pointerHint(m) }}</span>
+            <span v-if="rowHint(m)" class="tool-row-pointer">{{ rowHint(m) }}</span>
             <time
               v-if="rowTime(m)"
               class="tool-row-time"
@@ -145,17 +149,8 @@
               <span class="tool-section-label">{{ t("chat.toolResult") }}</span>
               <pre>{{ resultText(m) }}</pre>
             </div>
-            <div
-              v-if="groundingNotesFor(m).length"
-              class="tool-section tool-grounding-notes"
-            >
-              <p
-                v-for="n in groundingNotesFor(m)"
-                :key="n.id"
-                class="grounding-line"
-              >{{ firstLine(n) }}</p>
-            </div>
-            <!-- vm_ground : capture + croix sous l’outil déplié -->
+            <!-- vm_ground : capture + croix sous l’outil déplié.
+                 Les lignes « Grounding · boucle… » sont dans la liste, pas ici. -->
             <figure
               v-for="shot in targetShotFor(m) ? [targetShotFor(m)] : []"
               :key="`tgt-${m.id}`"
@@ -445,8 +440,8 @@ const detailEntries = computed(() => {
       if (hasTools) return false;
       return !targetIdSet.has(m.id);
     }
-    // Notes de boucle grounding → sous vm_ground déplié, pas en lignes libres.
-    if (isGrounding(m) && hasTools) return false;
+    // Loop notes stay in the open list (« Grounding · boucle… »).
+    // Captures stay nested under the vm_ground row.
     return true;
   });
 });
@@ -621,7 +616,7 @@ const livePreview = computed(() => {
   return {
     name: m.meta?.tool_name || t("chat.tool"),
     status: statusLabel(m),
-    hint: pointerHint(m),
+    hint: rowHint(m),
     duration: toolDurationLabel(m),
     timedOut: isTimedOut(m),
     running: active,
@@ -800,6 +795,18 @@ function pointerHint(m) {
   const a = parsePointer(m);
   return a ? a.coordsText : "";
 }
+
+function rowHint(m) {
+  if (m?.meta?.tool_name === "vm_ground") {
+    const instr = String(m?.meta?.args?.instruction || "").trim();
+    if (instr) return instr.length > 72 ? `${instr.slice(0, 72)}…` : instr;
+  }
+  return pointerHint(m);
+}
+
+const groundingCount = computed(
+  () => tools.value.filter((m) => m?.meta?.tool_name === "vm_ground").length
+);
 
 const title = computed(() => {
   if (targetShots.value.length && !tools.value.length) {

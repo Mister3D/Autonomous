@@ -44,7 +44,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). | [`pi-agent.md`](./pi-agent.md) |
-| `ToolGroup.vue` | Grouped tool cards (compact live line only while the list is folded; open list shows the running tool once, with elapsed time and stop). | [`pi-agent.md`](./pi-agent.md) |
+| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md) |
 
 ## Inspector panes
 
