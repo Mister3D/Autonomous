@@ -619,7 +619,6 @@
             v-model="text"
             rows="1"
             :placeholder="composerPlaceholder"
-            :title="t('chat.newlineHint')"
             @keydown="onComposerKey"
             @paste="onPaste"
             @input="onComposerInput"

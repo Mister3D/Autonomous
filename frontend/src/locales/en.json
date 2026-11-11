@@ -72,7 +72,6 @@
   "chat.botmailHint": "Tell {'@'}bot … / Ask {'@'}bot …",
   "chat.mentionList": "Bots to mention",
   "chat.mentionNone": "No matching bot",
-  "chat.newlineHint": "Enter to send · Shift+Enter newline · {'@'} to mention · Paste an image OK",
   "chat.send": "Send",
   "chat.queue": "Queue",
   "chat.queueHint": "Agent is busy — message will send as soon as possible",

@@ -72,7 +72,6 @@
   "chat.botmailHint": "Dit à {'@'}bot … / Demande à {'@'}bot … (Tell / Ask)",
   "chat.mentionList": "Bots à mentionner",
   "chat.mentionNone": "Aucun bot correspondant",
-  "chat.newlineHint": "Entrée envoie · Maj+Entrée nouvelle ligne · {'@'} pour mentionner · Coller une image OK",
   "chat.send": "Envoyer",
   "chat.queue": "Mettre en file",
   "chat.queueHint": "L’agent est occupé — le message partira dès que possible",
