@@ -29,6 +29,18 @@ def test_pi_env_uses_bot_token_not_admin(home):
     assert env["AUTONOMOUS_BOT"] == "pibot"
 
 
+def test_pi_env_uses_in_process_base_before_pid_file(home):
+    bots_svc.create_bot("EarlyPi", home=home)
+    pi_rpc.set_serve_api_base("http://127.0.0.1:8787/api/v1")
+    try:
+        env = pi_rpc._pi_session_env("earlypi", home=home)
+    finally:
+        pi_rpc.set_serve_api_base(None)
+    assert env["AUTONOMOUS_API_BASE"] == "http://127.0.0.1:8787/api/v1"
+    assert env["AUTONOMOUS_TOKEN"].startswith(auth_mod.BOT_TOKEN_PREFIX)
+    assert env["AUTONOMOUS_BOT"] == "earlypi"
+
+
 def test_bot_token_allows_own_bot_routes(app, home):
     bots_svc.create_bot("Worker", home=home)
     token = auth_mod.issue_bot_api_token("worker", home=home)

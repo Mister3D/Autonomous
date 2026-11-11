@@ -20,6 +20,10 @@ log = logging.getLogger("autonomous.pi_rpc")
 
 EventHandler = Callable[[dict[str, Any]], None]
 
+# Set by ``serve`` before stale-run recovery, so the first Pi of this process
+# can call the API even though ``serve.pid`` is not written yet.
+_SERVE_API_BASE: str | None = None
+
 _EXTENSIONS_DIR = Path(__file__).resolve().parent.parent / "pi_extensions"
 _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "vault.ts",
@@ -276,7 +280,22 @@ FORBIDDEN: inventing passwords or codes, quoting/revealing a vault secret in cha
 
 
 
+def set_serve_api_base(base: str | None) -> None:
+    """Remember this process's API URL before ``serve.pid`` exists.
+
+    ``recover_stale_runs`` starts Pi at the beginning of ``serve``. The pid
+    file is written later. Without this, that first session has no
+    ``AUTONOMOUS_API_BASE`` and every tool answers
+    « Autonomous API not configured for this Pi session ».
+    """
+    global _SERVE_API_BASE
+    text = (base or "").strip().rstrip("/")
+    _SERVE_API_BASE = text or None
+
+
 def _serve_api_base(home: Path | None = None) -> str | None:
+    if _SERVE_API_BASE:
+        return _SERVE_API_BASE
     path = serve_pid_path(home or default_home())
     if not path.is_file():
         return None

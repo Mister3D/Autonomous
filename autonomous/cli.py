@@ -250,6 +250,14 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
     from autonomous.wsproxy import MuxServer
 
     app = create_app(home)
+    # Pi tools need this URL. Recovery below may start a session before the
+    # pid file exists; the in-process value covers that window.
+    from autonomous.services.pi_rpc import set_serve_api_base
+
+    api_host = host
+    if api_host in ("0.0.0.0", "::", "[::]"):
+        api_host = "127.0.0.1"
+    set_serve_api_base(f"http://{api_host}:{port}/api/v1")
     try:
         # Dev reloader / crash leaves bots.busy with no live Pi worker.
         from autonomous.services import agent as agent_svc
