@@ -15,8 +15,12 @@
           <p class="events-instruction-kind">{{ kindLabel }}</p>
           <h2 :id="titleId">{{ displayName }}</h2>
         </header>
-        <p class="events-instruction-label">{{ t("events.instructionLabel") }}</p>
         <div class="events-instruction-scroll">
+          <template v-if="showPayload">
+            <p class="events-instruction-label">{{ t("chat.webhookPayload") }}</p>
+            <pre class="events-instruction-body events-payload-pre">{{ payloadText }}</pre>
+          </template>
+          <p class="events-instruction-label">{{ t("events.instructionLabel") }}</p>
           <p class="events-instruction-body">{{ displayText }}</p>
         </div>
         <div class="events-instruction-actions">
@@ -38,6 +42,8 @@ const props = defineProps({
   name: { type: String, default: "" },
   instruction: { type: String, default: "" },
   kind: { type: String, default: "webhook" },
+  showPayload: { type: Boolean, default: false },
+  payload: { type: String, default: "" },
 });
 
 const emit = defineEmits(["close"]);
@@ -48,6 +54,10 @@ const displayName = computed(() => String(props.name || "").trim() || "—");
 const displayText = computed(() => {
   const text = String(props.instruction || "").trim();
   return text || t("events.instructionEmpty");
+});
+const payloadText = computed(() => {
+  const text = String(props.payload || "").trim();
+  return text || t("chat.webhookPayloadEmpty");
 });
 const kindLabel = computed(() =>
   props.kind === "schedule" ? t("chat.scheduleLabel") : t("chat.webhookLabel")

@@ -292,19 +292,13 @@
                       botmailCollapsible(item.message),
                   },
                 ]"
-                :title="
-                  botmailCollapsible(item.message)
-                    ? isBotmailExpanded(item.message)
-                      ? t('chat.mailCollapse')
-                      : t('chat.mailExpand')
-                    : undefined
-                "
+                :title="bubbleTitle(item.message)"
                 :aria-expanded="
                   botmailCollapsible(item.message)
                     ? isBotmailExpanded(item.message)
                     : undefined
                 "
-                @click="onBotmailBubbleClick(item.message, $event)"
+                @click="onMessageBubbleClick(item.message, $event)"
               >
                 <div
                   v-if="botmailDirection(item.message)"
@@ -406,13 +400,6 @@
                   >
                     {{ t("chat.eventAnchor") }}
                   </button>
-                  <details
-                    v-if="item.message.meta?.has_payload || item.message.meta?.payload != null"
-                    class="event-payload"
-                  >
-                    <summary>{{ t("chat.webhookPayload") }}</summary>
-                    <pre>{{ formatPayload(item.message.meta?.payload) }}</pre>
-                  </details>
                 </div>
                 <div
                   v-else-if="botmailDirection(item.message) && showBubbleText(item.message)"
@@ -669,6 +656,8 @@
       :name="eventInstructionModal?.name || ''"
       :instruction="eventInstructionModal?.instruction || ''"
       :kind="eventInstructionModal?.kind || 'webhook'"
+      :show-payload="!!eventInstructionModal?.showPayload"
+      :payload="eventInstructionModal?.payload || ''"
       @close="eventInstructionModal = null"
     />
   </div>
@@ -1505,14 +1494,55 @@ function eventCarrierInstruction(m) {
   return text.trim();
 }
 
+function eventPayloadText(m) {
+  const meta = m?.meta || {};
+  if (meta.payload != null && meta.payload !== "") {
+    const formatted = formatPayload(meta.payload).trim();
+    if (formatted && formatted !== "{}") return formatted;
+  }
+  for (const blob of [meta.agent_prompt, m?.content]) {
+    const text = String(blob || "");
+    const match = text.match(/(?:^|\n)Payload\s*:\s*\n?([\s\S]*)$/i);
+    if (match && match[1].trim()) return match[1].trim();
+  }
+  return "";
+}
+
 function openEventInstruction(m) {
   if (!isEventTrigger(m)) return;
   const meta = m?.meta || {};
+  const kind = meta.kind === "schedule" ? "schedule" : "webhook";
   eventInstructionModal.value = {
     name: String(meta.name || "").trim() || "—",
     instruction: eventCarrierInstruction(m),
-    kind: meta.kind === "schedule" ? "schedule" : "webhook",
+    kind,
+    showPayload: kind === "webhook",
+    payload: eventPayloadText(m),
   };
+}
+
+function bubbleTitle(m) {
+  if (isEventTrigger(m)) {
+    return m?.meta?.kind === "webhook"
+      ? t("chat.readPayload")
+      : t("events.showInstruction");
+  }
+  if (botmailCollapsible(m)) {
+    return isBotmailExpanded(m) ? t("chat.mailCollapse") : t("chat.mailExpand");
+  }
+  return undefined;
+}
+
+function onMessageBubbleClick(m, ev) {
+  if (isEventTrigger(m)) {
+    const target = ev?.target;
+    if (target && typeof target.closest === "function") {
+      if (target.closest("a, button, input, textarea, summary, pre, code")) return;
+    }
+    openEventInstruction(m);
+    return;
+  }
+  onBotmailBubbleClick(m, ev);
 }
 
 function isNotify(m) {

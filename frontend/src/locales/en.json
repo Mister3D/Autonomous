@@ -280,6 +280,8 @@
   "chat.notifyFailed": "The notification was not shown.",
   "chat.webhookLabel": "Webhook",
   "chat.webhookPayload": "Payload",
+  "chat.webhookPayloadEmpty": "(no payload in the body)",
+  "chat.readPayload": "Read the request body",
   "chat.eventAnchor": "Open anchored message",
   "settings.title": "Settings",
   "companion.title": "Companions",

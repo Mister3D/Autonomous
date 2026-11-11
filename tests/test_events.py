@@ -196,6 +196,42 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     assert "hello" in agent_prompt
     assert "world" in agent_prompt
 
+    # Body that claims JSON but is not: keep the raw text for the chat modal.
+    raw = auth_client.post(
+        "/api/v1/hooks",
+        data="From: ada@example.com\nSubject: Bonjour\n\nCorps du mail",
+        headers={
+            "Authorization": f"Bearer {wh['token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    assert raw.status_code == 200, raw.data
+    msgs = chat_svc.list_messages("hookbot", home=home)
+    raw_hit = [
+        m
+        for m in msgs
+        if m["role"] == "user" and (m.get("meta") or {}).get("kind") == "webhook"
+    ]
+    assert "Corps du mail" in str(raw_hit[-1]["meta"].get("payload"))
+    assert raw_hit[-1]["meta"].get("has_payload") is True
+
+    plain = auth_client.post(
+        "/api/v1/hooks",
+        data="juste du texte",
+        headers={
+            "Authorization": f"Bearer {wh['token']}",
+            "Content-Type": "text/plain",
+        },
+    )
+    assert plain.status_code == 200, plain.data
+    msgs = chat_svc.list_messages("hookbot", home=home)
+    plain_hit = [
+        m
+        for m in msgs
+        if m["role"] == "user" and (m.get("meta") or {}).get("kind") == "webhook"
+    ]
+    assert plain_hit[-1]["meta"].get("payload") == "juste du texte"
+
     # Token-in-path is gone
     legacy = auth_client.post(f"/api/v1/hooks/{wh['token']}", json={"legacy": True})
     assert legacy.status_code in (404, 401, 405)

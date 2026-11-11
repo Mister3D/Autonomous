@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-11 (initial catalogue — agents must skim this after `docs/README.md`)
+**Last updated**: 2026-11-11 (event modal also shows the webhook body)
 
 ## Why this note exists
 
@@ -53,7 +53,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `DetailsPane.vue` | Bot details: model, capability, memory, manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md) |
 | `LibraryPane.vue` | Files / `~/shared`: list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
 | `EventsPane.vue` | Schedules + webhooks list (pause / copy curl / delete confirm). | [`events.md`](./events.md) |
-| `EventInstructionModal.vue` | Large modal: standing instruction body for a schedule/webhook. | [`events.md`](./events.md) |
+| `EventInstructionModal.vue` | Large modal: standing instruction, plus the webhook POST body when opened from a chat bubble. | [`events.md`](./events.md) |
 | `ManageMenu.vue` | Details manage list: clear chat, export PDF, desk restart/reset/remove, delete bot (arm → check). | [`chat-export-pdf.md`](./chat-export-pdf.md), [`bots-create.md`](./bots-create.md) |
 | `BotCompanion.vue` | Companion transfer toggle + device status. | [`companion.md`](./companion.md) |
 | `BotMcpGrants.vue` | Per-bot MCP grant checkboxes. | [`companion.md`](./companion.md) |

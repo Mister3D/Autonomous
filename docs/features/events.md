@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/migrations/001_schema.sql`, `autonomous/services/{bot_events,cronutil,scheduler}.py`, `autonomous/api/{bots,hooks}.py`, `autonomous/pi_extensions/events.ts`, `frontend/src/components/{EventsPane,ChatPane}.vue`  
-**Last updated**: 2026-11-10 (copy curl uses browser origin; POST /hooks only, no trailing slash)
+**Last updated**: 2026-11-11 (webhook bubble click opens the POST body)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@
 - **User**: small switch in front of the name (pause / resume, without the word "Actif"). Task: click the **name** to open the standing `instruction` modal; delete icon to the right of the next run. Webhook: click the **name** for the same modal; the token is not shown; copy + delete stay on the right. Modal = scrollable body for long texts. Empty → "(no instruction)". The chat fire card no longer repeats that body. The copy button puts a **curl** with `Authorization: Bearer <token>` on the clipboard (token not in the URL). Deleting a webhook opens a confirmation in the list ("Oui, supprimer" / "Annuler"), not a browser dialog.
 - `recurring=false` → deleted after firing, **unless** the next slot is less than 15 minutes away (burst, e.g. every 5 min). The row then stays until the first longer gap. For an hour of reminders, the cron must set the day and the hour (`25-55/5 11 1 11 *`). An hour set to `*` repeats the burst every hour, then stops when the gap exceeds 15 minutes (e.g. `25-55/5` stops after :55).
 - Missed ticks: **catch-up** (at most **one** due execution per task if `next_run_at <= now`), no N×missed burst.
-- Firing → chat message `role=user` with `meta.kind=schedule|webhook` (FIFO queue if busy, like user messages). The bot always receives the full preamble + standing instruction in `content` / `meta.agent_prompt` (unchanged for Pi). Meta also stores `instruction` for the UI. In the thread: centred card, light orange background, dotted outline — **type + name** (and optional payload `<details>` / anchor). Click the **name** (not the WEBHOOK/SCHEDULE prefix) → scrollable modal with the carrier instruction. Same click target on the Events list name. No eye icon. Webhook JSON stays in `meta.payload` for the UI; the same payload is copied into `meta.agent_prompt` (`Payload : …`, size-capped) so the agent can apply standing rules without relying on meta alone.
+- Firing → chat message `role=user` with `meta.kind=schedule|webhook` (FIFO queue if busy, like user messages). The bot always receives the full preamble + standing instruction in `content` / `meta.agent_prompt` (unchanged for Pi). Meta also stores `instruction` for the UI. In the thread: centred card, light orange background, dotted outline — **type + name** (and optional anchor). Click the **card or the name** → scrollable modal. A webhook modal leads with **Charge** (the POST body, pretty-printed JSON or raw text) then the standing instruction. A schedule modal is the instruction only. Same name click on the Events list (instruction only). No eye icon. Webhook JSON stays in `meta.payload` for the UI; the same payload is copied into `meta.agent_prompt` (`Payload : …`, size-capped) so the agent can apply standing rules without relying on meta alone. A body sent as `Content-Type: application/json` that is not valid JSON is kept as text (mail forwarders do this). `{}` and an empty body still count as no payload.
 - Public webhook: **POST only** `/api/v1/hooks` (no trailing `/` — single collection resource) with `Authorization: Bearer <token>` (no session auth; token is the secret, not in the URL). GET / path-token URLs are rejected. Rate-limited: 30 / min / token and 60 / min / client IP. Open exact path: `/api/v1/hooks` only.
 - **Copy curl** in Events uses the **browser origin** (`location.origin` + `/api/v1/hooks`), not the server-built absolute URL. Otherwise the clipboard often has `http://127.0.0.1:8787/…` (or plain HTTP behind a TLS proxy) → **301** on curl, Bearer/POST dropped on follow, while the bot may still claim the webhook exists. Absolute `url` in the API still prefers `AUTONOMOUS_PUBLIC_URL` when set.
 - **From a VM** (desktop with Internet): `host.docker.internal` + env `AUTONOMOUS_HOOKS_BASE` / file `~/shared/.autonomous/host-api.env`. Helper: `autonomous-hook <token> '{"ok":true}'` (sends Bearer). Without Internet (`network=none`) the VM cannot reach the host — recreate the desk with Internet, or call the webhook from outside.
@@ -53,7 +53,8 @@
 ## Quick check
 
 ```bash
-# UI: Events tab → webhook = switch + name, copy curl (Bearer) + delete, no raw token in the list
+# UI: click an orange webhook bubble → modal shows Charge (POST body) then the instruction.
+# Events tab → webhook = switch + name, copy curl (Bearer) + delete, no raw token in the list
 pytest tests/test_events.py tests/test_llm_schedules.py -q
 # Real model call (Pi + provider already configured on the host):
 # AUTONOMOUS_LLM_TESTS=1 pytest tests/test_llm_schedules.py -q -m llm

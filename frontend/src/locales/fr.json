@@ -280,6 +280,8 @@
   "chat.notifyFailed": "La notification n’a pas été affichée.",
   "chat.webhookLabel": "Webhook",
   "chat.webhookPayload": "Charge",
+  "chat.webhookPayloadEmpty": "(aucune charge dans le body)",
+  "chat.readPayload": "Lire la charge du body",
   "chat.eventAnchor": "Voir le message ancré",
   "settings.title": "Réglages",
   "companion.title": "Compagnons",
