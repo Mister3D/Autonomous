@@ -369,3 +369,13 @@ def test_catchup_advances_next_run(home):
     after = events_svc.get_schedule("catchbot", sched["id"], home=home)
     assert after["next_run_at"] > past
     assert after.get("last_run_at")
+
+
+def test_prompt_allows_self_relaunch_schedule(home):
+    from autonomous.services.pi_rpc import _events_system_hint
+
+    hint = _events_system_hint(home)
+    assert "Self-relaunch" in hint
+    assert "schedule_create" in hint
+    assert "Do not ask permission" in hint
+    assert "echo" in hint

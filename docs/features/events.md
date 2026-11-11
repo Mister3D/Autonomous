@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/migrations/001_schema.sql`, `autonomous/services/{bot_events,cronutil,scheduler}.py`, `autonomous/api/{bots,hooks}.py`, `autonomous/pi_extensions/events.ts`, `frontend/src/components/{EventsPane,ChatPane}.vue`  
-**Last updated**: 2026-11-11 (webhook bubble click opens the POST body)
+**Last updated**: 2026-11-12 (bot may schedule its own relaunch)
 
 ## User behaviour
 
@@ -11,6 +11,7 @@
 - **Storage**: equivalent expression in UTC (`cron_utc`) + `next_run_at` / `last_run_at` in UTC. `GET /api/v1/clock` exposes the effective time zone (`timezone` + `utc_offset`).
 - The UI shows the cron and the next run in that time zone (the cron tooltip shows the UTC expression). Changing the time zone in Settings redisplays already saved tasks without rewriting them.
 - **Creation**: Pi tools only. The tab has no form. Cron **update**: Pi tools. The header only shows the active time zone (`Fuseau : …`).
+- **Self-relaunch**: if the turn cannot finish (site down, wait longer than the turn, the bot told the user it will retry), the system hint tells the bot to call `schedule_create` itself, without asking. A shell echo is not a schedule. One-shot retry → `recurring=false`, and the instruction must carry the state and the next step. `schedule_create` is hidden in the thread, so the proof is the Events row and the later orange fire card. An already open Pi session keeps the previous hint until the next start.
 - The open **Events** tab updates itself when the agent creates, modifies or deletes a reminder (SSE `schedule.updated` / `schedule.deleted`, same for webhooks). No need to switch tabs.
 - To know the time before a relative cron, the agent runs `TZ=<timezone> date` with `vm_terminal_exec` (the VM is requested if there isn't one). It does not invent the time. `date -u` is UTC and ignores `TZ=`: the terminal output points this out, along with the local time. No separate clock tool.
 - A one-shot whose time has already passed today (day and day-of-week as `*`) is **refused** (`oneshot_too_far`) instead of being silently pushed to the next day. To target another day, the cron must set the day of month and the month. `GET /clock` includes `now` (`YYYY-MM-DD HH:MM`).
@@ -55,6 +56,7 @@
 ```bash
 # UI: click an orange webhook bubble → modal shows Charge (POST body) then the instruction.
 # Events tab → webhook = switch + name, copy curl (Bearer) + delete, no raw token in the list
+# Prompt: unfinished work → the bot creates its own one-shot schedule (no permission ask).
 pytest tests/test_events.py tests/test_llm_schedules.py -q
 # Real model call (Pi + provider already configured on the host):
 # AUTONOMOUS_LLM_TESTS=1 pytest tests/test_llm_schedules.py -q -m llm

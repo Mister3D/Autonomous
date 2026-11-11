@@ -166,7 +166,14 @@ def _events_system_hint(home) -> str:
         "(token not in the URL; GET is rejected). "
         "A fire injects a user chat message (queued if busy). Only you create schedules and webhooks "
         "(schedule_create / webhook_create). The user pauses, resumes and deletes them "
-        "in the Events inspector — there is no create form there."
+        "in the Events inspector — there is no create form there. "
+        "Self-relaunch: if this turn cannot finish the work and it must continue later "
+        "(a site is down, a wait is longer than this turn, you told the user you will retry), "
+        "create that schedule yourself with schedule_create. Do not ask permission. "
+        "An echo or a comment in the shell is not a schedule. "
+        "Use recurring=false for a one-shot retry, and put in the instruction the state "
+        "and the exact next step so the later run can continue alone. "
+        "Then tell the user the Next fire time returned by the tool."
     )
 
 _CLARIFY_SYSTEM_HINT = (

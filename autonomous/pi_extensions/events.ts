@@ -124,7 +124,9 @@ export default function (pi: ExtensionAPI) {
       + "recurring=false → delete after the fire, unless the next slot is within 15 minutes "
       + "(a short burst, e.g. every 5 min). For one hour of 5-min reminders, pin the day and hour "
       + "('25-55/5 11 1 11 *'), not hour '*'. "
-      + "instruction is injected as a user chat message when it fires.",
+      + "instruction is injected as a user chat message when it fires. "
+      + "If you need to relaunch yourself later, call this yourself — do not ask permission, "
+      + "and do not merely echo a reminder in the shell.",
     parameters: Type.Object({
       name: Type.String({ description: "Short label" }),
       cron: Type.String({
