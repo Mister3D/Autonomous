@@ -2954,20 +2954,70 @@ label.muted {
   background: var(--bg-soft);
 }
 
+.file-row.drop-over,
+.crumb.drop-over {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  outline-offset: -1px;
+}
+
+.file-row.dragging {
+  opacity: 0.45;
+}
+
+.file-row[draggable="true"] {
+  cursor: grab;
+}
+
+.file-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .file-name {
+  position: relative;
   flex: 1;
   min-width: 0;
   text-align: left;
   border: 0;
   background: transparent;
   padding: 0.4rem 0.25rem;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   gap: 0.55rem;
 }
 
+/* Same family as .bot-avatar-tip / .chat-token-tip — no browser title. */
+.file-row-tip {
+  position: absolute;
+  left: 0.25rem;
+  top: calc(100% + 6px);
+  z-index: 24;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  background: #1c1c1e;
+  color: #f5f5f7;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.file-row-tip::after {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 1rem;
+  border: 5px solid transparent;
+  border-bottom-color: #1c1c1e;
+}
+
 .file-label {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3005,11 +3055,13 @@ label.muted {
 }
 
 .file-size {
-  margin-left: auto;
   color: var(--muted);
   font-size: 0.72rem;
   font-family: var(--mono);
   flex: none;
+  white-space: nowrap;
+  padding: 0 0.15rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .file-ops {
@@ -3020,8 +3072,22 @@ label.muted {
   opacity: 0.55;
 }
 
-.file-row:hover .file-ops {
+.file-row:hover .file-ops,
+.file-ops:focus-within {
   opacity: 1;
+}
+
+.file-ops .action-confirm-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.file-ops .action-confirm {
+  color: var(--danger);
+}
+
+.file-ops .action-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 .file-icon-btn {

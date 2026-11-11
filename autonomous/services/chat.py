@@ -1017,6 +1017,78 @@ def unfinished_user_turn(
     return last_user
 
 
+_USER_STOP_MARKERS = (
+    "⏹ Stopped.",
+    "⏹ Stopped",
+)
+
+
+def _assistant_failure_is_user_stop(msg: dict[str, Any]) -> bool:
+    """True when the user (or GUARD:STOP) ended the turn on purpose."""
+    content = (msg.get("content") or "").strip()
+    if content in _USER_STOP_MARKERS or content.startswith("⏹ Stopped"):
+        return True
+    if "GUARD:STOP" in content:
+        return True
+    err = str((msg.get("meta") or {}).get("error") or "")
+    if "GUARD:STOP" in err:
+        return True
+    return False
+
+
+def _assistant_failure_is_retryable(msg: dict[str, Any]) -> bool:
+    """Recoverable infra/LLM failures — not a deliberate user stop."""
+    if _assistant_failure_is_user_stop(msg):
+        return False
+    meta = msg.get("meta") or {}
+    content = (msg.get("content") or "").strip()
+    err = str(meta.get("error") or "")
+    blob = f"{content}\n{err}".lower()
+    if content.startswith("⚠️") or meta.get("error") or meta.get("aborted"):
+        # Provider / RPC / abort leftovers — retry. Explicit user Stop excluded above.
+        if "this operation was aborted" in blob and "guard:stop" not in blob:
+            # Soft abort without a stop marker: still retryable (hung tool, etc.).
+            return True
+        return True
+    if not content:
+        return True
+    return False
+
+
+def retryable_failed_turn(
+    bot: str, *, home: Path | None = None
+) -> dict[str, Any] | None:
+    """Unfinished user turn whose last failure looks recoverable (timeout, ⚠️, …).
+
+    Returns the user message when the server should auto-``retry_unprocessed``.
+    Skips deliberate stops (⏹ Stopped / GUARD:STOP).
+    """
+    user = unfinished_user_turn(bot, home=home)
+    if user is None:
+        return None
+    msgs = list_messages(bot, limit=80, home=home)
+    last_user_i = -1
+    for i, m in enumerate(msgs):
+        if m.get("id") == user.get("id"):
+            last_user_i = i
+            break
+    if last_user_i < 0:
+        return user
+    for m in msgs[last_user_i + 1 :]:
+        if m.get("role") == "user":
+            break
+        if m.get("role") != "assistant":
+            continue
+        if _assistant_failure_is_user_stop(m):
+            return None
+        if _assistant_turn_looks_failed(m):
+            if not _assistant_failure_is_retryable(m):
+                return None
+            continue
+        return None
+    return user
+
+
 def pending_resume_card(bot: str, *, home: Path | None = None) -> dict[str, Any] | None:
     for msg in reversed(list_messages(bot, limit=40, home=home)):
         meta = msg.get("meta") or {}

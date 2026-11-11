@@ -1,23 +1,50 @@
 const BASE = "/api/v1";
 
 async function request(path, options = {}) {
+  const body = options.body;
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers = { ...(options.headers || {}) };
+  // Never force JSON Content-Type on FormData — that breaks multipart boundary
+  // and some browsers/proxies then surface a opaque "Failed to fetch".
+  if (isForm) {
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  } else if (
+    body != null &&
+    typeof body === "object" &&
+    !(body instanceof Blob) &&
+    !(body instanceof ArrayBuffer)
+  ) {
+    if (!headers["Content-Type"] && !headers["content-type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
   const opts = {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   };
-  if (opts.body instanceof FormData) {
-    // Let the browser set multipart boundary.
-    if (opts.headers && opts.headers["Content-Type"]) {
-      delete opts.headers["Content-Type"];
-    }
-  } else if (opts.body && typeof opts.body === "object") {
+  if (
+    !isForm &&
+    opts.body != null &&
+    typeof opts.body === "object" &&
+    !(opts.body instanceof Blob) &&
+    !(opts.body instanceof ArrayBuffer)
+  ) {
     opts.body = JSON.stringify(opts.body);
   }
-  const res = await fetch(`${BASE}${path}`, opts);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, opts);
+  } catch (e) {
+    const err = new Error(
+      e?.message === "Failed to fetch"
+        ? "Network error while contacting the server (upload interrupted)."
+        : e?.message || String(e)
+    );
+    err.cause = e;
+    throw err;
+  }
   const ct = res.headers.get("content-type") || "";
   const data = ct.includes("application/json") ? await res.json() : await res.text();
   if (!res.ok) {
@@ -106,11 +133,11 @@ export const api = {
   /** Chat drop/picker → ~/shared/upload/<uuid>/<filename> */
   uploadChatFile: (name, file) => {
     const fd = new FormData();
-    fd.append("file", file, file.name);
-    return request(`/bots/${name}/chat/files`, {
+    const fname = String(file?.name || "upload.bin").trim() || "upload.bin";
+    fd.append("file", file, fname);
+    return request(`/bots/${encodeURIComponent(name)}/chat/files`, {
       method: "POST",
       body: fd,
-      headers: {},
     });
   },
   clearMessages: (name) => request(`/bots/${name}/messages`, { method: "DELETE" }),
@@ -169,14 +196,22 @@ export const api = {
       method: "POST",
       body: { path: path || ".", name: dirname },
     }),
+  moveFile: (name, src, dest = ".") =>
+    request(`/bots/${name}/files/move`, {
+      method: "POST",
+      body: { src, dest: dest || "." },
+    }),
   uploadFile: (name, path, file) => {
     const fd = new FormData();
-    fd.append("file", file, file.name);
-    return request(`/bots/${name}/files/upload?path=${encodeURIComponent(path || ".")}`, {
-      method: "POST",
-      body: fd,
-      headers: {},
-    });
+    const fname = String(file?.name || "upload.bin").trim() || "upload.bin";
+    fd.append("file", file, fname);
+    return request(
+      `/bots/${encodeURIComponent(name)}/files/upload?path=${encodeURIComponent(path || ".")}`,
+      {
+        method: "POST",
+        body: fd,
+      }
+    );
   },
   settings: () => request("/settings"),
   putSettings: (body) => request("/settings", { method: "PUT", body }),

@@ -1215,12 +1215,19 @@ function onCompanionFocus(ev) {
   }, 150);
 }
 
+function onSseCatchup() {
+  // After an SSE drop / tab wake, resync DB → store so the thread cannot stay
+  // frozen while the agent kept writing messages server-side.
+  if (state.currentBot) loadMessages(state.currentBot);
+}
+
 onMounted(() => {
   applyRoute();
   if (state.currentBot) loadMessages(state.currentBot);
   loadPreviews();
   loadPiStatus();
   window.addEventListener("autonomous-focus", onCompanionFocus);
+  window.addEventListener("autonomous-sse-catchup", onSseCatchup);
   narrowMq = window.matchMedia("(max-width: 1080px)");
   narrowLayout.value = narrowMq.matches;
   narrowMq.addEventListener("change", onNarrowChange);
@@ -1240,6 +1247,7 @@ function onMobileChange() {
 
 onUnmounted(() => {
   window.removeEventListener("autonomous-focus", onCompanionFocus);
+  window.removeEventListener("autonomous-sse-catchup", onSseCatchup);
   window.clearTimeout(focusTimer);
   narrowMq?.removeEventListener("change", onNarrowChange);
   mobileMq?.removeEventListener("change", onMobileChange);

@@ -473,13 +473,17 @@ class PiRpcSession:
         *,
         images: list[dict[str, Any]] | None = None,
         streaming_behavior: str | None = None,
+        timeout: float = 300.0,
     ) -> dict[str, Any]:
+        # ACK only (preflight). Pi can spend a long time on compaction / model
+        # warm-up before ``preflightResult``; 30s was aborting healthy long turns
+        # and leaving the child process streaming while the UI showed a timeout.
         fields: dict[str, Any] = {"message": message}
         if images:
             fields["images"] = images
         if streaming_behavior:
             fields["streamingBehavior"] = streaming_behavior
-        return self.request("prompt", timeout=30.0, **fields)
+        return self.request("prompt", timeout=float(timeout), **fields)
 
     def steer(self, message: str) -> dict[str, Any]:
         """Queue a steering message (delivered after current tool turn, before next LLM call)."""

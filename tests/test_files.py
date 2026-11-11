@@ -148,3 +148,34 @@ def test_write_refuses_overwrite_image(home):
     with pytest.raises(AutonomousError) as exc:
         files_svc.write_text("fow", "x.png", "oops", home=home)
     assert exc.value.code == "refuse_overwrite_binary"
+
+
+def test_list_dir_reports_folder_size(home):
+    bots_svc.create_bot("fsz", slug="fsz", home=home)
+    root = home / "bots" / "fsz" / "home"
+    folder = root / "docs"
+    folder.mkdir()
+    (folder / "a.txt").write_bytes(b"12345")
+    (folder / "b.txt").write_bytes(b"abc")
+    entries = files_svc.list_dir("fsz", ".", home=home)
+    docs = next(e for e in entries if e["name"] == "docs")
+    assert docs["is_dir"] is True
+    assert docs["size"] == 8
+
+
+def test_move_into_folder(home, auth_client):
+    bots_svc.create_bot("fmv", slug="fmv", home=home)
+    root = home / "bots" / "fmv" / "home"
+    (root / "CV").mkdir()
+    (root / "note.pdf").write_bytes(b"%PDF")
+    out = files_svc.move_path("fmv", "note.pdf", "CV", home=home)
+    assert out["path"] == "CV/note.pdf"
+    assert (root / "CV" / "note.pdf").is_file()
+    assert not (root / "note.pdf").exists()
+    r = auth_client.post(
+        "/api/v1/bots/fmv/files/move",
+        json={"src": "CV/note.pdf", "dest": "."},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["path"] == "note.pdf"
+    assert (root / "note.pdf").is_file()

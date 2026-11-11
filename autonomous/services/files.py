@@ -69,6 +69,34 @@ def resolve(bot: str, rel: str, home: Path | None = None) -> Path:
     return target
 
 
+def _dir_total_size(path: Path, *, max_entries: int = 50_000) -> int:
+    """Sum file bytes under ``path`` (best-effort; capped for huge trees)."""
+    total = 0
+    seen = 0
+    stack = [path]
+    try:
+        while stack:
+            current = stack.pop()
+            with os.scandir(current) as it:
+                for entry in it:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                            continue
+                        if entry.is_file(follow_symlinks=False):
+                            seen += 1
+                            if seen > max_entries:
+                                return total
+                            total += entry.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        continue
+    except OSError:
+        return total
+    return total
+
+
 def list_dir(bot: str, path: str = ".", home: Path | None = None) -> list[dict[str, Any]]:
     target = resolve(bot, path, home=home)
     if not target.exists():
@@ -80,12 +108,13 @@ def list_dir(bot: str, path: str = ".", home: Path | None = None) -> list[dict[s
     for child in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
         rel = str(child.relative_to(root)).replace(os.sep, "/")
         stat = child.stat()
+        is_dir = child.is_dir()
         entries.append(
             {
                 "name": child.name,
                 "path": rel,
-                "is_dir": child.is_dir(),
-                "size": None if child.is_dir() else stat.st_size,
+                "is_dir": is_dir,
+                "size": _dir_total_size(child) if is_dir else stat.st_size,
                 "modified_at": datetime.fromtimestamp(
                     stat.st_mtime, tz=timezone.utc
                 ).isoformat(),
@@ -359,13 +388,58 @@ def _safe_filename(name: str) -> str:
 def _entry_dict(root: Path, target: Path) -> dict[str, Any]:
     stat = target.stat()
     rel = str(target.relative_to(root)).replace(os.sep, "/")
+    is_dir = target.is_dir()
     return {
         "name": target.name,
         "path": rel,
-        "is_dir": target.is_dir(),
-        "size": None if target.is_dir() else stat.st_size,
+        "is_dir": is_dir,
+        "size": _dir_total_size(target) if is_dir else stat.st_size,
         "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
     }
+
+
+def move_path(
+    bot: str,
+    src: str,
+    dest_dir: str = ".",
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Move a file or directory into ``dest_dir`` (same basename)."""
+    root = _root(bot, home)
+    source = resolve(bot, src, home=home)
+    if source == root:
+        raise Forbidden(t("files.forbidden"))
+    if not source.exists():
+        raise NotFound(t("files.not_found"))
+    dest_parent = resolve(bot, dest_dir or ".", home=home)
+    if not dest_parent.exists() or not dest_parent.is_dir():
+        raise NotFound(t("files.not_found"))
+    # Refuse moving a directory into itself or a descendant.
+    try:
+        source.resolve().relative_to(root)
+        dest_parent.resolve().relative_to(root)
+    except ValueError as exc:
+        raise Forbidden(t("files.forbidden")) from exc
+    if source.is_dir():
+        try:
+            dest_parent.resolve().relative_to(source.resolve())
+            raise Forbidden(t("files.forbidden"))
+        except ValueError:
+            pass
+    dest = dest_parent / source.name
+    if dest.resolve() == source.resolve():
+        return _entry_dict(root, source)
+    if dest.exists():
+        raise ValidationError(t("files.exists"), code="exists")
+    shutil.move(str(source), str(dest))
+    try:
+        os.chown(dest, 1000, 1000)
+    except OSError:
+        pass
+    entry = _entry_dict(root, dest)
+    _notify_changed(bot, op="move", path=entry["path"], is_dir=entry["is_dir"])
+    return entry
 
 
 def mkdir(

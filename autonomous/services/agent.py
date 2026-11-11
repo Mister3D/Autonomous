@@ -280,8 +280,16 @@ def recover_silent_busy_runs(
             else:
                 # DB busy but no worker → zombie.
                 should = True
-        elif status == "idle" and pending_card and not live:
-            should = True
+        elif status == "idle" and not live:
+            if pending_card:
+                should = True
+            else:
+                try:
+                    should = bool(
+                        chat_svc.retryable_failed_turn(name, home=home)
+                    )
+                except Exception:
+                    should = False
 
         if not should:
             continue
@@ -977,6 +985,17 @@ class PiAgent:
             except PiRpcError as exc:
                 state["error"] = str(exc)
                 state["settled"].set()
+                # Timeout / RPC failure often leaves the child mid-preflight or
+                # still streaming — kill it so the UI stops getting orphan SSE
+                # and the next retry can start a clean session.
+                try:
+                    MANAGER.abort(bot)
+                except Exception:
+                    pass
+                try:
+                    MANAGER.stop(bot)
+                except Exception:
+                    pass
             except Exception as exc:
                 log.exception("Pi run failed for %s", bot)
                 state["error"] = str(exc)
@@ -1114,12 +1133,26 @@ class PiAgent:
                             daemon=True,
                         ).start()
                     else:
+                        drained = False
                         try:
-                            chat_svc.drain_queued_user_messages(bot, home=home)
+                            drained = bool(
+                                chat_svc.drain_queued_user_messages(
+                                    bot, home=home
+                                )
+                            )
                         except Exception:
                             log.exception(
                                 "drain queued user messages failed for %s", bot
                             )
+                        # RPC timeout / provider ⚠️ left idle with no queue —
+                        # retry soon (scheduler is a backstop only).
+                        if not drained and state.get("error"):
+                            threading.Thread(
+                                target=_kick_retryable_failure_run,
+                                args=(bot, home),
+                                name=f"retry-fail-{bot}",
+                                daemon=True,
+                            ).start()
                 elif owns and soft_busy:
                     # Slot released but another Pi turn may still be mid-flight.
                     try:
@@ -1528,6 +1561,34 @@ _GUARD_RESUME_PROMPT = (
     "review gate. Resume your unfinished task immediately with the next useful "
     "tool calls. Do not redo work that already succeeded."
 )
+
+
+def _kick_retryable_failure_run(bot: str, home: Path | None) -> None:
+    """Auto-retry after RPC/provider failure without waiting for the scheduler."""
+    import time
+
+    time.sleep(2.0)
+    try:
+        if has_pending_human_wait(bot, home=home):
+            return
+        if run_in_progress(bot):
+            return
+        if not chat_svc.retryable_failed_turn(bot, home=home):
+            return
+        now = time.monotonic()
+        with _PROGRESS_LOCK:
+            last_retry = _LAST_SILENT_RETRY.get(bot, 0.0)
+            if (now - last_retry) < _SILENT_BUSY_COOLDOWN_SEC:
+                return
+            _LAST_SILENT_RETRY[bot] = now
+        out = chat_svc.retry_unprocessed(bot, home=home)
+        log.warning(
+            "auto-retry after failure bot=%s action=%s",
+            bot,
+            (out or {}).get("action"),
+        )
+    except Exception:
+        log.exception("auto-retry after failure failed for %s", bot)
 
 
 def _kick_guard_resume_run(bot: str, home: Path | None) -> None:

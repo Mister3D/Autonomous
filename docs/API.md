@@ -127,6 +127,7 @@ POST   /bots/:name/vault/inject          # type|paste granted secret → VNC (no
 GET    /bots/:name/files?path=
 POST   /bots/:name/files/upload?path=    # multipart field "file"
 POST   /bots/:name/files/mkdir           # JSON {path, name}
+POST   /bots/:name/files/move            # JSON {src, dest} — move into directory
 GET    /bots/:name/files/download?path=
 GET    /bots/:name/files/content?path=   # UTF-8 text (agent)
 PUT    /bots/:name/files/content         # JSON {path, content}

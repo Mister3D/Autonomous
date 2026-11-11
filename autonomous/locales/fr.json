@@ -30,6 +30,7 @@
   "terminal.done": "Commande terminée (code {code})",
   "files.not_found": "Chemin introuvable",
   "files.forbidden": "Chemin hors du répertoire du bot",
+  "files.exists": "Un fichier portant ce nom existe déjà",
   "job.not_found": "Tâche « {id} » introuvable",
   "health.ok": "Autonomous {version} OK",
   "serve.starting": "Écoute sur http://{host}:{port}",

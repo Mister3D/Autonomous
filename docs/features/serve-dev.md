@@ -41,7 +41,7 @@ A single TCP port:
 - Don't install system packages without asking the user.
 - The WebSocket sniff (5 s timeout, `MSG_PEEK`) must **not** stay on the HTTP socket, nor block the thread that does `accept`. Otherwise `GET /api/v1/events` (SSE, ping every 15 s) is cut; the browser retries and shows `net::ERR_EMPTY_RESPONSE`. The bus drops the subscription as soon as the client sends FIN (a successful write in `CLOSE-WAIT` is not enough to detect the close).
 - Don't send `Connection: keep-alive` on the SSE: Werkzeug already adds `Connection: close`. Two `Connection` headers make the stream fail on the browser side.
-- The client (`frontend/src/sync.js`) does not reopen `EventSource` on every route change: closing a GET that has not yet been answered produces the same `ERR_EMPTY_RESPONSE`.
+- The client (`frontend/src/sync.js`) does not reopen `EventSource` on every route change: closing a GET that has not yet been answered produces the same `ERR_EMPTY_RESPONSE`. It **does** force a new stream when `readyState === CLOSED`, and on tab focus triggers a message catch-up reload so a killed SSE cannot freeze the chat forever.
 
 ## Quick check
 

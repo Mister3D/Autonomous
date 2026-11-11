@@ -43,6 +43,7 @@ from autonomous.models.schemas import (
     DeskTypeSchema,
     FileContentSchema,
     FileEntrySchema,
+    FileMoveSchema,
     FileWriteSchema,
     FilesQuerySchema,
     GroundLocateResultSchema,
@@ -1305,6 +1306,24 @@ class BotFileMkdir(MethodView):
             abort(400, message="Missing name")
         try:
             return files_svc.mkdir(name, parent, dirname, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/files/move")
+class BotFileMove(MethodView):
+    @blp.arguments(FileMoveSchema)
+    @blp.response(200, FileEntrySchema)
+    @blp.doc(summary="Move a file or folder within ~/shared")
+    def post(self, body, name):
+        """Move ``src`` into directory ``dest`` (basename preserved)."""
+        try:
+            return files_svc.move_path(
+                name,
+                body.get("src") or "",
+                body.get("dest") or ".",
+                home=g.home,
+            )
         except AutonomousError as exc:
             _handle(exc)
 

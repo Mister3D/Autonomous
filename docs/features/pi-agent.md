@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-11 (auto-resume after restart; no Relancer+Resume double)
+**Last updated**: 2026-11-11 (RPC prompt ACK 300s; auto-retry ⚠️ timeouts; SSE catch-up)
 
 ## User behaviour
 
@@ -26,7 +26,8 @@
 - During a run: the send button becomes the **Working orb** ([thinking-orbs](https://libraries.dev/orbs), canvas engine `thinking-orbs/engine` via `WorkingOrb.vue`) — click = Pi `abort`. In the Conversation thread, the same orb appears **as long as no assistant text has started** (waiting for the model / between tool turns); from the first token, it disappears in favour of the bubble.
 - If the Pi session dies while the user is resolving vault / desk / approval / clarify: after the human action, `mark_interrupted_after_wait` goes `idle` then **auto-resumes** (`retry_unprocessed` / `resume_run`) — no manual Resume card in the happy path. A Resume card (`meta.kind=agent_interrupted`) is only a fallback if auto-retry cannot start; `POST /bots/:name/resume` still works.
 - **Retry** bar above the composer (idle with queue left undrained after a **2 s** grace, hard LLM failure bubble, or soft-stuck busy after **45 s** — not during a real human wait): **Relancer** is **manual only** → `POST /bots/:name/retry`. Soft-clears a dead worker (tools / streaming), keeps `pi_session_id` and the chat history, then drains the oldest queued user/webhook **or** resumes the last unfinished turn. Refuses with `waiting_for_user` if a vault/approval/clarify/desk card is still open. Right after send (`user` with no assistant yet, or busy waiting for the first token) must **not** show the bar — that is the normal Working-orb wait, not a failed turn. **Queued bubbles while the agent is live** (`busy` / streaming / running tools / waiting-for-reply orb) are normal — hide Relancer. Between two drains status can flicker `idle` with « En file » still present: the **2 s** idle-queue grace avoids flashing « Des messages sont en file » mid-burst. **Never** show Relancer on top of a pending Resume card (same action twice). The front **must not** auto-POST `/retry` or `/resume` — recovery must work with no browser open.
-- **Silent-busy watchdog** (server): each scheduler tick (`~30 s`) calls `recover_silent_busy_runs`. A bot left `busy` with no pending human wait, and either no live worker **or** a live worker with no Pi progress (token / tool / settle) for **45 s**, gets `retry_unprocessed` (90 s cooldown). Also auto-retries **idle + pending Resume card** leftovers. Progress is stamped via `touch_run_progress` on every Pi event and at `start_run`.
+- **Silent-busy watchdog** (server): each scheduler tick (`~30 s`) calls `recover_silent_busy_runs`. A bot left `busy` with no pending human wait, and either no live worker **or** a live worker with no Pi progress (token / tool / settle) for **45 s**, gets `retry_unprocessed` (90 s cooldown). Also auto-retries **idle + pending Resume card** and **idle + retryable failed turn** (`⚠️` / RPC timeout / provider error — **not** `⏹ Stopped` / `GUARD:STOP`). Progress is stamped via `touch_run_progress` on every Pi event and at `start_run`. After a `PiRpcError`, the worker **aborts+stops** the Pi child (so orphan SSE stops) and kicks an early auto-retry (~2 s) in addition to the scheduler backstop.
+- **Pi `prompt` ACK timeout**: 300 s (was 30 s). The RPC response is only the preflight ACK (compaction / warm-up can exceed 30 s); the real turn still waits on `agent_settled`. A short ACK timeout used to post `⚠️ Pi RPC timeout on prompt` while the child kept streaming — the chat looked frozen / half-updated.
 - Desk ready while a run is still going: **no** second `resume_run` (avoids "Agent is already processing"). Always set `status=busy` back for the Working orb — don't leave a forced `idle` at the end of desk boot.
 - On `tool_execution_end`, Pi often sends `args={}`: Autonomous keeps the args from the start and enriches `meta` (click/drag coords, `duration_ms`, `timed_out`) for the UI.
 - **Actions** guard-rail (Settings, saved as soon as the field changes — no button), counter **since the last `user` message** (user, webhook or cron) — **not** the whole conversation, and **not** reset by a desk/vault resume:
@@ -84,7 +85,7 @@ Pi is **not** in the VMs. It's on the host.
 - PATH: serve with `~/.local/bin` visible (the code enriches `PATH` for subprocesses).
 - Host Pi tools active (web search + vault + terminal + VM screenshot). Computer-use / click = next step.
 - `message.delta` is not replayed on refresh: the final content is in the database via `message.updated`.
-- Do **not** rebroadcast SSE envelopes on `BroadcastChannel`: every tab already has EventSource, and the posting tab also receives its own broadcast → each `message.delta` was applied twice (duplicated tokens until refresh). See `frontend/src/sync.js`.
+- Do **not** rebroadcast SSE envelopes on `BroadcastChannel`: every tab already has EventSource, and the posting tab also receives its own broadcast → each `message.delta` was applied twice (duplicated tokens until refresh). See `frontend/src/sync.js`. If `EventSource.readyState === CLOSED`, force a new stream; on tab `visibilitychange` → visible, emit `autonomous-sse-catchup` so HubView reloads the current bot thread (SSE drop must not leave a frozen pane while the server kept writing).
 - Mid-turn navigation: `loadMessages` / mid-stream `message.updated` must not truncate SSE text already shown — `preferLiveStreamingMessage` keeps the longer body while `streaming` is true; missing bubbles are created on delta if `message.created` was missed.
 - On Pi `message_end`: don't reopen a bubble if it was already finalised at `toolcall_start` (otherwise an identical duplicate right before the tool).
 - On refresh, don't stop at the last page of tools: the `user` message (and therefore the assistant reply more recent than it) must stay in the displayed thread.
@@ -115,5 +116,5 @@ pi --list-models
 curl -s -b cookies http://127.0.0.1:8787/api/v1/pi/status
 # Send a web message → streaming assistant bubbles; Stop cuts the run.
 python3 -m pytest tests/test_bot_api_token.py tests/test_chat.py::test_openapi_generated -q
-python3 -m pytest tests/test_recover_stale_runs.py tests/test_retry_unprocessed.py tests/test_silent_busy_recover.py -q
+python3 -m pytest tests/test_recover_stale_runs.py tests/test_retry_unprocessed.py tests/test_silent_busy_recover.py tests/test_retryable_failed_turn.py -q
 ```

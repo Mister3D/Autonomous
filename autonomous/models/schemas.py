@@ -319,6 +319,11 @@ class FileEntrySchema(Schema):
     modified_at = fields.Str(allow_none=True)
 
 
+class FileMoveSchema(Schema):
+    src = fields.Str(required=True, validate=validate.Length(min=1))
+    dest = fields.Str(load_default=".")
+
+
 class FileContentSchema(Schema):
     path = fields.Str(required=True)
     name = fields.Str()

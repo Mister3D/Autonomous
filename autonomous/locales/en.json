@@ -30,6 +30,7 @@
   "terminal.done": "Command finished (exit {code})",
   "files.not_found": "Path not found",
   "files.forbidden": "Path outside bot directory",
+  "files.exists": "A file with that name already exists",
   "job.not_found": "Job '{id}' not found",
   "health.ok": "Autonomous {version} OK",
   "serve.starting": "Serving on http://{host}:{port}",
