@@ -89,6 +89,29 @@ def test_retry_refuses_real_human_wait(home):
         assert exc.code == "waiting_for_user"
 
 
+def test_retry_does_not_cut_a_live_pi(home, monkeypatch):
+    import threading
+
+    from autonomous.services import agent as agent_svc
+    from autonomous.services.pi_rpc import MANAGER
+
+    bots_svc.create_bot("retry-live", home=home)
+    bots_svc.patch_bot("retry-live", {"status": "busy"}, home=home)
+    settled = threading.Event()
+    assert agent_svc._register_run("retry-live", settled)
+    stopped: list[str] = []
+    monkeypatch.setattr(MANAGER, "abort", lambda *a, **k: stopped.append("abort"))
+    monkeypatch.setattr(MANAGER, "stop", lambda *a, **k: stopped.append("stop"))
+    try:
+        out = chat_svc.retry_unprocessed("retry-live", home=home)
+        assert out == {"ok": True, "action": "live"}
+        assert stopped == []
+        assert bots_svc.get_bot("retry-live", home=home)["status"] == "busy"
+    finally:
+        settled.set()
+        agent_svc.clear_active_run("retry-live")
+
+
 def test_retry_noop_when_turn_complete(home, monkeypatch):
     bots_svc.create_bot("retry-ok", home=home)
     chat_svc.create_message("retry-ok", "Salut", role="user", home=home)

@@ -29,7 +29,6 @@ _ACTIVE_RUNS: dict[str, threading.Event] = {}
 _PROGRESS_LOCK = threading.Lock()
 _LAST_PROGRESS: dict[str, float] = {}
 _LAST_SILENT_RETRY: dict[str, float] = {}
-_SILENT_BUSY_GRACE_SEC = 45.0
 _SILENT_BUSY_COOLDOWN_SEC = 90.0
 
 # bot → True : prochain settle/abort ne doit pas poster « ⚠️ This operation was aborted »
@@ -239,16 +238,19 @@ def recover_silent_busy_runs(
     home: Path | None = None,
     grace_sec: float | None = None,
 ) -> list[str]:
-    """Server watchdog: stuck work → ``retry_unprocessed`` (no browser needed).
+    """Server watchdog. It never abort/stops a live Pi process.
 
-    Covers:
-    - ``busy`` with no live worker (zombie status);
-    - live worker with no Pi progress for ``grace_sec`` (GPU idle / hung tools);
-    - leftover pending Resume cards while idle (legacy / failed auto-resume).
+    A running agent can sit for hours (a long tool, a slow model). Nothing
+    here ends it. The user stops it from the UI (Working orb → ``stop_run``).
+
+    This only resumes work when Pi is already gone:
+    - ``busy`` with no live worker (zombie status) → ``retry_unprocessed``;
+    - leftover pending Resume cards while idle;
+    - idle retryable failures, and turns cut after a preamble plus tool cards.
+
+    ``grace_sec`` is accepted for callers and ignored: duration is not a stop.
     """
-    grace = float(
-        _SILENT_BUSY_GRACE_SEC if grace_sec is None else grace_sec
-    )
+    del grace_sec
     recovered: list[str] = []
     now = time.monotonic()
     for bot in bots_svc.list_bots(home=home):
@@ -267,19 +269,14 @@ def recover_silent_busy_runs(
 
         live = run_in_progress(name)
         with _PROGRESS_LOCK:
-            last = _LAST_PROGRESS.get(name)
             last_retry = _LAST_SILENT_RETRY.get(name, 0.0)
 
         should = False
         if status == "busy":
             if live:
-                if last is None:
-                    touch_run_progress(name)
-                elif (now - last) >= grace:
-                    should = True
-            else:
-                # DB busy but no worker → zombie.
-                should = True
+                continue
+            # DB busy but no worker → zombie. Nothing live to kill.
+            should = True
         elif status == "idle" and not live:
             if pending_card:
                 should = True
@@ -287,7 +284,7 @@ def recover_silent_busy_runs(
                 try:
                     should = bool(
                         chat_svc.retryable_failed_turn(name, home=home)
-                    )
+                    ) or bool(chat_svc.turn_ended_on_tool(name, home=home))
                 except Exception:
                     should = False
 
@@ -983,19 +980,26 @@ class PiAgent:
                     except Exception:
                         pass
             except PiRpcError as exc:
-                state["error"] = str(exc)
-                state["settled"].set()
-                # Timeout / RPC failure often leaves the child mid-preflight or
-                # still streaming — kill it so the UI stops getting orphan SSE
-                # and the next retry can start a clean session.
-                try:
-                    MANAGER.abort(bot)
-                except Exception:
-                    pass
-                try:
-                    MANAGER.stop(bot)
-                except Exception:
-                    pass
+                # Do not kill a Pi process that is still up. A slow preflight
+                # or a multi-hour turn is not a reason to stop the agent; the
+                # user does that from the UI. If the process already exited,
+                # record the error so the run can settle.
+                session = MANAGER.get(bot)
+                if session is not None and session.alive:
+                    log.warning(
+                        "Pi RPC error while session still alive for %s: %s",
+                        bot,
+                        exc,
+                    )
+                    while not state["settled"].wait(timeout=2.0):
+                        session = MANAGER.get(bot)
+                        if session is None or not session.alive:
+                            state["error"] = str(exc)
+                            state["settled"].set()
+                            break
+                else:
+                    state["error"] = str(exc)
+                    state["settled"].set()
             except Exception as exc:
                 log.exception("Pi run failed for %s", bot)
                 state["error"] = str(exc)

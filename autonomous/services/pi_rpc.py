@@ -455,7 +455,12 @@ class PiRpcSession:
                     waiter["event"].set()
                 self._pending.clear()
 
-    def request(self, command_type: str, timeout: float = 30.0, **fields: Any) -> dict[str, Any]:
+    def request(
+        self,
+        command_type: str,
+        timeout: float | None = 30.0,
+        **fields: Any,
+    ) -> dict[str, Any]:
         if not self.alive:
             raise PiRpcError("Pi session is not running")
         req_id = fields.pop("id", None) or str(uuid.uuid4())
@@ -466,7 +471,11 @@ class PiRpcSession:
             self._pending[req_id] = slot
         try:
             self._write(payload)
-            if not event.wait(timeout):
+            # timeout=None waits until Pi answers, the process exits, or the
+            # user clicks Stop (that unblocks the waiter). No clock kills Pi.
+            if timeout is None:
+                event.wait()
+            elif not event.wait(timeout):
                 raise PiRpcError(f"Pi RPC timeout on {command_type}")
             if slot["error"]:
                 raise PiRpcError(str(slot["error"]))
@@ -481,17 +490,19 @@ class PiRpcSession:
         *,
         images: list[dict[str, Any]] | None = None,
         streaming_behavior: str | None = None,
-        timeout: float = 300.0,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
-        # ACK only (preflight). Pi can spend a long time on compaction / model
-        # warm-up before ``preflightResult``; 30s was aborting healthy long turns
-        # and leaving the child process streaming while the UI showed a timeout.
+        # ACK only (preflight). No deadline: compaction / a long turn must not
+        # end the agent. The user stops it from the UI, which unblocks this wait.
         fields: dict[str, Any] = {"message": message}
         if images:
             fields["images"] = images
         if streaming_behavior:
             fields["streamingBehavior"] = streaming_behavior
-        return self.request("prompt", timeout=float(timeout), **fields)
+        # None means no deadline. float(None) is what posted
+        # « float() argument must be a string or a real number, not 'NoneType' ».
+        wait = None if timeout is None else float(timeout)
+        return self.request("prompt", timeout=wait, **fields)
 
     def steer(self, message: str) -> dict[str, Any]:
         """Queue a steering message (delivered after current tool turn, before next LLM call)."""

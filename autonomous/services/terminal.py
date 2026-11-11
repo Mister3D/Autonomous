@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +21,12 @@ from autonomous.services.events import BUS
 _MAX_OUTPUT_CHARS = 200_000
 _DEFAULT_TIMEOUT = 30
 _MAX_TIMEOUT = 600
+
+# In-flight ``docker exec`` per bot, so the chat can stop that command
+# without stopping the Pi agent.
+_EXEC_LOCK = threading.Lock()
+_EXEC_PROCS: dict[str, subprocess.Popen[str]] = {}
+_EXEC_CANCELLED: set[str] = set()
 
 
 def _now() -> str:
@@ -151,6 +159,29 @@ def _llm_test_clock(bot: str, command: str, *, home: Path | None) -> dict[str, A
     )
 
 
+def _kill_proc(proc: subprocess.Popen[str]) -> None:
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def cancel_running_command(bot: str) -> bool:
+    """Kill the VM command this bot is waiting on. Pi keeps running."""
+    with _EXEC_LOCK:
+        proc = _EXEC_PROCS.get(bot)
+        if proc is None or proc.poll() is not None:
+            return False
+        _EXEC_CANCELLED.add(bot)
+    _kill_proc(proc)
+    return True
+
+
 def exec_command(
     bot: str,
     command: str,
@@ -197,27 +228,39 @@ def exec_command(
         "-lc",
         command,
     ]
+    proc: subprocess.Popen[str] | None = None
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout_s,
-            check=False,
+            start_new_session=True,
         )
-        exit_code = int(completed.returncode)
-        output = (completed.stdout or "") + (completed.stderr or "")
     except FileNotFoundError as exc:
         raise AutonomousError("docker CLI not found on host") from exc
-    except subprocess.TimeoutExpired as exc:
-        exit_code = 124
-        parts = []
-        if exc.stdout:
-            parts.append(exc.stdout if isinstance(exc.stdout, str) else exc.stdout.decode("utf-8", "replace"))
-        if exc.stderr:
-            parts.append(exc.stderr if isinstance(exc.stderr, str) else exc.stderr.decode("utf-8", "replace"))
-        parts.append(f"[timeout after {timeout_s}s]")
-        output = "".join(parts)
+    with _EXEC_LOCK:
+        _EXEC_CANCELLED.discard(bot)
+        _EXEC_PROCS[bot] = proc
+    try:
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout_s)
+            exit_code = int(proc.returncode or 0)
+            output = (stdout or "") + (stderr or "")
+        except subprocess.TimeoutExpired:
+            _kill_proc(proc)
+            exit_code = 124
+            output = f"[timeout after {timeout_s}s]"
+        with _EXEC_LOCK:
+            stopped = bot in _EXEC_CANCELLED
+        if stopped:
+            exit_code = 130
+            output = (output or "") + "\n[stopped]"
+    finally:
+        with _EXEC_LOCK:
+            if _EXEC_PROCS.get(bot) is proc:
+                _EXEC_PROCS.pop(bot, None)
+            _EXEC_CANCELLED.discard(bot)
 
     output = output + _utc_date_note(command, home)
     return append_log(bot, command, exit_code=exit_code, output=output, home=home)

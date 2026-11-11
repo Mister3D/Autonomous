@@ -58,7 +58,8 @@ POST   /bots/:name/chat/files       # multipart → ~/shared/upload/<uuid>/<name
 DELETE /bots/:name/messages         # + Pi session rotation
 DELETE /bots/:name/messages/:id     # cancel a still-queued bubble (meta.queued)
 GET    /bots/:name/messages/export.pdf  # discussion PDF (tool names, no args/results)
-POST   /bots/:name/stop             # abort run Pi
+POST   /bots/:name/stop             # abort run Pi (UI Stop next to the in-thread orb)
+POST   /bots/:name/tools/cancel     # kill the in-flight VM command; Pi keeps running
 POST   /bots/:name/resume           # resume after session died during approval
 POST   /bots/:name/retry            # relaunch queued / unfinished work (LLM outage); keeps chat + Pi session
 POST   /bots/:name/mail/tell        # {to, content?, attachments?, expect_reply?} → one-way (+ files; Manager expect_reply = async footer)

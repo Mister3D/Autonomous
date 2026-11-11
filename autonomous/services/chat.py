@@ -1001,20 +1001,51 @@ def unfinished_user_turn(
         break
     if last_user is None:
         return None
-    saw_ok_assistant = False
-    for m in msgs[last_user_i + 1 :]:
+    saw_ok, tool_after = _assistant_and_trailing_tools(msgs[last_user_i + 1 :])
+    if tool_after:
+        # Preamble bubble, then tools — the turn is still open (a long
+        # vm_terminal_exec killed by the watchdog must be resumed).
+        return last_user
+    if saw_ok:
+        return None
+    return last_user
+
+
+def _assistant_and_trailing_tools(msgs: list[dict[str, Any]]) -> tuple[bool, bool]:
+    """(saw a successful assistant reply, a tool card follows that reply)."""
+    saw_ok = False
+    tool_after = False
+    for m in msgs:
         role = m.get("role")
         if role == "user":
             break
-        if role != "assistant":
+        if role == "assistant":
+            if _assistant_turn_looks_failed(m):
+                continue
+            saw_ok = True
+            tool_after = False
             continue
-        if _assistant_turn_looks_failed(m):
-            continue
-        saw_ok_assistant = True
-        break
-    if saw_ok_assistant:
+        meta = m.get("meta") or {}
+        if role == "event" and meta.get("kind") == "tool" and saw_ok:
+            tool_after = True
+    return saw_ok, tool_after
+
+
+def turn_ended_on_tool(bot: str, *, home: Path | None = None) -> dict[str, Any] | None:
+    """User turn whose last successful reply is followed by tool cards and no close."""
+    user = unfinished_user_turn(bot, home=home)
+    if user is None:
         return None
-    return last_user
+    msgs = list_messages(bot, limit=80, home=home)
+    last_user_i = -1
+    for i, m in enumerate(msgs):
+        if m.get("id") == user.get("id"):
+            last_user_i = i
+            break
+    if last_user_i < 0:
+        return None
+    _, tool_after = _assistant_and_trailing_tools(msgs[last_user_i + 1 :])
+    return user if tool_after else None
 
 
 _USER_STOP_MARKERS = (
@@ -1119,6 +1150,11 @@ def retry_unprocessed(bot: str, *, home: Path | None = None) -> dict[str, Any]:
             "L’agent attend encore votre réponse (coffre / approbation / bureau).",
             code="waiting_for_user",
         )
+
+    # A live Pi is stopped only from the UI (Working orb). Relancer must not
+    # abort it, however long the turn has already run.
+    if agent_svc.run_in_progress(bot):
+        return {"ok": True, "action": "live"}
 
     # Soft clear — keep pi_session_id so the conversation context stays intact.
     agent_svc.clear_active_run(bot)

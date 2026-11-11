@@ -1,5 +1,5 @@
 <template>
-  <div class="tool-group" :class="[groupStatus, { live: !sealed }]">
+  <div class="tool-group" :class="[groupStatus, { live: !sealed || groupStatus === 'running' }]">
     <button class="tool-group-summary" type="button" @click="onToggleList">
       <span class="tool-group-ico" aria-hidden="true">⚙</span>
       <span class="tool-group-title">{{ title }}</span>
@@ -45,12 +45,22 @@
         <span
           v-if="livePreview.duration"
           class="tool-dur"
-          :class="{ timeout: livePreview.timedOut }"
+          :class="{ timeout: livePreview.timedOut, live: livePreview.running }"
         >{{ livePreview.duration }}</span>
         <span
           class="tool-live-status"
           :class="{ timeout: livePreview.timedOut }"
         >{{ livePreview.status }}</span>
+        <button
+          v-if="livePreview.running"
+          type="button"
+          class="tool-stop-btn"
+          :disabled="stoppingTool"
+          :title="t('chat.stopToolHint')"
+          @click.stop="stopTool"
+        >
+          {{ t("chat.stopTool") }}
+        </button>
         <span v-if="livePreview.hint" class="tool-live-hint">{{ livePreview.hint }}</span>
       </div>
     </div>
@@ -85,13 +95,23 @@
             <span
               v-if="toolDurationLabel(m)"
               class="tool-dur"
-              :class="{ timeout: isTimedOut(m) }"
+              :class="{ timeout: isTimedOut(m), live: isRunning(m) }"
               :title="isTimedOut(m) ? t('chat.toolTimeout') : undefined"
             >{{ toolDurationLabel(m) }}</span>
             <span
               class="tool-row-status"
               :class="{ timeout: isTimedOut(m) }"
             >{{ statusLabel(m) }}</span>
+            <button
+              v-if="isRunning(m)"
+              type="button"
+              class="tool-stop-btn"
+              :disabled="stoppingTool"
+              :title="t('chat.stopToolHint')"
+              @click.stop="stopTool"
+            >
+              {{ t("chat.stopTool") }}
+            </button>
             <span v-if="pointerHint(m)" class="tool-row-pointer">{{ pointerHint(m) }}</span>
             <time
               v-if="rowTime(m)"
@@ -242,6 +262,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { api } from "../api";
 import { formatMsgTime } from "../timeFormat";
 
 const POINTER_TOOLS = new Set(["vm_click", "vm_drag", "vm_scroll"]);
@@ -250,9 +271,27 @@ const props = defineProps({
   entries: { type: Array, required: true },
   /** True once a later chat item (assistant, vault…) follows this group. */
   sealed: { type: Boolean, default: false },
+  bot: { type: String, default: "" },
 });
 
 const { t, locale } = useI18n();
+const stoppingTool = ref(false);
+
+function isRunning(m) {
+  return (m?.meta?.status || "running") === "running";
+}
+
+async function stopTool() {
+  if (!props.bot || stoppingTool.value) return;
+  stoppingTool.value = true;
+  try {
+    await api.cancelTool(props.bot);
+  } catch {
+    /* The command may already have finished. */
+  } finally {
+    stoppingTool.value = false;
+  }
+}
 const expanded = reactive({});
 /** Details open only when the user expands — never auto-open on seal. */
 const listOpen = ref(false);
@@ -573,9 +612,11 @@ const liveTick = computed(() => {
 
 /** Compact live line: last tool name + status (details stay in the folded list). */
 const livePreview = computed(() => {
-  if (props.sealed) return null;
-  const m = lastTool.value;
+  const running = [...entryTools()].reverse().find((m) => isRunning(m));
+  const m = running || lastTool.value;
   if (!m) return null;
+  const active = isRunning(m);
+  if (props.sealed && !active) return null;
   void nowMs.value;
   return {
     name: m.meta?.tool_name || t("chat.tool"),
@@ -583,6 +624,7 @@ const livePreview = computed(() => {
     hint: pointerHint(m),
     duration: toolDurationLabel(m),
     timedOut: isTimedOut(m),
+    running: active,
   };
 });
 

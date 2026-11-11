@@ -1520,6 +1520,29 @@ a:focus-visible {
   color: var(--muted);
 }
 
+.agent-stop-btn,
+.tool-stop-btn {
+  margin-left: 0.15rem;
+  border: 1px solid rgba(180, 60, 40, 0.45);
+  background: #fff;
+  color: #9a3412;
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.agent-stop-btn:hover,
+.tool-stop-btn:hover:not(:disabled) {
+  background: #fff1ee;
+}
+
+.tool-stop-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .thinking-inline {
   display: inline-flex;
   align-items: center;
@@ -4836,6 +4859,10 @@ button.msg-queued-cancel:focus-visible {
   font-weight: 600;
 }
 
+.tool-dur.live {
+  color: #9a3412;
+}
+
 .tool-dur.timeout,
 .tool-group-badge.timeout,
 .tool-row-status.timeout,
@@ -4916,8 +4943,8 @@ button.msg-queued-cancel:focus-visible {
 
 /* Compact live line — fixed height so rapid tool spam does not reflow the thread. */
 .tool-group.live .tool-group-live-compact {
-  min-height: 2.35rem;
-  max-height: 2.35rem;
+  min-height: 2.6rem;
+  max-height: 2.6rem;
   overflow: hidden;
   contain: layout paint;
   box-sizing: border-box;
@@ -4929,9 +4956,10 @@ button.msg-queued-cancel:focus-visible {
 
 .tool-live-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .tool-live-name {

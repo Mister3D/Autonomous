@@ -917,6 +917,22 @@ class TerminalExec(MethodView):
             _handle(exc)
 
 
+@blp.route("/<string:name>/tools/cancel")
+class ToolCancel(MethodView):
+    @blp.response(200, OkSchema)
+    def post(self, name):
+        """Stop the VM command in flight. Does not stop the Pi agent."""
+        try:
+            bots_svc.get_bot(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+        cancelled = term_svc.cancel_running_command(name)
+        return {
+            "ok": True,
+            "message": "cancelled" if cancelled else "idle",
+        }
+
+
 @blp.route("/<string:name>/vault/inject")
 class BotVaultInject(MethodView):
     @blp.arguments(VaultInjectSchema)

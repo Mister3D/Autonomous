@@ -72,15 +72,24 @@
               <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
             </div>
           </article>
-          <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
+          <article v-else-if="showAgentOrb" class="msg assistant thinking" aria-live="polite">
             <div class="thinking-row">
-              <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
+              <WorkingOrb state="working" :size="22" :label="t('chat.working')" />
               <span class="thinking-label">{{ t("chat.working") }}</span>
+              <button
+                type="button"
+                class="agent-stop-btn"
+                :aria-label="t('chat.stop')"
+                :title="t('chat.stopHint')"
+                @click="stop"
+              >
+                {{ t("chat.stop") }}
+              </button>
             </div>
           </article>
         </template>
         <article v-else-if="item.kind === 'tools'" class="msg tool" :data-msg-id="item.id">
-          <ToolGroup :entries="item.entries" :sealed="item.sealed" />
+          <ToolGroup :entries="item.entries" :sealed="item.sealed" :bot="bot.name" />
         </article>
         <article v-else-if="item.kind === 'notice'" class="msg notice" :data-msg-id="item.message.id">
           <div class="notice-card" :class="item.message.meta?.status">
@@ -427,12 +436,6 @@
                   v-else-if="showBubbleText(item.message)"
                   v-html="render(item.message)"
                 />
-                <span
-                  v-else-if="item.message.meta?.streaming && !item.message.content"
-                  class="thinking-inline"
-                >
-                  <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
-                </span>
               </div>
               <div
                 v-if="reactionsOf(item.message).length"
@@ -470,10 +473,19 @@
             <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
           </div>
         </article>
-        <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
+        <article v-else-if="showAgentOrb" class="msg assistant thinking" aria-live="polite">
           <div class="thinking-row">
-            <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
+            <WorkingOrb state="working" :size="22" :label="t('chat.working')" />
             <span class="thinking-label">{{ t("chat.working") }}</span>
+            <button
+              type="button"
+              class="agent-stop-btn"
+              :aria-label="t('chat.stop')"
+              :title="t('chat.stopHint')"
+              @click="stop"
+            >
+              {{ t("chat.stop") }}
+            </button>
           </div>
         </article>
       </template>
@@ -618,17 +630,7 @@
         </div>
       </div>
       <button
-        v-if="busy"
-        class="send-btn working"
-        type="button"
-        :aria-label="t('chat.stop')"
-        :title="t('chat.stopHint')"
-        @click="stop"
-      >
-        <WorkingOrb state="working" :size="20" dark :label="t('chat.working')" />
-      </button>
-      <button
-        v-else-if="deskCreating || waitingHuman"
+        v-if="deskCreating || waitingHuman"
         class="send-btn working waiting"
         type="button"
         :aria-label="t('chat.stop')"
@@ -640,6 +642,7 @@
       <button
         v-else
         class="send-btn"
+        :class="{ queue: busy }"
         type="submit"
         :aria-label="t('chat.send')"
         :title="t('chat.send')"
@@ -796,12 +799,14 @@ const canSend = computed(
   () => !uploading.value && (!!text.value.trim() || pending.value.length > 0)
 );
 
-/** Orbe en bas du fil tant qu’aucune bulle assistant n’est encore en streaming. */
+/** True only before the first streaming token (retry-bar logic). */
 const waitingForReply = computed(() => {
   if (!busy.value || waitingHuman.value) return false;
   const msgs = state.messages[props.bot.name] || [];
   return !msgs.some((m) => m.role === "assistant" && m.meta?.streaming);
 });
+/** Left-side orb for the whole run, including tools and streaming text. */
+const showAgentOrb = computed(() => busy.value && !waitingHuman.value);
 
 const otherBots = computed(() =>
   (state.bots || []).filter((b) => b.name && b.name !== props.bot.name)

@@ -218,6 +218,11 @@ export const api = {
   piStatus: () => request("/pi/status"),
   piModels: () => request("/pi/models"),
   stopBot: (name) => request(`/bots/${name}/stop`, { method: "POST", body: {} }),
+  cancelTool: (name) =>
+    request(`/bots/${encodeURIComponent(name)}/tools/cancel`, {
+      method: "POST",
+      body: {},
+    }),
   resumeBot: (name) => request(`/bots/${name}/resume`, { method: "POST", body: {} }),
   retryBot: (name) => request(`/bots/${name}/retry`, { method: "POST", body: {} }),
   vaultEntries: () => request("/vault/entries"),

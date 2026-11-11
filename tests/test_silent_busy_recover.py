@@ -56,11 +56,11 @@ def test_silent_busy_live_worker_respects_grace(home, monkeypatch):
     assert agent_svc.recover_silent_busy_runs(home=home, grace_sec=30.0) == []
     assert called == []
 
+    # Three hours of silence still must not stop a live Pi.
     with agent_svc._PROGRESS_LOCK:
-        agent_svc._LAST_PROGRESS["live"] = time.monotonic() - 60.0
-    recovered = agent_svc.recover_silent_busy_runs(home=home, grace_sec=30.0)
-    assert recovered == ["live"]
-    assert called == ["x"]
+        agent_svc._LAST_PROGRESS["live"] = time.monotonic() - 3 * 3600
+    assert agent_svc.recover_silent_busy_runs(home=home, grace_sec=30.0) == []
+    assert called == []
     settled.set()
     agent_svc.clear_active_run("live")
 
