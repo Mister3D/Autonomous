@@ -55,7 +55,8 @@
       ref="scroller"
       @scroll.passive="onMessagesScroll"
     >
-      <p v-if="!thread.length" class="empty">{{ t("chat.empty") }}</p>
+      <p v-if="historyBooting && !hasHistory" class="empty">{{ t("chat.loading") }}</p>
+      <p v-else-if="showEmpty" class="empty">{{ t("chat.empty") }}</p>
       <template v-for="item in thread" :key="item.id">
         <div v-if="item.kind === 'day'" class="day-sep">{{ item.label }}</div>
         <div v-else-if="item.kind === 'new'" class="new-sep">
@@ -708,6 +709,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { api } from "../api";
 import { state } from "../store";
+import { loadOlderMessages, threadBooting, threadHasMore } from "../threadPages";
 import { avatarColor } from "../avatarColor";
 import {
   colorizeMentionsInHtml,
@@ -1219,7 +1221,7 @@ async function addPendingImages(files) {
   }
 }
 
-/** Picker / drop → ~/shared/upload/<uuid>/<name>. */
+/** Picker / drop → ~/files/upload/<uuid>/<name>. */
 async function addPendingUploads(fileList) {
   const files = [...(fileList || [])].filter(Boolean);
   if (!files.length) return;
@@ -1357,10 +1359,12 @@ function rewriteWorkspaceImages(content, botName) {
       if (!raw) return full;
       if (raw.includes(`/api/v1/bots/${botName}/files/raw`)) return full;
       if (/^https?:\/\//i.test(raw) || raw.startsWith("data:")) return full;
-      // Local-ish path: renard.svg, shared/x.png, ./foo.jpg
+      // Local-ish path: renard.svg, files/x.png, shared/x.png, ./foo.jpg
       const path = raw
         .replace(/^\/+/, "")
         .replace(/^\.\//, "")
+        .replace(/^~\/files\//, "")
+        .replace(/^files\//, "")
         .replace(/^~\/shared\//, "")
         .replace(/^shared\//, "");
       if (!path || path.includes("..")) return full;
@@ -2364,9 +2368,61 @@ function pulseMessagesScrollbar() {
   }, 2000);
 }
 
+const historyBooting = computed(() => threadBooting(props.bot.name));
+const hasHistory = computed(() =>
+  (state.messages[props.bot.name] || []).some((m) => !m?.meta?.hidden_prompt),
+);
+const showEmpty = computed(() => !historyBooting.value && !hasHistory.value);
+const loadingOlder = ref(false);
+
+function revealThread() {
+  if (router.currentRoute.value.query?.msg) {
+    threadPlaced.value = true;
+    return;
+  }
+  if (!hasHistory.value && historyBooting.value) {
+    threadPlaced.value = true;
+    return;
+  }
+  scrollMessagesToBottom(true);
+}
+
+async function fillIfShort() {
+  const name = props.bot.name;
+  let rounds = 0;
+  while (rounds++ < 6 && threadHasMore(name)) {
+    const el = scroller.value;
+    if (!el || el.scrollHeight > el.clientHeight + 8) break;
+    const added = await loadOlderMessages(name);
+    if (!added) break;
+    await nextTick();
+  }
+}
+
 function onMessagesScroll() {
   stickToBottom.value = isNearBottom(scroller.value);
   pulseMessagesScrollbar();
+  maybeLoadOlder();
+}
+
+async function maybeLoadOlder() {
+  const el = scroller.value;
+  const name = props.bot.name;
+  if (!el || loadingOlder.value || !threadHasMore(name)) return;
+  if (el.scrollHeight <= el.clientHeight + 8) return;
+  if (el.scrollTop > 160) return;
+  const prevHeight = el.scrollHeight;
+  const prevTop = el.scrollTop;
+  loadingOlder.value = true;
+  stickToBottom.value = false;
+  try {
+    const added = await loadOlderMessages(name);
+    await nextTick();
+    const delta = el.scrollHeight - prevHeight;
+    if (added && delta > 0) el.scrollTop = prevTop + delta;
+  } finally {
+    loadingOlder.value = false;
+  }
 }
 
 /** @param {boolean} force ignore stickToBottom
@@ -2617,10 +2673,20 @@ watch(
     threadPlaced.value = false;
     await nextTick();
     autosize();
-    if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
-    else threadPlaced.value = true;
+    if (!hasHistory.value && historyBooting.value) {
+      threadPlaced.value = true;
+      return;
+    }
+    revealThread();
   }
 );
+
+watch(historyBooting, async (loading, was) => {
+  if (loading || !was) return;
+  await nextTick();
+  if (stickToBottom.value) await fillIfShort();
+  revealThread();
+});
 
 let composerMq;
 function onComposerMqChange(e) {
@@ -2634,8 +2700,7 @@ onMounted(async () => {
   composerMq.addEventListener("change", onComposerMqChange);
   await nextTick();
   autosize();
-  if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
-  else threadPlaced.value = true;
+  revealThread();
 });
 
 watch(

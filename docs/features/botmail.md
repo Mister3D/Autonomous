@@ -14,7 +14,7 @@ In a bot's input area:
 - **`Ask @other …`** (FR aliases: `Demande` / `Demandez à @…`) — same, with `bot_ask` when the user wants the reply brought back here.
 - **Natural chat** (« I think @lol rides horses — do you like that too? ») — the bot answers **you**. It contacts `@lol` only if clearly asked; then it sends a short autonomous question, never your whole sentence.
 - **Peer-facing content** is always authored by the sending bot: objective, relevant facts, constraints, expected result. The peer does **not** see this chat. Address them as « you »; never a raw relative clause (« if she… »).
-- **File attachments**: `bot_tell` / `bot_ask` may include `attachments` (paths under the **sender’s** `~/shared`). The host **copies** them into the recipient’s staging folder `.autonomous/mail-inbox/<inbox_id>/`. The recipient **chooses** where to place them (`files_claim_mail` or normal `files_*`). No shared volume across bots.
+- **File attachments**: `bot_tell` / `bot_ask` may include `attachments` (paths under the **sender’s** private `~/files`). The host **copies** them into the recipient’s staging folder `.autonomous/mail-inbox/<inbox_id>/`. The recipient **chooses** where to place them (`files_claim_mail` or normal `files_*`). No volume is shared across bots.
 - Exchanges are **async**. Confirming transmission ≠ task finished. Prefer Ask (or follow-up) when the user said « bring it back here »; Tell when they continue in the peer’s chat.
 - Inter-bot mail does **not** grant new rights and does not replace vault / approval / external-send consent.
 - If the recipient is **waiting** (vault / approval / …), the message stays **queued** until idle. If they are **busy** mid-run, delivery tries a **mid-run steer** so they can answer then continue; otherwise it queues.
@@ -25,7 +25,7 @@ In a bot's input area:
   - Long bodies are **collapsed** to the first sentence; a click on the card expands/collapses (links stay clickable without toggling).
   - Attachment **chips** (name + size) stay visible even when the body is collapsed; click downloads.
 
-Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** only — see [manager.md](./manager.md)). Invisible in the thread. `bot_ask` waits (`status=waiting`) — Managers must not use it to orchestrate. **One file path**: `attachments` on `bot_tell` / `bot_ask` only. Managers add `expect_reply` on the same `bot_tell` for async callback. `files_claim_mail` moves a staged attachment into a chosen `~/shared` path (tool card hidden).
+Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** only — see [manager.md](./manager.md)). Invisible in the thread. `bot_ask` waits (`status=waiting`) — Managers must not use it to orchestrate. **One file path**: `attachments` on `bot_tell` / `bot_ask` only. Managers add `expect_reply` on the same `bot_tell` for async callback. `files_claim_mail` moves a staged attachment into a chosen `~/files` path (tool card hidden).
 
 ## Implementation
 

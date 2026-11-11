@@ -136,7 +136,7 @@ def _normalize_file_ref(
     *,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a chat file already stored under ~/shared/upload/<uuid>/…"""
+    """Validate a chat file already stored under ~/files/upload/<uuid>/…"""
     from autonomous.services import files as files_svc
 
     name = str(item.get("name") or "").strip()
@@ -168,7 +168,7 @@ def normalize_attachments(
     *,
     home: Path | None = None,
 ) -> list[Any]:
-    """Normalize pasted images (URLs) and chat files (dicts under ~/shared/upload/)."""
+    """Normalize pasted images (URLs) and chat files (dicts under ~/files/upload/)."""
     raw = list(attachments or [])
     out: list[Any] = []
     image_count = 0
@@ -228,9 +228,9 @@ def prompt_with_files(
 ) -> str:
     """Append absolute paths so the host-side Pi agent can open chat uploads.
 
-    Never use ``~/shared`` here: Pi runs as the host user (often root), so
+    Never use ``~/files`` here: Pi runs as the host user (often root), so
     ``~`` expands to that user's home and gives ENOENT. Files live on the host under
-    ``data/bots/<bot>/home/`` (= ``/home/autonomous/shared`` inside the VM).
+    ``data/bots/<bot>/home/`` (= ``/home/autonomous/files`` inside the VM).
     """
     files = file_attachments(attachments)
     base = (content or "").strip()
@@ -242,7 +242,8 @@ def prompt_with_files(
     for f in files:
         name = f.get("name") or Path(str(f.get("path") or "")).name
         rel = str(f.get("path") or "").strip().replace("\\", "/")
-        vm_path = f"/home/autonomous/shared/{rel}" if rel else ""
+        # workspace is the shell cwd and the same private folder as ~/files.
+        vm_path = f"/home/autonomous/workspace/{rel}" if rel else ""
         host_path = ""
         if bot and rel:
             try:
@@ -255,7 +256,7 @@ def prompt_with_files(
             lines.append(
                 f"- {name}\n"
                 f"  • hôte (lecture fichiers Pi) : {host_path}\n"
-                f"  • VM (vm_terminal_exec) : {vm_path}"
+                f"  • VM (vm_terminal_exec, dossier privé ~/files) : {vm_path}"
             )
         elif host_path:
             lines.append(f"- {name} → {host_path}")

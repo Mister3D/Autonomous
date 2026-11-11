@@ -326,9 +326,9 @@ class ChatAttachmentFile(MethodView):
 @blp.route("/<string:name>/chat/files")
 class ChatFileUpload(MethodView):
     @blp.response(201, ChatFileAttachmentSchema)
-    @blp.doc(summary="Upload a chat file into ~/shared/upload/<uuid>/")
+    @blp.doc(summary="Upload a chat file into ~/files/upload/<uuid>/")
     def post(self, name):
-        """Multipart field ``file`` → stored under ~/shared/upload/<uuid>/<name>."""
+        """Multipart field ``file`` → stored under ~/files/upload/<uuid>/<name>."""
         if "file" not in request.files:
             abort(400, message="Missing file field")
         up = request.files["file"]
@@ -729,7 +729,7 @@ class BotEvents(MethodView):
 class BotPackage(MethodView):
     @blp.response(200, BotPackageUsageSchema)
     def get(self, name):
-        """Disk footprint for this bot (VM layer + ~/shared + chat + Pi session)."""
+        """Disk footprint for this bot (VM layer + ~/files + chat + Pi session)."""
         from autonomous.services import bot_package as package_svc
 
         try:
@@ -812,6 +812,21 @@ class DeskDestroy(MethodView):
         """Destroy desktop container (async job)."""
         try:
             return desk_svc.destroy(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/desk/activity")
+class DeskActivity(MethodView):
+    @blp.response(200, DeskSchema)
+    def post(self, name):
+        """Reset the auto-sleep clock. Does not wake a sleeping desk."""
+        try:
+            bot = bots_svc.get_bot(name, home=g.home)
+            desk = dict(bot.get("desk") or {"state": "absent"})
+            if desk.get("state") == "running":
+                desk_svc.touch_activity(name, home=g.home)
+            return desk
         except AutonomousError as exc:
             _handle(exc)
 
@@ -1292,7 +1307,7 @@ class BotFiles(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, FileEntrySchema(many=True))
     def get(self, query, name):
-        """List files under the bot ~/shared directory."""
+        """List files under the bot ~/files directory."""
         try:
             return files_svc.list_dir(name, query.get("path") or ".", home=g.home)
         except AutonomousError as exc:
@@ -1301,7 +1316,7 @@ class BotFiles(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, OkSchema)
     def delete(self, query, name):
-        """Delete a file or directory under ~/shared."""
+        """Delete a file or directory under ~/files."""
         try:
             files_svc.delete_path(name, query.get("path") or "", home=g.home)
             return {"ok": True}
@@ -1312,7 +1327,7 @@ class BotFiles(MethodView):
 @blp.route("/<string:name>/files/mkdir")
 class BotFileMkdir(MethodView):
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Create a directory under ~/shared")
+    @blp.doc(summary="Create a directory under ~/files")
     def post(self, name):
         """Create a directory. JSON body: ``{ "path": ".", "name": "dossier" }``."""
         body = request.get_json(silent=True) or {}
@@ -1330,7 +1345,7 @@ class BotFileMkdir(MethodView):
 class BotFileMove(MethodView):
     @blp.arguments(FileMoveSchema)
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Move a file or folder within ~/shared")
+    @blp.doc(summary="Move a file or folder within ~/files")
     def post(self, body, name):
         """Move ``src`` into directory ``dest`` (basename preserved)."""
         try:
@@ -1348,9 +1363,9 @@ class BotFileMove(MethodView):
 class BotFileUpload(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Upload a file into ~/shared")
+    @blp.doc(summary="Upload a file into ~/files")
     def post(self, query, name):
-        """Upload a multipart file into the given directory (default: ~/shared root)."""
+        """Upload a multipart file into the given directory (default: ~/files root)."""
         if "file" not in request.files:
             abort(400, message="Missing file field")
         up = request.files["file"]
@@ -1371,7 +1386,7 @@ class BotFileUpload(MethodView):
 @blp.route("/<string:name>/files/download")
 class BotFileDownload(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
-    @blp.doc(summary="Download a file from ~/shared")
+    @blp.doc(summary="Download a file from ~/files")
     def get(self, query, name):
         """Download a single file."""
         try:
@@ -1386,7 +1401,7 @@ class BotFileDownload(MethodView):
 @blp.route("/<string:name>/files/raw")
 class BotFileRaw(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
-    @blp.doc(summary="Serve a ~/shared file inline (images in chat)")
+    @blp.doc(summary="Serve a ~/files file inline (images in chat)")
     def get(self, query, name):
         """Inline file bytes (no Content-Disposition attachment)."""
         try:
@@ -1402,7 +1417,7 @@ class BotFileRaw(MethodView):
 @blp.route("/<string:name>/files/share")
 class BotFileShare(MethodView):
     @blp.response(200)
-    @blp.doc(summary="Build markdown to embed a ~/shared image in the assistant reply")
+    @blp.doc(summary="Build markdown to embed a ~/files image in the assistant reply")
     def post(self, name):
         """JSON ``{path, caption?}`` → ``{markdown, url, …}`` (agent pastes markdown in text)."""
         body = request.get_json(silent=True) or {}
@@ -1423,7 +1438,7 @@ class BotFileShare(MethodView):
 @blp.route("/<string:name>/files/attach")
 class BotFileAttach(MethodView):
     @blp.response(200)
-    @blp.doc(summary="Attach a non-image ~/shared file to the assistant reply")
+    @blp.doc(summary="Attach a non-image ~/files file to the assistant reply")
     def post(self, name):
         """JSON ``{path}`` → download card on the assistant bubble (PDF, zip, … — not images)."""
         body = request.get_json(silent=True) or {}
@@ -1439,7 +1454,7 @@ class BotFileAttach(MethodView):
 @blp.route("/<string:name>/files/claim-mail")
 class BotFileClaimMail(MethodView):
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Move a staged inter-bot mail attachment into ~/shared")
+    @blp.doc(summary="Move a staged inter-bot mail attachment into ~/files")
     def post(self, name):
         """JSON ``{path, dest}`` — ``path`` under ``.autonomous/mail-inbox/…``."""
         body = request.get_json(silent=True) or {}
@@ -1459,7 +1474,7 @@ class BotFileClaimMail(MethodView):
 class BotFileContent(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, FileContentSchema)
-    @blp.doc(summary="Read a UTF-8 text file under ~/shared (agent)")
+    @blp.doc(summary="Read a UTF-8 text file under ~/files (agent)")
     def get(self, query, name):
         """Return text content of a file (no host shell needed)."""
         try:
@@ -1469,7 +1484,7 @@ class BotFileContent(MethodView):
 
     @blp.arguments(FileWriteSchema)
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Write a UTF-8 text file under ~/shared (agent)")
+    @blp.doc(summary="Write a UTF-8 text file under ~/files (agent)")
     def put(self, body, name):
         """Create or overwrite a text file. JSON: ``{path, content}``."""
         try:

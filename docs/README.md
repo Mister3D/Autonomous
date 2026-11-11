@@ -28,8 +28,8 @@ The user has (probably) told you to read this file and then get to work: **do ex
 |-------|--------|
 | [features/desk-screen.md](./features/desk-screen.md) | Docker desktop, noVNC, take control, 1920×1200, frame |
 | [features/terminal-pty.md](./features/terminal-pty.md) | xterm.js terminal + PTY WebSocket `/ws/terminal/<bot>` |
-| [features/files-shared.md](./features/files-shared.md) | Files panel, `~/shared`, upload / mkdir / download |
-| [features/agent-files.md](./features/agent-files.md) | Pi agent → `files_*` on `~/shared` (no host shell) |
+| [features/files-shared.md](./features/files-shared.md) | Files panel, `~/files`, upload / mkdir / download |
+| [features/agent-files.md](./features/agent-files.md) | Pi agent → `files_*` on `~/files` (no host shell) |
 | [features/routing-tabs.md](./features/routing-tabs.md) | URLs `/b/:name/:tab` |
 | [features/serve-dev.md](./features/serve-dev.md) | `serve` / `serve stop` / `--dev`, MuxServer |
 | [features/chrome-desktop-image.md](./features/chrome-desktop-image.md) | `autonomous-desktop:latest` image, Chrome flags |
@@ -46,7 +46,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/botmail.md](./features/botmail.md) | Tell / Ask @bot, queue if busy, follow-up on reply |
 | [features/bots-create.md](./features/bots-create.md) | Free-form name + auto technical slug |
 | [features/bot-package.md](./features/bot-package.md) | Package size in Details (VM + files + chat) |
-| [features/chat-files.md](./features/chat-files.md) | Chat attachments → ~/shared/upload |
+| [features/chat-files.md](./features/chat-files.md) | Chat attachments → ~/files/upload |
 | [features/composer-drafts.md](./features/composer-drafts.md) | Per-bot composer drafts (sessionStorage, per tab) |
 | [features/events.md](./features/events.md) | UTC cron + tokenized webhooks, Events tab |
 | [features/chat-search.md](./features/chat-search.md) | Message search (FTS + NL) + `?msg=` deep-link |

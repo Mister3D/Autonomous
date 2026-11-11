@@ -1,4 +1,4 @@
-"""Path traversal + agent text read/write + share/attach under ~/shared."""
+"""Path traversal + agent text read/write + share/attach under ~/files."""
 
 from pathlib import Path
 
@@ -179,3 +179,25 @@ def test_move_into_folder(home, auth_client):
     assert r.status_code == 200
     assert r.get_json()["path"] == "note.pdf"
     assert (root / "note.pdf").is_file()
+
+
+def test_files_and_legacy_shared_prefixes(home):
+    bots_svc.create_bot("alias", slug="alias", home=home)
+    root = home / "bots" / "alias" / "home"
+    written = files_svc.write_text(
+        "alias", "~/files/notes/a.txt", "a\n", home=home
+    )
+    assert written["path"] == "notes/a.txt"
+    assert files_svc.resolve("alias", "~/shared/notes/a.txt", home=home) == (
+        root / "notes" / "a.txt"
+    ).resolve()
+    assert files_svc.resolve("alias", "files/notes/a.txt", home=home) == (
+        root / "notes" / "a.txt"
+    ).resolve()
+    files_svc.write_text("alias", "files.txt", "b\n", home=home)
+    assert (root / "files.txt").read_text() == "b\n"
+    from autonomous.services.pi_rpc import _FILES_SYSTEM_HINT
+
+    assert "~/files" in _FILES_SYSTEM_HINT
+    assert "private to THIS bot" in _FILES_SYSTEM_HINT
+    assert "Never use the path ~/shared" in _FILES_SYSTEM_HINT

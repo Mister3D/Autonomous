@@ -22,7 +22,7 @@ App.vue
     ├── ScreenPane.vue
     └── inspector:
         ├── DetailsPane.vue
-        ├── LibraryPane.vue   # Files / ~/shared
+        ├── LibraryPane.vue   # Files / ~/files
         └── EventsPane.vue
 ```
 
@@ -40,9 +40,9 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `ChatPane.vue` | Conversation thread, composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md) |
+| `ChatPane.vue` | Conversation thread (newest page first, older pages on scroll up), composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md) |
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
-| `ScreenPane.vue` | noVNC desktop frame, wake/create desk. | [`desk-screen.md`](./desk-screen.md) |
+| `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). | [`pi-agent.md`](./pi-agent.md) |
 | `ToolGroup.vue` | Grouped tool cards (compact live line only while the list is folded; open list shows the running tool once, with elapsed time and stop). | [`pi-agent.md`](./pi-agent.md) |
 
@@ -51,7 +51,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | Component | Role | Feature note |
 |-----------|------|----------------|
 | `DetailsPane.vue` | Bot details: model, capability, memory, manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md) |
-| `LibraryPane.vue` | Files / `~/shared`: list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
+| `LibraryPane.vue` | Files / `~/files` (private per bot): list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
 | `EventsPane.vue` | Schedules + webhooks list (pause / copy curl / delete confirm). | [`events.md`](./events.md) |
 | `EventInstructionModal.vue` | Large modal: standing instruction, plus the webhook POST body when opened from a chat bubble. | [`events.md`](./events.md) |
 | `ManageMenu.vue` | Details manage list: clear chat, export PDF, desk restart/reset/remove, delete bot (arm → check). | [`chat-export-pdf.md`](./chat-export-pdf.md), [`bots-create.md`](./bots-create.md) |

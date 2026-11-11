@@ -94,6 +94,56 @@ def test_tick_skips_busy(home):
         n = desk_svc.tick_auto_sleep(home=home)
     assert n == 0
     d.assert_not_called()
+    fresh = bots_svc.get_bot("busybot2", home=home)["desk_last_active_at"]
+    assert fresh and fresh > past
+
+
+def test_novnc_info_does_not_wake_or_touch(home):
+    bots_svc.create_bot("viewbot", home=home)
+    past = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    bots_svc.patch_bot(
+        "viewbot",
+        {
+            "desk": {"state": "sleeping", "vnc_port": 6081, "created_at": past},
+            "desk_last_active_at": past,
+        },
+        home=home,
+    )
+    with patch("autonomous.services.desk.status", return_value={"state": "sleeping", "vnc_port": 6081}):
+        info = desk_svc.novnc_info("viewbot", home=home)
+    assert info["vnc_port"] is None
+    assert info["state"] == "sleeping"
+    assert bots_svc.get_bot("viewbot", home=home)["desk"]["state"] == "sleeping"
+    assert bots_svc.get_bot("viewbot", home=home)["desk_last_active_at"] == past
+
+
+def test_activity_resets_clock_without_waking(auth_client, home):
+    auth_client.post("/api/v1/bots", json={"name": "hold"})
+    past = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    bots_svc.patch_bot(
+        "hold",
+        {
+            "desk": {"state": "running", "vnc_port": 6082, "created_at": past},
+            "desk_last_active_at": past,
+            "status": "idle",
+        },
+        home=home,
+    )
+    r = auth_client.post("/api/v1/bots/hold/desk/activity")
+    assert r.status_code == 200
+    assert r.json["state"] == "running"
+    fresh = bots_svc.get_bot("hold", home=home)["desk_last_active_at"]
+    assert fresh and fresh > past
+
+    bots_svc.patch_bot(
+        "hold",
+        {"desk": {"state": "sleeping", "vnc_port": 6082}, "desk_last_active_at": past},
+        home=home,
+    )
+    r = auth_client.post("/api/v1/bots/hold/desk/activity")
+    assert r.status_code == 200
+    assert r.json["state"] == "sleeping"
+    assert bots_svc.get_bot("hold", home=home)["desk_last_active_at"] == past
 
 
 def test_wake_from_sleep(home):
@@ -157,3 +207,29 @@ def test_api_desk_wake(auth_client, home):
     assert r.status_code == 200
     assert r.json["state"] == "running"
     fake_c.start.assert_called_once()
+
+
+def test_ensure_files_aliases_on_running_desks_only(home):
+    bots_svc.create_bot("livefiles", home=home)
+    bots_svc.patch_bot(
+        "livefiles",
+        {"desk": {"state": "running", "container_name": "autonomous-live"}},
+        home=home,
+    )
+    bots_svc.create_bot("sleepfiles", home=home)
+    bots_svc.patch_bot(
+        "sleepfiles",
+        {"desk": {"state": "sleeping", "container_name": "autonomous-sleep"}},
+        home=home,
+    )
+    with patch("subprocess.run") as run:
+        run.return_value = MagicMock(returncode=0)
+        desk_svc.ensure_files_aliases(home=home)
+    commands = []
+    for call in run.call_args_list:
+        args = call.args[0] if call.args else call.kwargs.get("args")
+        commands.append(" ".join(args) if isinstance(args, list) else str(args))
+    joined = "\n".join(commands)
+    assert "autonomous-live" in joined
+    assert "ln -sfn workspace /home/autonomous/files" in joined
+    assert "autonomous-sleep" not in joined

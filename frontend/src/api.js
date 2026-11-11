@@ -78,28 +78,16 @@ function formatApiError(data, fallback) {
   return fallback || "Error";
 }
 
-/** Walk pages until the start of the conversation (or the page cap).
- *
- * The API returns at most 200 messages per call (newest page). Stopping at the
- * first page that merely *contains* a user bubble used to drop older history
- * (e.g. Manager: 301 rows → only the newest 200 loaded, kickoff missing at top).
- * Keep paging while the page is full; a short page means we reached the start.
+/** One page of the thread, newest first in the window (chronological in the array).
+ * Older rows load later, when the reader scrolls up — not before the first paint.
  */
-async function loadThread(name) {
-  const pages = [];
-  let before = "";
-  for (let i = 0; i < 20; i++) {
-    const q = new URLSearchParams({ limit: "200" });
-    if (before) q.set("before", before);
-    const page = await request(`/bots/${name}/messages?${q}`);
-    if (!Array.isArray(page) || !page.length) break;
-    pages.unshift(page);
-    const oldest = page[0]?.created_at;
-    if (!oldest || oldest === before) break;
-    if (page.length < 200) break;
-    before = oldest;
-  }
-  return pages.flat();
+async function listMessagePage(name, { before = "", limit = 80 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (before) q.set("before", before);
+  const page = await request(
+    `/bots/${encodeURIComponent(name)}/messages?${q}`,
+  );
+  return Array.isArray(page) ? page : [];
 }
 
 export const api = {
@@ -120,7 +108,7 @@ export const api = {
   deleteBot: (name) => request(`/bots/${name}`, { method: "DELETE" }),
   setCapability: (name, level) =>
     request(`/bots/${name}/capability`, { method: "POST", body: { level } }),
-  listMessages: (name) => loadThread(name),
+  listMessagePage,
   sendMessage: (name, content, attachments = [], opts = {}) =>
     request(`/bots/${name}/messages`, {
       method: "POST",
@@ -130,7 +118,7 @@ export const api = {
         ...(opts.prompt ? { prompt: opts.prompt } : {}),
       },
     }),
-  /** Chat drop/picker → ~/shared/upload/<uuid>/<filename> */
+  /** Chat drop/picker → ~/files/upload/<uuid>/<filename> */
   uploadChatFile: (name, file) => {
     const fd = new FormData();
     const fname = String(file?.name || "upload.bin").trim() || "upload.bin";
@@ -166,7 +154,7 @@ export const api = {
       : `discussion-${name}.pdf`;
     return { blob, filename };
   },
-  /** Disk footprint: VM layer + ~/shared + chat + Pi session. */
+  /** Disk footprint: VM layer + ~/files + chat + Pi session. */
   botPackage: (name) => request(`/bots/${name}/package`),
   deskStatus: (name) => request(`/bots/${name}/desk`),
   deskRequest: (name, body = { mode: "screen", reason: "" }) =>
@@ -176,6 +164,9 @@ export const api = {
   deskCreate: (name, body = { mode: "screen", internet: true }) =>
     request(`/bots/${name}/desk/create`, { method: "POST", body }),
   deskWake: (name) => request(`/bots/${name}/desk/wake`, { method: "POST", body: {} }),
+  /** Reset auto-sleep while the user holds the desktop. Does not wake. */
+  deskActivity: (name) =>
+    request(`/bots/${name}/desk/activity`, { method: "POST", body: {} }),
   deskDestroy: (name) => request(`/bots/${name}/desk/destroy`, { method: "POST", body: {} }),
   deskRestart: (name) => request(`/bots/${name}/desk/restart`, { method: "POST", body: {} }),
   deskReset: (name) =>

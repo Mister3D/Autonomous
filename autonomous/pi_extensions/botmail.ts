@@ -428,7 +428,7 @@ export default function (pi: ExtensionAPI) {
       + "Confirming delivery is not the end of the task. "
       + "content = a self-contained brief for the peer (they lack this chat): objective, "
       + "relevant facts, constraints, expected result — not the user's raw last sentence. "
-      + "FILES (only way): attachments = paths under YOUR ~/shared; host copies them into "
+      + "FILES (only way): attachments = paths under YOUR private ~/files; host copies them into "
       + "the peer's .autonomous/mail-inbox staging — they place them with files_claim_mail. "
       + "Do not paste file contents when a workspace path exists. "
       + "Managers: for async work + callback, set expect_reply (adds « Tell @you … » footer). "
@@ -444,7 +444,7 @@ export default function (pi: ExtensionAPI) {
       attachments: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            "Optional relative paths under YOUR ~/shared to send (copied to peer staging)",
+            "Optional relative paths under YOUR private ~/files to send (copied to peer staging)",
         }),
       ),
       expect_reply: Type.Optional(
@@ -518,7 +518,7 @@ export default function (pi: ExtensionAPI) {
       attachments: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            "Optional relative paths under YOUR ~/shared to send with the question",
+            "Optional relative paths under YOUR private ~/files to send with the question",
         }),
       ),
       timeout_sec: Type.Optional(

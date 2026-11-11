@@ -9,14 +9,14 @@
 - `autonomous/wsproxy.py` (WS → websockify)
 - `docker/desktop/*`
 
-**Last updated**: 2026-11-10 (split toggle only when VM exists)
+**Last updated**: 2026-11-12 (screen without control sleeps; Wake button; clock held while controlling or while the agent runs)
 
 ## User behaviour
 
-- **Two panes** (off by default, per bot): two-frame button to the left of the tabs — **hidden when the bot has no VM** (`desk.state` not in creating/running/sleeping/error); a saved split preference stays inert until a desk exists again. When active, it keeps the same grey border as the other round buttons. Once enabled, the tabs give way to two lists (Conversation, Terminal, Screen) — the left one then the right one — plus a button to swap them. No "Left / Right" label. The same pane cannot be on both sides: choosing it on the other side **swaps**. The URL follows the left pane (`/discussion`, `/terminal` or `/screen`). Right pane width adjustable (handle, 28–62%) — the drag strip matches `--bg-sidebar` at rest (accent only on hover/focus). Split screen/terminal cards use `height: calc(100% - chrome offset)` so `margin-top` does not clip the bottom Soft radius. Preference in `localStorage` (`autonomous.splitScreen`: `{ bot: { on, left, right } }`). Showing the screen **wakes** the desk, like the Screen tab. Below 900 px, the panes stack.
+- **Two panes** (off by default, per bot): two-frame button to the left of the tabs — **hidden when the bot has no VM** (`desk.state` not in creating/running/sleeping/error); a saved split preference stays inert until a desk exists again. When active, it keeps the same grey border as the other round buttons. Once enabled, the tabs give way to two lists (Conversation, Terminal, Screen) — the left one then the right one — plus a button to swap them. No "Left / Right" label. The same pane cannot be on both sides: choosing it on the other side **swaps**. The URL follows the left pane (`/discussion`, `/terminal` or `/screen`). Right pane width adjustable (handle, 28–62%) — the drag strip matches `--bg-sidebar` at rest (accent only on hover/focus). Split screen/terminal cards use `height: calc(100% - chrome offset)` so `margin-top` does not clip the bottom Soft radius. Preference in `localStorage` (`autonomous.splitScreen`: `{ bot: { on, left, right } }`). Showing the screen does **not** wake a sleeping desk: the pane stays on **Wake** until the user asks, or the agent wakes the VM itself. Below 900 px, the panes stack.
 
-- **Sleep** (default ON at creation): if the bot is idle and the desktop unused for **5 minutes**, the Docker container is **stopped** (`desk.state=sleeping`). The `~/shared` files stay on the host. **Wake**: opening Terminal/Screen calls `POST /desk/wake` ("Waking desktop…" message, **not** "create a desktop"); VM tools / `novnc` / starting an agent run too. Can be disabled in **Details** (long scripts).
-- **A single VM**: creating the VM always publishes noVNC. The Terminal and Screen tabs open on it. There is no longer a "terminal only" option (the desktop was already running, the port was just hidden). Internet on/off remains the only choice. An old VM without a noVNC port: the Screen tab reopens creation, which replaces the container (`~/shared` kept).
+- **Sleep** (default ON at creation): if the bot is idle and the desktop unused for **5 minutes**, the Docker container is **stopped** (`desk.state=sleeping`). The `~/files` files stay on the host. The clock stays at zero while the user **has control** of the screen (heartbeat `POST /desk/activity` every 60 s) and while the agent is **busy or waiting** (each scheduler tick refreshes `desk_last_active_at`). Sitting on the Screen tab **without** control does not reset the clock and does **not** auto-wake: after the 5 minutes the pane shows **Wake**. Opening Terminal, VM tools, or that button still call `POST /desk/wake`. Can be disabled in **Details** (long scripts).
+- **A single VM**: creating the VM always publishes noVNC. The Terminal and Screen tabs open on it. There is no longer a "terminal only" option (the desktop was already running, the port was just hidden). Internet on/off remains the only choice. An old VM without a noVNC port: the Screen tab reopens creation, which replaces the container (`~/files` kept).
 - **Screen** tab: the remote desktop stays **1920×1200**; the display **adapts** to the window (`scaleViewport`, mouse realigned by noVNC). No `resizeSession` (grounding coords unchanged).
 - **Copy-paste** with the computer: take control of the screen, then Ctrl+C / Ctrl+V (text). Bridge injected into `vnc_lite` (remote copy → local clipboard; local Ctrl+V → VNC clipboard + remote Ctrl+V).
 - Coloured frame around the area: orange (`--accent`) when viewing, **green** (`--ok`) when the user has control.
@@ -32,9 +32,9 @@
 ## Implementation
 
 - Docker container named **`autonomous-<uuid>`** (same scheme as Pi sessions). Bot ↔ VM link = `desk.container_name` (+ label `autonomous.bot=<slug>`). Image `autonomous-desktop:fr`.
-- Host volume `data/bots/<bot>/home` mounted at **`/home/autonomous/shared`** and **`/home/autonomous/workspace`** (same source) — **persists** if the container is stopped or destroyed (except `desk reset` which wipes the volume). Chrome CDP profile: `shared/.autonomous-chrome/` (see [`chrome-desktop-image.md`](./chrome-desktop-image.md)).
+- Host volume `data/bots/<bot>/home` mounted at **`/home/autonomous/files`**, **`/home/autonomous/workspace`**, and **`/home/autonomous/shared`** (same private source — `shared` is a legacy alias, not a folder other bots can read) — **persists** if the container is stopped or destroyed (except `desk reset` which wipes the volume). Chrome CDP profile: `shared/.autonomous-chrome/` (see [`chrome-desktop-image.md`](./chrome-desktop-image.md)).
 - Old desks without `container_name`: legacy fallback `autonomous-<slug>` until recreate.
-- Auto-sleep: column `bots.auto_sleep` + `desk_last_active_at`; tick via the `serve` scheduler (~30s); `desk.ensure_awake` / `POST …/desk/wake` before terminal/VNC/browser/screenshot/UI.
+- Auto-sleep: column `bots.auto_sleep` + `desk_last_active_at`; tick via the `serve` scheduler (~30s). A busy or waiting bot refreshes that stamp on each tick. `POST …/desk/activity` does the same and does not wake. `desk.ensure_awake` / `POST …/desk/wake` before the terminal and VM tools. `GET …/desk/novnc` and the `/novnc/` proxy only report a port while the desk is running.
 - Agent: `vm_desk_status` does **not** ask for `vm_request_desk` for a `sleeping` desk (the tools wake it); `vm_request_desk` wakes first if sleeping.
 - Host API access from the VM (bridge): `extra_hosts host.docker.internal=host-gateway`, env `AUTONOMOUS_API_BASE` / `AUTONOMOUS_HOOKS_BASE`, helper `autonomous-hook` (see [events.md](./events.md)).
 - noVNC port published on localhost; UI via `/novnc/<bot>/` + mux WS upgrade.
@@ -53,7 +53,7 @@
 - Don't enable two panes by default, nor for all bots: per-bot opt-in. Without this button, Conversation / Terminal / Screen stay a single pane. Don't show the split control when there is no desktop — dual pane is useless without a VM.
 - Don't re-centre a large opaque label over the whole viewport: the desktop must stay readable in view-only mode.
 - Keep the connect/disconnect `postMessage` in the injection (otherwise the UI thinks it's "stuck" with no feedback).
-- Containers created **before** the double mount: `~/shared` may be a symlink to `workspace` (hot-patch); new desks have both binds.
+- Containers created before the `~/files` mount: `serve` start links `~/files` → `workspace` on desks already running, before Pi recovery. Sleeping desks get the link on wake. `~/shared` may still exist (Chrome). New desks bind all three names. The prompt tells the bot not to use `~/shared`.
 - Stale Docker image ≠ `docker/desktop/` sources on the host → rebuild or `docker cp` the scripts (`bot-chrome`, etc.).
 
 ## Quick check

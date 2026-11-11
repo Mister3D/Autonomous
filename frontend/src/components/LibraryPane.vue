@@ -8,16 +8,16 @@
     @drop.prevent="onDropAt(path, $event)"
   >
     <div class="files-head">
-      <nav class="files-crumb" aria-label="shared">
-        <button
+      <nav class="files-crumb" aria-label="files">
+      <button
           type="button"
           class="crumb root"
           :class="{
             active: path === '.',
             'drop-over': dropOver === '.',
           }"
-          title="~/shared"
-          aria-label="~/shared"
+          title="~/files"
+          aria-label="~/files"
           @click="goRoot"
           @dragenter.prevent.stop="onTargetEnter('.')"
           @dragover.prevent.stop="onTargetOver('.')"

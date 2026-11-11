@@ -130,6 +130,11 @@ import {
 import { botPath } from "../router";
 import { dropOptimisticDupes, isOptimisticMessageId, refreshSetup, setupReady, state } from "../store";
 import { refreshBots } from "../sync";
+import {
+  forgetUpdateStatus,
+  readUpdateStatus,
+  writeUpdateStatus,
+} from "../updateStatusCache";
 import SetupItem from "./SetupItem.vue";
 
 const FIRST_AVATAR = "renard";
@@ -144,7 +149,7 @@ const error = ref("");
 const forceList = ref(false);
 const firstChatDone = ref(false);
 const hasMemoryPrefs = ref(false);
-const updateInfo = ref(null);
+const updateInfo = ref(readUpdateStatus());
 const updateBusy = ref(false);
 const updateApplying = ref(false);
 const updateError = ref("");
@@ -220,9 +225,18 @@ const updateMeta = computed(() => {
 });
 
 async function loadUpdate(force = false) {
+  if (!force) {
+    const cached = readUpdateStatus();
+    if (cached) {
+      updateInfo.value = cached;
+      return;
+    }
+  }
   try {
-    updateInfo.value = force ? await api.checkUpdate() : await api.updateStatus(false);
+    const next = force ? await api.checkUpdate() : await api.updateStatus(false);
+    updateInfo.value = next;
     updateError.value = "";
+    writeUpdateStatus(next);
   } catch (e) {
     updateError.value = e.message || String(e);
   }
@@ -274,6 +288,7 @@ function isNetworkDrop(err) {
 }
 
 function scheduleReloadAfterUpdate() {
+  forgetUpdateStatus();
   updateError.value = "";
   updateBusy.value = true;
   updateApplying.value = true;

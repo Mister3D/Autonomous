@@ -259,6 +259,11 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
         api_host = "127.0.0.1"
     set_serve_api_base(f"http://{api_host}:{port}/api/v1")
     try:
+        # Existing desks: ~/files must exist before recovered Pi sessions start.
+        desk_svc.ensure_files_aliases(home=home)
+    except Exception as exc:  # never block serve
+        print(f"[desk] ~/files alias failed: {exc}", file=sys.stderr)
+    try:
         # Dev reloader / crash leaves bots.busy with no live Pi worker.
         from autonomous.services import agent as agent_svc
 

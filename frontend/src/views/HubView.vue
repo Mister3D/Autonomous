@@ -388,12 +388,11 @@ import { refreshFirstChatPrefsPending } from "../firstChatPrefs";
 import {
   state,
   currentBotObj,
-  isOptimisticMessageId,
   markBotRead,
-  preferLiveStreamingMessage,
   refreshSetup,
   setupReady,
 } from "../store";
+import { ensureMessageLoaded, loadLatestMessages } from "../threadPages";
 import { api } from "../api";
 import { botPath, normalizeTab } from "../router";
 import ChatPane from "../components/ChatPane.vue";
@@ -841,7 +840,7 @@ const visibleBots = computed(() => [...railManagers.value, ...railWorkers.value]
 function previewOf(b) {
   const msgs = state.messages[b.name] || [];
   const last = [...msgs].reverse().find((m) => !m?.meta?.hidden_prompt);
-  const raw = last ? last.content : "";
+  const raw = last ? last.content : state.previews[b.name] || "";
   return String(raw || "").replace(/\s+/g, " ").trim();
 }
 
@@ -1034,9 +1033,7 @@ async function openMessageHit(h) {
   markBotRead(name);
   state.tab = "discussion";
   try {
-    if (!state.messages[name]?.length) {
-      state.messages[name] = await api.listMessages(name);
-    }
+    await ensureMessageLoaded(name, h.message_id);
   } catch {
     /* ChatPane will retry */
   }
@@ -1064,38 +1061,9 @@ async function loadMessages(name) {
   if (!state.bots.some((b) => b.name === name)) return;
   const seq = (loadMessagesSeq.get(name) || 0) + 1;
   loadMessagesSeq.set(name, seq);
-  try {
-    const remote = await api.listMessages(name);
-    // Ignore stale responses that would wipe a message just sent.
-    if (loadMessagesSeq.get(name) !== seq) return;
-    const local = state.messages[name] || [];
-    const byId = new Map(remote.map((m) => [m.id, m]));
-    for (const m of local) {
-      if (!m?.id) continue;
-      if (byId.has(m.id)) {
-        // Keep SSE-accumulated streaming text when the HTTP snapshot is shorter.
-        byId.set(m.id, preferLiveStreamingMessage(m, byId.get(m.id)));
-        continue;
-      }
-      // Keep in-flight optimistic bubbles only if the server has not echoed them yet.
-      if (isOptimisticMessageId(m.id)) {
-        const echoed = remote.some(
-          (r) =>
-            r.role === m.role &&
-            String(r.content || "") === String(m.content || "")
-        );
-        if (echoed) continue;
-      }
-      byId.set(m.id, m);
-    }
-    state.messages[name] = [...byId.values()].sort((a, b) =>
-      String(a.created_at || "").localeCompare(String(b.created_at || ""))
-    );
-    previewLoaded.add(name);
-  } catch {
-    if (loadMessagesSeq.get(name) === seq) previewLoaded.delete(name);
-    return;
-  }
+  await loadLatestMessages(name);
+  if (loadMessagesSeq.get(name) !== seq) return;
+  previewLoaded.add(name);
   try {
     state.terminal[name] = await api.terminalLog(name);
   } catch {
@@ -1104,20 +1072,28 @@ async function loadMessages(name) {
 }
 
 async function loadPreviews() {
-  await Promise.all(
-    state.bots.map(async (b) => {
-      if (previewLoaded.has(b.name) || state.messages[b.name]) {
-        previewLoaded.add(b.name);
-        return;
-      }
-      previewLoaded.add(b.name);
+  // Latest page of every bot, into the same reactive store the open thread reads.
+  // The bot on screen is loaded by loadMessages; the others warm up beside it.
+  const pending = [];
+  for (const bot of state.bots) {
+    const name = bot.name;
+    if (!name || name === state.currentBot || previewLoaded.has(name)) continue;
+    previewLoaded.add(name);
+    pending.push(name);
+  }
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pending.length) {
+      const name = pending[cursor++];
       try {
-        state.messages[b.name] = await api.listMessages(b.name);
+        await loadLatestMessages(name);
       } catch {
-        previewLoaded.delete(b.name);
+        previewLoaded.delete(name);
       }
-    })
-  );
+    }
+  }
+  const workers = Math.min(3, pending.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
 }
 
 watch(

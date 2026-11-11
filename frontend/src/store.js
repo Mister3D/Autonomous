@@ -12,6 +12,10 @@ export const state = reactive({
   panel: "details",
   inspectorOpen: false,
   messages: {},
+  /** bot → { before, hasMore, boot, paged, older } for chat history paging. */
+  threadPages: {},
+  /** Rail snippet when the full thread is not loaded yet. */
+  previews: {},
   /** botName → true when assistant activity arrived while not selected */
   unread: {},
   terminal: {},
@@ -26,7 +30,7 @@ export const state = reactive({
   composerRestore: null,
   /** Latest schedule/webhook SSE payload so the Events tab can refresh live. */
   eventsFeed: null,
-  /** Latest ~/shared mutation so the Files tab can refresh live. */
+  /** Latest ~/files mutation so the Files tab can refresh live. */
   filesFeed: null,
   /** Set when the user saves a timezone in Settings, so Events can reload. */
   userTimezone: null,
@@ -323,6 +327,14 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
   }
   if (type === "message.cleared" && data.bot) {
     state.messages[data.bot] = [];
+    state.threadPages[data.bot] = {
+      before: null,
+      hasMore: false,
+      boot: false,
+      paged: false,
+      older: false,
+    };
+    delete state.previews[data.bot];
     const i = state.bots.findIndex((b) => b.name === data.bot);
     if (i >= 0) {
       state.bots[i] = { ...state.bots[i], last_message_at: null };

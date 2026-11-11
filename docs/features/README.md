@@ -6,7 +6,7 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 |-------|---------|
 | [desk-screen.md](./desk-screen.md) | noVNC, frame, control, geometry |
 | [terminal-pty.md](./terminal-pty.md) | xterm + `/ws/terminal/<bot>` |
-| [files-shared.md](./files-shared.md) | Files panel / `~/shared` |
+| [files-shared.md](./files-shared.md) | Files panel / `~/files` |
 | [agent-files.md](./agent-files.md) | Agent `files_*` without host shell |
 | [routing-tabs.md](./routing-tabs.md) | Tab URLs |
 | [serve-dev.md](./serve-dev.md) | serve / stop / --dev / Mux |
@@ -24,7 +24,7 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [botmail.md](./botmail.md) | Tell / Ask @bot, queue, follow-up |
 | [bots-create.md](./bots-create.md) | Slug identifier, 422, CreateBotModal |
 | [bot-package.md](./bot-package.md) | Package size in Details (VM + files + chat) |
-| [chat-files.md](./chat-files.md) | Attach files (picker + drop → ~/shared/upload) |
+| [chat-files.md](./chat-files.md) | Attach files (picker + drop → ~/files/upload) |
 | [composer-drafts.md](./composer-drafts.md) | Per-bot composer drafts (sessionStorage, per tab) |
 | [events.md](./events.md) | UTC cron + webhooks, Events inspector |
 | [chat-search.md](./chat-search.md) | FTS + NL message search, `?msg=` deep-link |

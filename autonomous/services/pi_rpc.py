@@ -110,10 +110,15 @@ _CHAT_SEARCH_SYSTEM_HINT = (
 )
 
 _FILES_SYSTEM_HINT = (
-    "Bot files (~/shared = ~/workspace, same as the Files inspector): use "
+    "Bot files (~/files, private to THIS bot — other bots cannot see them; "
+    "same folder as ~/workspace and the Files inspector): use "
     "files_list, files_read, files_write, files_mkdir, files_delete, "
     "files_share_image, files_attach, files_claim_mail. "
     "These work WITHOUT host bash and WITHOUT a running desk. "
+    "Always use the name ~/files (or ~/workspace in the shell). "
+    "Never use the path ~/shared or /home/autonomous/shared in commands, tool "
+    "arguments, or replies. A directory with that old name may still be visible; "
+    "ignore it. It is not shared with other bots. "
     "IMAGES (mandatory): call files_share_image(path) for each file, then paste the "
     "EXACT returned markdown line (![](/api/v1/bots/…/files/raw?path=…)) into your reply. "
     "FORBIDDEN: inventing image URLs, external http(s) links, or guessing paths — "
@@ -123,7 +128,7 @@ _FILES_SYSTEM_HINT = (
     "just to show a workspace image. "
     "Do NOT overwrite images with files_write. "
     "Inter-bot mail files land under .autonomous/mail-inbox/<id>/ — place them with "
-    "files_claim_mail(path, dest) wherever you want in ~/shared. "
+    "files_claim_mail(path, dest) wherever you want in ~/files. "
     "There is no host bash: shell commands run in the bot VM via vm_terminal_exec."
 )
 
@@ -134,9 +139,9 @@ _BOTMAIL_SYSTEM_HINT = (
     "« Demande à X de faire Y… », or a standing rule you were given "
     "(« quand un mail d’achat arrive, donne-le à @achat »). Then you MUST call "
     "bot_tell / bot_ask (Managers: bot_tell with expect_reply for async workers). "
-    "ONE way to share files: bot_tell / bot_ask attachments=[paths under YOUR ~/shared]. "
-    "The host copies them into the peer's mail-inbox staging (they place them with "
-    "files_claim_mail). There is no other file-share tool. "
+    "ONE way to give a peer a file: bot_tell / bot_ask attachments=[paths under YOUR ~/files]. "
+    "The host copies them into the peer's private mail-inbox (they place them with "
+    "files_claim_mail). There is no folder shared between bots. "
     "bot_tell = one-way async; bot_ask = ask and WAIT for a reply (blocks this "
     "run). Confirming transmission is NOT the end of the task. If the user said "
     "« rapporte-moi sa réponse ici », prefer bot_ask (or follow up when the "
@@ -167,7 +172,7 @@ _MANAGER_SYSTEM_HINT = (
     "Set expect_reply so the worker relaunches you with « Tell @you … » when done "
     "(success or failure). Put files in the SAME bot_tell via attachments=['path/…'] "
     "(copied to their mail-inbox staging; they use files_claim_mail). "
-    "Do NOT paste file contents when a ~/shared path exists. "
+    "Do NOT paste file contents when a ~/files path exists. "
     "Do NOT use a second channel for files. bot_delegate is text-only sugar "
     "(no attachments) — prefer bot_tell when files or a callback matter. "
     "After sending, continue other work or idle; when their Dit arrives, you are "
@@ -265,7 +270,7 @@ DESKTOP & BROWSER (server-side; works without the web UI open)
 
 == 1. Desk and shell ==
 - Two desk modes: terminal (shell only) and screen (GUI). vm_request_desk(mode) WAITS for the user; call nothing else meanwhile. Ask for screen only for GUI work (browser, clicks, drags). Check state with vm_desk_status. If the desk is down, ask the user once.
-- Shell work: vm_terminal_exec (cwd /home/autonomous/workspace). Bot files (~/shared): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for a terminal VM and waits. Never invent command output. There is no host bash on the Autonomous server: the agent cannot run commands on the host machine.
+- Shell work: vm_terminal_exec (cwd /home/autonomous/workspace, the same private folder as ~/files). Bot files (~/files, this bot only): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for a terminal VM and waits. Never invent command output. There is no host bash on the Autonomous server: the agent cannot run commands on the host machine.
 - Chrome is already started by the screen desk: check with browser_tabs, then browser_navigate. Only if no Chrome exists: `setsid bot-chrome 'https://…' >/dev/null 2>&1 &` (it never exits: never run it in the foreground, never start a second Chrome).
 
 == 2. Tools: what each one is for ==

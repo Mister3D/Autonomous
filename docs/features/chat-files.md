@@ -14,10 +14,10 @@
 
 - Composer **+** button → system file picker (multiple).
 - **Drag and drop** onto the conversation area → same attachments.
-- Storage: `~/shared/upload/<uuid>/<user_file_name>` (name collision = different UUID).
+- Storage: `~/files/upload/<uuid>/<user_file_name>` (name collision = different UUID).
 - In the thread: images (pasted **or** uploaded `.png`/`.jpg`/…) in a **thumbnail grid**; other files as side-by-side **cards** (wrap), not stacked.
 - Pasting an **image** (Ctrl+V) remains the vision flow (`chat-attachments/`), distinct from uploaded files.
-- The agent receives **absolute paths** (host + VM) — never `~/shared` (Pi runs as the host user, so `~` points to that user's home → ENOENT).
+- The agent receives **absolute paths** (host + VM) — never `~/files` (Pi runs as the host user, so `~` points to that user's home → ENOENT). The VM path is `/home/autonomous/workspace/…` (same private folder).
 
 ## Implementation
 

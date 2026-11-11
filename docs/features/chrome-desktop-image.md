@@ -27,7 +27,7 @@
 
 Chrome isolates each tab in an OS **sandbox** (namespaces / seccomp). In "tight" Docker, this sandbox often fails (`Operation not permitted` on PID namespaces) — hence the habit of passing `--no-sandbox`, which **turns off** this isolation. Consequences: (1) less safe if a page is malicious; (2) **very visible** to anti-bots, which read the flags / environment. We prefer to loosen Docker a little (`seccomp=unconfined`) and keep the Chrome sandbox, rather than a browser that "works" but is fingerprinted as a bot.
 - Useful shell packages: `nano`, `vim-tiny`, `less` (via Dockerfile).
-- Downloads → `/home/autonomous/shared` (policy).
+- Downloads → `/home/autonomous/shared` (policy in the image). That path is the same private folder as `~/files` and `~/workspace`, not a folder other bots can read.
 
 ## Rebuild
 

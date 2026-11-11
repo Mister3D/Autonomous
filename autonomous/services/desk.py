@@ -29,7 +29,7 @@ def _refresh_companion_egress(home: Path | None) -> None:
     except Exception:
         pass
 _PORT_BASE = 15900
-# Idle desk → docker stop (bind-mounted ~/shared stays on host).
+# Idle desk → docker stop (bind-mounted ~/files stays on host).
 AUTO_SLEEP_SEC = 5 * 60
 _REPO_DESKTOP = Path(__file__).resolve().parents[2] / "docker" / "desktop"
 _DESKTOP_SCRIPTS = (
@@ -238,8 +238,58 @@ def vm_api_base(home: Path | None = None) -> str | None:
     return f"http://host.docker.internal:{port}/api/v1"
 
 
+def _ensure_files_alias(bot: str, *, home: Path | None = None) -> None:
+    """Expose this bot's private files as ~/files inside an already running VM.
+
+    New desks bind-mount that path. Older containers only have ~/workspace
+    (and the legacy ~/shared mount Chrome still uses), so add a symlink once.
+    """
+    marker = bot_dir(bot, home) / "home" / ".autonomous" / "files-alias"
+    if marker.is_file():
+        return
+    name = container_name(bot, home=home)
+    script = (
+        "if [ ! -e /home/autonomous/files ]; then "
+        "ln -sfn workspace /home/autonomous/files; "
+        "fi"
+    )
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "-u", "root", name, "bash", "-lc", script],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("ok\n", encoding="utf-8")
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return
+
+
+def ensure_files_aliases(*, home: Path | None = None) -> None:
+    """Point ~/files at the private folder on every desk already running.
+
+    Called at serve start, before stale-run recovery opens Pi. Sleeping desks
+    get the same link in ``wake_desk`` / ``ensure_awake``. The new prompt then
+    tells the bot to use ~/files and to stop using ~/shared.
+    """
+    from autonomous.services import bots as bots_svc
+
+    for bot in bots_svc.list_bots(home=home):
+        name = str(bot.get("name") or "")
+        desk = bot.get("desk") or {}
+        if not name or desk.get("state") != "running":
+            continue
+        try:
+            _ensure_files_alias(name, home=home)
+        except Exception:
+            continue
+
+
 def sync_host_api_env(bot: str, *, home: Path | None = None) -> Path | None:
-    """Write host API URLs into the bind-mounted shared home for VM scripts."""
+    """Write host API URLs into the bind-mounted private files for VM scripts."""
     base = vm_api_base(home)
     if not base:
         return None
@@ -424,6 +474,7 @@ def wake_desk(bot: str, *, home: Path | None = None) -> dict[str, Any]:
         raise AutonomousError("No desk to wake", code="desk_absent")
     if desk.get("state") == "running":
         touch_activity(bot, home=home)
+        _ensure_files_alias(bot, home=home)
         return desk
     try:
         client = _docker()
@@ -470,6 +521,7 @@ def wake_desk(bot: str, *, home: Path | None = None) -> dict[str, Any]:
             restart_bot_chrome(bot, home=home)
     except Exception:
         pass
+    _ensure_files_alias(bot, home=home)
     BUS.publish("desk.updated", {"desk": desk}, bot=bot)
     return desk
 
@@ -488,6 +540,7 @@ def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:
         desk = wake_desk(bot, home=home)
     elif state == "running":
         touch_activity(bot, home=home)
+        _ensure_files_alias(bot, home=home)
     else:
         raise AutonomousError(
             "Desktop is not running — start the bot desk first.",
@@ -504,10 +557,13 @@ def tick_auto_sleep(*, home: Path | None = None) -> int:
     for bot in bots_svc.list_bots(home=home):
         if not bot.get("auto_sleep", True):
             continue
-        if bot.get("status") in ("busy", "waiting"):
-            continue
         desk = bot.get("desk") or {}
         if desk.get("state") != "running":
+            continue
+        # Agent run (or a card waiting on the user): keep the idle clock at zero
+        # so sleep starts only after the run ends.
+        if bot.get("status") in ("busy", "waiting"):
+            touch_activity(bot["name"], home=home)
             continue
         last = bot.get("desk_last_active_at") or desk.get("created_at")
         if not last:
@@ -780,7 +836,8 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
     BUS.publish("notification", {"kind": "desk.creating", "bot": bot}, bot=bot)
 
     root = bot_dir(bot, home)
-    # Bind host folder as ~/shared (and workspace alias) — do not overlay $HOME.
+    # Bind this bot's private files as ~/files (and workspace). Keep ~/shared
+    # so the desktop image (Chrome downloads, autonomous-hook) still finds them.
     home_mount = root / "home"
     home_mount.mkdir(parents=True, exist_ok=True)
     try:
@@ -803,13 +860,20 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
 
         shared_mounts = [
             Mount(
-                target="/home/autonomous/shared",
+                target="/home/autonomous/files",
                 source=str(home_mount),
                 type="bind",
                 read_only=False,
             ),
             Mount(
                 target="/home/autonomous/workspace",
+                source=str(home_mount),
+                type="bind",
+                read_only=False,
+            ),
+            # Legacy alias. Same private folder — not shared with other bots.
+            Mount(
+                target="/home/autonomous/shared",
                 source=str(home_mount),
                 type="bind",
                 read_only=False,
@@ -913,6 +977,7 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
     # below restores busy or resume_run sets it.
     bots_svc.patch_bot(bot, {"desk": desk}, home=home)
     touch_activity(bot, home=home)
+    _ensure_files_alias(bot, home=home)
     _refresh_companion_egress(home)
     _job_log(job_id, "terminé", progress=98, home=home)
     BUS.publish("desk.updated", {"desk": desk}, bot=bot)
@@ -1185,12 +1250,9 @@ def reset(bot: str, *, confirm: bool, home: Path | None = None) -> dict[str, Any
 
 
 def novnc_info(bot: str, home: Path | None = None) -> dict[str, Any]:
+    """Connection info only. Viewing the stream must not wake or reset auto-sleep."""
     desk = status(bot, home=home) or {}
-    if desk.get("state") == "sleeping":
-        desk = ensure_awake(bot, home=home)
-    elif desk.get("state") == "running":
-        touch_activity(bot, home=home)
-    port = desk.get("vnc_port")
+    port = desk.get("vnc_port") if desk.get("state") == "running" else None
     if not port:
         return {
             "url": "",

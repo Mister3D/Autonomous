@@ -588,6 +588,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../api";
+import { forgetUpdateStatus } from "../updateStatusCache";
 import { setLocale } from "../i18n";
 import { botPath } from "../router";
 import { currentBotObj, state } from "../store";
@@ -769,6 +770,8 @@ async function deleteAllBots() {
     for (const name of names) {
       await api.deleteBot(name);
       delete state.messages[name];
+      delete state.threadPages[name];
+      delete state.previews[name];
     }
     state.currentBot = null;
     deleteAllArmed.value = false;
@@ -1155,6 +1158,7 @@ async function applyUpdateBranch(want) {
       channel: branch,
       confirm_dev: branch !== "main",
     });
+    forgetUpdateStatus();
     updateChannelSaved = branch;
     if (branch !== "main" && branch !== "dev") {
       updateCustomBranch.value = branch;
@@ -1194,6 +1198,7 @@ async function saveUpdateRemote() {
   updateChannelBusy.value = true;
   try {
     const st = await api.setUpdateChannel({ remote_url: next });
+    forgetUpdateStatus();
     updateRemoteSaved.value = String(st.remote_url || "").trim();
     updateRemoteDraft.value = updateRemoteSaved.value;
     updateOriginUrl.value = String(st.origin_url || updateOriginUrl.value || "").trim();

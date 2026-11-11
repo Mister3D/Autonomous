@@ -2,12 +2,12 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/updates.py`, `autonomous/api/setup_routes.py` (`/setup/update*`), `frontend/src/components/SetupPanel.vue`, Settings → General  
-**Last updated**: 2026-11-07 (available-update card: icon + title/meta + pill actions)
+**Last updated**: 2026-11-12 (home line reuses the last check for 24 h; no refetch on each page load)
 
 ## User behaviour
 
 - Update status is shown on the ready home (`/` tagline, under the setup link) **and** at the bottom of the incomplete setup checklist (`/setup` or home while required items are missing), so you can apply an update before finishing config. Quiet “Up to date · channel · Check” when current; when behind (or fetch/dirty/apply in progress) a compact **card**: small download icon left of “Update available”, meta `Branch: {channel}` (no commit count), full-width **Update** below. Hidden if the install is not a git checkout.
-- **Check** forces a remote check (otherwise results are cached **24 h** under `$AUTONOMOUS_HOME/update-check.json`).
+- **Check** forces a remote check (otherwise results are cached **24 h** under `$AUTONOMOUS_HOME/update-check.json`). The home line also keeps that result in the browser (`localStorage`) for the same 24 h, so a page load does not call `/setup/update` again and the line does not pop in late. Changing the branch or the remote URL drops that copy. After an apply, it is dropped so the restarted page checks once.
 - **Update** fast-forwards to `<remote>/<branch>`, runs `npm ci` + `npm run build` in `frontend/`, `pip install -e .` in the venv, then **restarts** `autonomous.service` via `systemctl` when a unit is active (delayed ~2 s). Manual restart if no unit.
 - Settings → General → **Updates**:
   - **Repository URL** (optional): empty keeps `origin`; a fork URL configures a dedicated git remote named `updates`. Only `https://`, `ssh://`, or `git@…` — applying an update from that remote runs `npm`/`pip` and may restart the service (**code execution**).

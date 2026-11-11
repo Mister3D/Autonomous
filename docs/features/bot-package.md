@@ -13,7 +13,7 @@
 ## Implementation
 
 - Host paths under `data/bots/<bot>/`:
-  - `home/` (= `~/shared`) → files + screenshots + browser profile
+  - `home/` (= `~/files`) → files + screenshots + browser profile
   - `pi/` → agent session JSONL
   - `downloads/`
 - Conversation size = SQLite `messages` UTF-8 lengths for that bot (content + attachments_json + meta_json). File bytes for uploads/images/screenshots are **not** double-counted here — they sit under `home/`.

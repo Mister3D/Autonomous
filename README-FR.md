@@ -15,7 +15,7 @@ Interface en anglais par défaut ; traductions françaises incluses.
 - Créer / gérer des bots (CLI = API = UI)
 - Chat persistant avec un agent Pi en streaming (outils, coffre, garde-fous) ; export PDF d’une discussion (noms d’outils, sans détail)
 - Terminal interactif (xterm.js + PTY) et bureau (XFCE + noVNC + Chrome)
-- Fichiers partagés sous `~/shared` (envoi / dossiers / téléchargement)
+- Fichiers privés de chaque bot sous `~/files` (envoi / dossiers / téléchargement)
 - Connexion web (utilisateur unique) + SSE en direct entre onglets
 - OpenAPI généré depuis les routes Flask (`/api/docs`, `/api/openapi.json`)
 
@@ -43,7 +43,7 @@ Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor liste les fichiers de ~/shared" width="820">
+  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor liste les fichiers de ~/files" width="820">
 </p>
 
 </details>

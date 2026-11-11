@@ -1,4 +1,4 @@
-"""Bot file browsing under ~/shared (host-mounted) with path-traversal protection."""
+"""Bot file browsing under ~/files (host-mounted, private per bot)."""
 
 from __future__ import annotations
 
@@ -18,8 +18,10 @@ from autonomous.services import bots as bots_svc
 from autonomous.services.errors import AutonomousError, Forbidden, NotFound, ValidationError
 from autonomous.services.events import BUS
 
-# Shown in the UI as ~/shared — host path bots/<name>/home
-SHARED_LABEL = "shared"
+# Shown in the UI as ~/files — host path bots/<name>/home (one folder per bot).
+# "shared" stays accepted so older paths and chat markdown still resolve.
+FILES_LABEL = "files"
+_FILES_ALIASES = ("files", "shared")
 CHAT_UPLOAD_DIR = "upload"
 MAIL_INBOX_DIR = ".autonomous/mail-inbox"
 MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024
@@ -51,14 +53,22 @@ def _root(bot: str, home: Path | None) -> Path:
     return root
 
 
+def _strip_files_alias(rel: str) -> str:
+    """Drop ~/files or the legacy ~/shared prefix. Empty string means the root."""
+    rel = (rel or "").replace("\\", "/").strip().lstrip("/")
+    for name in _FILES_ALIASES:
+        for prefix in (f"~/{name}/", f"{name}/", f"~/{name}", name):
+            bare = prefix.rstrip("/")
+            if rel == bare or rel.startswith(prefix if prefix.endswith("/") else prefix + "/"):
+                if rel == bare:
+                    return ""
+                return rel[len(prefix) :].lstrip("/")
+    return rel
+
+
 def resolve(bot: str, rel: str, home: Path | None = None) -> Path:
     root = _root(bot, home)
-    rel = (rel or ".").replace("\\", "/").lstrip("/")
-    # Accept UI prefixes like shared/… or ~/shared/…
-    for prefix in ("~/shared/", "shared/", "~/shared", "shared"):
-        if rel == prefix.rstrip("/") or rel.startswith(prefix if prefix.endswith("/") else prefix + "/"):
-            rel = rel[len(prefix) :].lstrip("/") if rel != prefix.rstrip("/") else "."
-            break
+    rel = _strip_files_alias(rel or ".")
     if not rel or rel == ".":
         return root
     target = (root / rel).resolve()
@@ -149,7 +159,7 @@ def share_image(
     caption: str | None = None,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a ~/shared image and return markdown to paste into the assistant reply.
+    """Validate a ~/files image and return markdown to paste into the assistant reply.
 
     The model can only emit text — embedding an image means writing ``![…](url)``
     in the reply body (rendered by the chat markdown). This helper builds that line.
@@ -256,7 +266,7 @@ def attach_file(
 
 
 def read_text(bot: str, path: str, home: Path | None = None) -> dict[str, Any]:
-    """Read a UTF-8 text file under ~/shared (agent-facing)."""
+    """Read a UTF-8 text file under ~/files (agent-facing)."""
     target = resolve(bot, path, home=home)
     if not target.exists() or not target.is_file():
         raise NotFound(t("files.not_found"))
@@ -298,7 +308,7 @@ def write_text(
     *,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Create or overwrite a UTF-8 text file under ~/shared (agent-facing)."""
+    """Create or overwrite a UTF-8 text file under ~/files (agent-facing)."""
     if content is None:
         content = ""
     if not isinstance(content, str):
@@ -312,13 +322,7 @@ def write_text(
     rel = (path or "").replace("\\", "/").strip().lstrip("/")
     if not rel or rel in (".", "..") or ".." in rel.split("/"):
         raise AutonomousError("Invalid path", code="invalid_path")
-    # Strip shared/ prefix the same way resolve() does.
-    for prefix in ("~/shared/", "shared/", "~/shared", "shared"):
-        if rel == prefix.rstrip("/") or rel.startswith(
-            prefix if prefix.endswith("/") else prefix + "/"
-        ):
-            rel = rel[len(prefix) :].lstrip("/") if rel != prefix.rstrip("/") else ""
-            break
+    rel = _strip_files_alias(rel)
     if not rel or rel.endswith("/"):
         raise AutonomousError("Path must be a file path", code="invalid_path")
     parent_rel = str(Path(rel).parent).replace("\\", "/")
@@ -449,7 +453,7 @@ def mkdir(
     *,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Create a directory under ~/shared."""
+    """Create a directory under ~/files."""
     directory = resolve(bot, parent or ".", home=home)
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
@@ -482,7 +486,7 @@ def save_upload(
     stream: BinaryIO,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Save an uploaded file into a directory under ~/shared."""
+    """Save an uploaded file into a directory under ~/files."""
     directory = resolve(bot, dest_dir or ".", home=home)
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
@@ -517,7 +521,7 @@ def save_chat_upload(
     stream: BinaryIO,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Save a chat attachment under ``~/shared/upload/<uuid>/<original_name>``.
+    """Save a chat attachment under ``~/files/upload/<uuid>/<original_name>``.
 
     UUID folder avoids collisions when the same display name is uploaded twice.
     The conversation keeps ``name`` (original); the bot reads via ``path``.
@@ -606,7 +610,7 @@ def stage_mail_attachments(
     inbox_id: str,
     home: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Copy sender ``~/shared`` files into the recipient mail-inbox staging area.
+    """Copy sender ``~/files`` files into the recipient mail-inbox staging area.
 
     Staging path: ``.autonomous/mail-inbox/<inbox_id>/<filename>``.
     The recipient may then claim/move them wherever they want.
@@ -714,18 +718,8 @@ def claim_mail_attachment(
     *,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Move a staged mail-inbox file to ``dest`` under the bot's ``~/shared``."""
-    src_rel = (staging_path or "").replace("\\", "/").strip().lstrip("/")
-    for prefix in ("~/shared/", "shared/", "~/shared", "shared"):
-        if src_rel == prefix.rstrip("/") or src_rel.startswith(
-            prefix if prefix.endswith("/") else prefix + "/"
-        ):
-            src_rel = (
-                src_rel[len(prefix) :].lstrip("/")
-                if src_rel != prefix.rstrip("/")
-                else ""
-            )
-            break
+    """Move a staged mail-inbox file to ``dest`` under the bot's ``~/files``."""
+    src_rel = _strip_files_alias(staging_path or "")
     if not src_rel.startswith(f"{MAIL_INBOX_DIR}/"):
         raise ValidationError(
             f"path must be under {MAIL_INBOX_DIR}/",
@@ -735,17 +729,7 @@ def claim_mail_attachment(
     if not src.is_file():
         raise NotFound(t("files.not_found"))
 
-    dest_rel = (dest or "").replace("\\", "/").strip().lstrip("/")
-    for prefix in ("~/shared/", "shared/", "~/shared", "shared"):
-        if dest_rel == prefix.rstrip("/") or dest_rel.startswith(
-            prefix if prefix.endswith("/") else prefix + "/"
-        ):
-            dest_rel = (
-                dest_rel[len(prefix) :].lstrip("/")
-                if dest_rel != prefix.rstrip("/")
-                else ""
-            )
-            break
+    dest_rel = _strip_files_alias(dest or "")
     if not dest_rel or dest_rel in (".", "..") or ".." in dest_rel.split("/"):
         raise ValidationError("Invalid destination path", code="invalid_path")
     if dest_rel.endswith("/"):

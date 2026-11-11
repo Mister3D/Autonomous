@@ -1,4 +1,4 @@
-# Files (`~/shared`)
+# Files (`~/files`)
 
 **Status**: in place  
 **Key files**:
@@ -6,14 +6,14 @@
 - `frontend/src/api.js` (`listFiles`, `uploadFile`, `mkdir`, `moveFile`, `downloadUrl`, `deleteFile`)
 - `autonomous/services/files.py`
 - `autonomous/api/bots.py` (`/files`, `/files/upload`, `/files/mkdir`, `/files/move`, `/files/download`)
-- `autonomous/services/desk.py` (mounts shared + workspace)
+- `autonomous/services/desk.py` (mounts files + workspace; legacy `shared` alias)
 
-**Last updated**: 2026-11-11 (dir sizes, DnD into folders/crumbs, click=download, delete confirm)
+**Last updated**: 2026-11-12 (private `~/files`; `~/shared` is only a legacy alias)
 
 ## User behaviour
 
 - Inspector: tab renamed **Files** (i18n key `panel.files`).
-- UI root = `~/shared` (breadcrumb with folder icon).
+- UI root = `~/files` (breadcrumb with folder icon). This folder is **private to the bot**. Other bots do not see it. Shared household memory (`memory_*`) is a different feature and keeps its name.
 - **Icon-only** actions (tooltip): create folder, upload file(s).
 - Drag & drop of files onto the panel.
 - Folder creation: **inline form** (not `window.prompt` — often blocked → "it doesn't work").
@@ -21,24 +21,24 @@
 - **Click a file** → download (no separate download icon). **Click a folder** → enter it.
 - **Delete**: arm → check confirm (same pattern as Manage / Settings), then delete.
 - **Drag & drop**:
-  - OS files onto the panel, a **folder row**, a breadcrumb crumb (incl. root `~/shared`), or `..` → upload into that directory;
+  - OS files onto the panel, a **folder row**, a breadcrumb crumb (incl. root `~/files`), or `..` → upload into that directory;
   - an existing library entry onto a folder / crumb / `..` → `POST /files/move` (basename kept).
-- Content synced with the VM under `~/shared` (and `~/workspace`, same volume).
+- Content synced with the VM under `~/files` (and `~/workspace`, same volume). `~/shared` is the same private folder, kept so Chrome downloads and `autonomous-hook` still resolve.
 - **Live list**: agent/UI writes (`files_write` / mkdir / upload / delete / move) emit SSE `files.changed` → the Files tab reloads quietly (debounced). No interval poll — shell/`vm_terminal_exec` writes that skip the files API are not auto-detected until the next API mutation or manual navigation.
 - **Not "inside" the VM**: host bind mount → if the desktop goes to sleep (`docker stop`) or is destroyed, the files **remain**. Only a **desktop reset** (or manual deletion of the host folder) erases them.
 
 ## Implementation
 
 - Host root: `data/bots/<bot>/home/` (= former desk "home").
-- API paths relative to this root; `shared/` or `~/shared/` prefixes accepted then normalised.
+- API paths relative to this root; `files/` or `~/files/` prefixes accepted then normalised. Legacy `shared/` and `~/shared/` still resolve to the same root.
 - `files._notify_changed` → `BUS.publish("files.changed", {bot, op, path})`; UI `state.filesFeed` + `LibraryPane` debounce reload.
 - Upload: `POST /api/v1/bots/:name/files/upload?path=.` multipart field `file`. The client **must not** set `Content-Type: application/json` on `FormData` (breaks the boundary → opaque `Failed to fetch` / empty body). Snapshot `dataTransfer.files` synchronously on drop; OS drops on a file row upload into the **current** folder (folder rows / crumbs still target that directory).
 - Text content (agent): `GET|PUT /api/v1/bots/:name/files/content` — see [`agent-files.md`](./agent-files.md).
 - Mkdir: `POST /api/v1/bots/:name/files/mkdir` JSON `{ "path": ".", "name": "dossier" }`.
 - Move: `POST /api/v1/bots/:name/files/move` JSON `{ "src": "a.pdf", "dest": "CV" }` — moves into directory `dest`, keeps basename; refuses self/descendant and name clashes.
 - Folder `size` = recursive byte sum (capped walk) from `list_dir`.
-- New desks: two Docker `Mount`s on the same source → `/home/autonomous/shared` and `/home/autonomous/workspace`.
-- Already running VMs: often `ln -sfn /home/autonomous/workspace /home/autonomous/shared`.
+- New desks: three Docker `Mount`s on the same source → `/home/autonomous/files`, `/home/autonomous/workspace`, and `/home/autonomous/shared` (legacy alias, not shared with other bots).
+- Already running VMs: `serve` start calls `ensure_files_aliases` **before** stale-run recovery, so a Pi restarted by an update sees `~/files` immediately (`ln -sfn workspace /home/autonomous/files` once, marker `home/.autonomous/files-alias`). Sleeping desks get the same link on wake. The prompt forbids `~/shared` / `/home/autonomous/shared` in commands and replies. Older desks may still show that directory (Chrome downloads); bots must ignore it.
 
 ## Pitfalls / non-regressions
 
@@ -51,7 +51,7 @@
 ## Quick check
 
 1. Files tab → folder+/upload icons visible; folder sizes shown.
-2. Create a folder via the inline field → appears in the list **and** in `ls ~/shared` in the container.
+2. Create a folder via the inline field → appears in the list **and** in `ls ~/files` (or `~/workspace`) in the container.
 3. Click a PDF → download starts; drag it onto another folder / root crumb → moved.
 4. Delete → check confirm → gone.
 

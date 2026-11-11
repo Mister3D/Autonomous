@@ -60,7 +60,7 @@
       </ul>
     </div>
 
-    <div v-else-if="(waking || sleeping) && active" class="desk-status">
+    <div v-else-if="waking && active" class="desk-status">
       <h3>{{ t("desk.waking") }}</h3>
       <p v-if="wakeError" style="color: var(--danger)">{{ wakeError }}</p>
       <button
@@ -72,6 +72,15 @@
       >
         {{ t("desk.wakeRetry") }}
       </button>
+    </div>
+
+    <div v-else-if="sleeping && active" class="desk-status">
+      <h3>{{ t("desk.asleep") }}</h3>
+      <p class="desk-status-meta">{{ t("desk.asleepHint") }}</p>
+      <button class="btn primary" type="button" :disabled="waking" @click="wake">
+        {{ t("desk.wake") }}
+      </button>
+      <p v-if="wakeError" style="color: var(--danger)">{{ wakeError }}</p>
     </div>
     <!-- Keep a quiet placeholder while sleeping but tab not visible (v-show mount). -->
     <div v-else-if="sleeping || waking" class="empty" aria-hidden="true" />
@@ -101,7 +110,7 @@ import CreateDeskModal from "./CreateDeskModal.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },
-  /** True when the Screen tab is visible — triggers wake / noVNC refresh. */
+  /** True when the Screen tab is visible. Does not wake a sleeping desk. */
   active: { type: Boolean, default: false },
 });
 const { t } = useI18n();
@@ -116,6 +125,8 @@ const linkState = ref("idle");
 let releaseArmedAt = 0;
 let connectWatchdog = 0;
 let retryTimer = 0;
+/** While the user holds the desktop, ping often enough that the 5 min clock stays at zero. */
+let activityTimer = 0;
 
 const running = computed(
   () => props.bot.desk?.state === "running" && !!props.bot.desk?.vnc_port,
@@ -266,10 +277,28 @@ async function wake() {
   }
 }
 
+function stopActivityHold() {
+  if (activityTimer) {
+    clearInterval(activityTimer);
+    activityTimer = 0;
+  }
+}
+
+function holdActivity() {
+  if (!props.active || !state.humanControl || !running.value) return;
+  api.deskActivity(props.bot.name).catch(() => {});
+}
+
+function syncActivityHold() {
+  stopActivityHold();
+  if (!props.active || !state.humanControl || !running.value) return;
+  holdActivity();
+  activityTimer = window.setInterval(holdActivity, 60_000);
+}
+
 async function ensureVisible() {
   if (!props.active) return;
-  if (sleeping.value) await wake();
-  else if (running.value) await refreshNovnc({ bust: false });
+  if (running.value) await refreshNovnc({ bust: false });
 }
 
 watch(running, (isRunning) => {
@@ -281,9 +310,10 @@ watch(running, (isRunning) => {
   }
 });
 
-watch(sleeping, (asleep) => {
-  if (asleep && props.active) wake();
-});
+watch(
+  () => [props.active, state.humanControl, running.value],
+  () => syncActivityHold(),
+);
 
 watch(
   () => props.active,
@@ -309,6 +339,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearTimers();
+  stopActivityHold();
   document.removeEventListener("pointerdown", onDocPointerDown, true);
   window.removeEventListener("message", onNovncMessage);
 });

@@ -70,7 +70,7 @@ const props = defineProps({
 const emit = defineEmits(["close", "done"]);
 
 const { t } = useI18n();
-/** Recreate keeps ~/shared. One VM always includes the shell and the desktop. */
+/** Recreate keeps ~/files. One VM always includes the shell and the desktop. */
 const replacing = computed(() => {
   const st = props.bot.desk?.state;
   return st === "running" || st === "sleeping" || st === "creating";

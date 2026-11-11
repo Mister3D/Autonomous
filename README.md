@@ -15,7 +15,7 @@ English UI by default; French translations included.
 - Create / manage bots (CLI = API = UI)
 - Persistent chat with a streaming Pi agent (tools, vault, guard-rails); export a discussion to PDF (tool names, no details)
 - Interactive terminal (xterm.js + PTY) and desktop (XFCE + noVNC + Chrome)
-- Shared files under `~/shared` (upload / folders / download)
+- Each bot's private files under `~/files` (upload / folders / download)
 - Web login (single user) + live SSE across tabs
 - OpenAPI from Flask routes (`/api/docs`, `/api/openapi.json`)
 
@@ -43,7 +43,7 @@ Example bots (**Atlas**, **Nova**, **Pixel**, **Harbor**) in the English UI:
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor listing files in ~/shared" width="820">
+  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor listing files in ~/files" width="820">
 </p>
 
 </details>

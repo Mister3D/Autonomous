@@ -39,7 +39,7 @@ GET    /bots
 POST   /bots                        # free-form {name} (spaces/CAPS OK) → label + auto slug; slug?; is_manager? (only one → 409 manager_exists)
 GET    /bots/token-usage            # daily cumulative token series per living bot (Settings chart)
 GET    /bots/:name                  # :name = technical slug
-GET    /bots/:name/package          # disk footprint (VM layer + ~/shared + chat + Pi)
+GET    /bots/:name/package          # disk footprint (VM layer + ~/files + chat + Pi)
 PATCH  /bots/:name                  # incl. companion_id, companion_egress, companion_killswitch
 DELETE /bots/:name
 POST   /bots/:name/capability
@@ -54,7 +54,7 @@ GET    /bots/:name/messages        # page `limit`≤200, `before`; the client pa
 POST   /bots/:name/messages         # {content?, attachments?, prompt?} → run Pi (prompt = agent text if set)
 POST   /bots/:name/reactions        # {emoji, message_id?} — emoji on the turn's user bubble; does not cut the reply
 GET    /bots/:name/chat/attachments/:file  # pasted image
-POST   /bots/:name/chat/files       # multipart → ~/shared/upload/<uuid>/<name>
+POST   /bots/:name/chat/files       # multipart → ~/files/upload/<uuid>/<name>
 DELETE /bots/:name/messages         # + Pi session rotation
 DELETE /bots/:name/messages/:id     # cancel a still-queued bubble (meta.queued)
 GET    /bots/:name/messages/export.pdf  # discussion PDF (tool names, no args/results)
@@ -91,13 +91,14 @@ GET    /bots/:name/mcp               # grants + published servers
 POST   /bots/:name/mcp               # {device_id, server}
 DELETE /bots/:name/mcp/:grant_id
 WS     /ws/companion                 # tunnel, Authorization: Bearer adc_…
+POST   /bots/:name/desk/activity         # reset auto-sleep clock; does not wake
 POST   /bots/:name/desk/wake             # wake (sleeping → running); no-op if already running
 POST   /bots/:name/desk/request          # agent → card + authorisation modal
 POST   /bots/:name/desk/request/resolve  # deny from the card
 POST   /bots/:name/desk/destroy
 POST   /bots/:name/desk/restart
 POST   /bots/:name/desk/reset
-GET    /bots/:name/desk/novnc            # also wakes if sleeping
+GET    /bots/:name/desk/novnc            # connection info; does not wake or reset auto-sleep
 POST   /bots/:name/screen/screenshot     # X11 capture → PNG (+ chat card)
 GET    /bots/:name/screen/screenshots/:id.png
 POST   /bots/:name/screen/ground         # UI-TARS locate → {ok,x,y,loops[]} + chat cards
@@ -135,7 +136,7 @@ PUT    /bots/:name/files/content         # JSON {path, content}
 GET    /bots/:name/files/raw?path=       # inline bytes (chat images)
 POST   /bots/:name/files/share           # JSON {path, caption?} → markdown image
 POST   /bots/:name/files/attach          # JSON {path} → bubble attachment (PDF/zip, not images)
-POST   /bots/:name/files/claim-mail      # JSON {path, dest} → move mail-inbox staging file into ~/shared
+POST   /bots/:name/files/claim-mail      # JSON {path, dest} → move mail-inbox staging file into ~/files
 DELETE /bots/:name/files?path=
 
 GET    /jobs/:id
@@ -196,7 +197,7 @@ event: job.updated
 event: terminal.created
 event: notification
 event: vault.updated | vault.deleted | vault.grant | vault.revoke | vault.request
-event: files.changed                 # ~/shared write/mkdir/upload/delete → Files tab refresh
+event: files.changed                 # ~/files write/mkdir/upload/delete → Files tab refresh
 ```
 
 Global `/events` is what every open browser tab should subscribe to so creations, runs and toasts stay in sync.

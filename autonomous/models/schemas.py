@@ -206,7 +206,7 @@ class CapabilitySchema(Schema):
 
 
 class ChatFileAttachmentSchema(Schema):
-    """File dropped / picked in chat → stored under ~/shared/upload/<uuid>/."""
+    """File dropped / picked in chat → stored under ~/files/upload/<uuid>/."""
 
     type = fields.Str(required=True)
     name = fields.Str(required=True)
@@ -221,7 +221,7 @@ class MessageSchema(Schema):
     conversation_id = fields.Str()
     role = fields.Str(validate=validate.OneOf(MSG_ROLES))
     content = fields.Str(required=True)
-    # str = pasted image URL ; dict = chat file under ~/shared/upload/
+    # str = pasted image URL ; dict = chat file under ~/files/upload/
     attachments = fields.List(fields.Raw())
     meta = fields.Dict()
     created_at = fields.Str()
@@ -468,7 +468,7 @@ class BotMailSendSchema(Schema):
         validate=validate.Length(max=10),
         metadata={
             "description": (
-                "Optional paths under the sender's ~/shared to copy into the "
+                "Optional paths under the sender's private ~/files to copy into the "
                 "recipient's .autonomous/mail-inbox staging area"
             )
         },

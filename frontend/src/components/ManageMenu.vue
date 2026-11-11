@@ -143,6 +143,14 @@ async function clearChat() {
   await api.clearMessages(name);
   // Server wipe does not emit SSE; drop the thread so the pane and the rail update.
   state.messages[name] = [];
+  state.threadPages[name] = {
+    before: null,
+    hasMore: false,
+    boot: false,
+    paged: false,
+    older: false,
+  };
+  delete state.previews[name];
 }
 
 async function exportPdf() {
@@ -196,6 +204,8 @@ async function remove() {
   await api.deleteBot(name);
   state.bots = state.bots.filter((b) => b.name !== name);
   delete state.messages[name];
+  delete state.threadPages[name];
+  delete state.previews[name];
   const next = state.bots[0]?.name || null;
   state.currentBot = next;
   if (next) {

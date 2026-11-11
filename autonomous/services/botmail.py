@@ -163,7 +163,7 @@ def format_delegate_content(
     files_note = ""
     if has_attachments:
         files_note = (
-            " Files for this task were copied into your ~/shared staging "
+            " Files for this task were copied into your private ~/files staging "
             "(.autonomous/mail-inbox/…). Place them with files_claim_mail "
             "(or files_list/read) wherever you need before you start."
         )
@@ -653,7 +653,7 @@ def _attachments_prompt_block(attachments: list[dict[str, Any]] | None) -> str:
     if not attachments:
         return ""
     lines = [
-        "Attached files were copied into your ~/shared staging area. "
+        "Attached files were copied into your private ~/files staging area. "
         "Place each where you want with files_claim_mail(path, dest) "
         "(or files_list/read + write). Staging paths:"
     ]

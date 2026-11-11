@@ -11,7 +11,7 @@ from autonomous.paths import bot_dir, bot_pi_dir
 from autonomous.services import bots as bots_svc
 from autonomous.services.errors import AutonomousError
 
-# Chrome profile under ~/shared (often the heaviest folder after a few days).
+# Chrome profile under ~/files (often the heaviest folder after a few days).
 _CHROME_REL = Path(".autonomous-chrome")
 _SHOTS_REL = Path(".autonomous") / "screenshots"
 
@@ -36,7 +36,7 @@ def _dir_bytes(path: Path) -> int:
 
 
 def _chat_bytes(bot: str, home: Path | None) -> tuple[int, int]:
-    """UTF-8 byte length of stored messages + count (attachments live under ~/shared)."""
+    """UTF-8 byte length of stored messages + count (attachments live under ~/files)."""
     with get_db(home) as conn:
         row = conn.execute(
             """
@@ -115,7 +115,7 @@ def package_usage(bot: str, *, home: Path | None = None) -> dict[str, Any]:
     """Full package footprint for Details.
 
     Media (uploads, shared images, screenshots, Chrome profile) lives under
-    ``bots/<bot>/home`` (= ~/shared). Conversation size is SQLite text only —
+    ``bots/<bot>/home`` (= ~/files). Conversation size is SQLite text only —
     file bytes are not double-counted there.
     """
     bots_svc.get_bot(bot, home=home)

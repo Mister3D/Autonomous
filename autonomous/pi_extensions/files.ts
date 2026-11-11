@@ -1,5 +1,5 @@
 /**
- * Bot ~/shared (workspace) file tools — no desk required.
+ * Bot ~/files (private to this bot) — no desk required.
  * Same volume as the Files inspector and VM ~/workspace.
  */
 
@@ -76,12 +76,13 @@ export default function (pi: ExtensionAPI) {
     name: "files_list",
     label: "List bot files",
     description:
-      "List files/folders in this bot's shared workspace (~/shared = ~/workspace). " +
-      "No running desk required. Prefer this over vm_terminal_exec when you only need to browse bot files.",
+      "List files/folders in this bot's private ~/files (same folder as ~/workspace). " +
+      "Other bots cannot see them. No running desk required. " +
+      "Prefer this over vm_terminal_exec when you only need to browse bot files.",
     parameters: Type.Object({
       path: Type.Optional(
         Type.String({
-          description: "Relative path under ~/shared (default: root '.')",
+          description: "Relative path under ~/files (default: root '.')",
         }),
       ),
     }),
@@ -113,7 +114,7 @@ export default function (pi: ExtensionAPI) {
     name: "files_read",
     label: "Read bot file",
     description:
-      "Read a UTF-8 text file from this bot's ~/shared workspace. " +
+      "Read a UTF-8 text file from this bot's private ~/files. " +
       "Binary files are rejected — use Files panel download instead.",
     parameters: Type.Object({
       path: Type.String({ description: "Relative path, e.g. 'notes.txt' or 'upload/.../x.md'" }),
@@ -143,11 +144,11 @@ export default function (pi: ExtensionAPI) {
     name: "files_write",
     label: "Write bot file",
     description:
-      "Create or overwrite a UTF-8 text file in this bot's ~/shared workspace. " +
+      "Create or overwrite a UTF-8 text file in this bot's private ~/files. " +
       "Parents are created as needed. Visible in the Files inspector " +
       "and inside the VM at ~/workspace.",
     parameters: Type.Object({
-      path: Type.String({ description: "Relative file path under ~/shared" }),
+      path: Type.String({ description: "Relative file path under ~/files" }),
       content: Type.String({ description: "Full file contents (UTF-8)" }),
     }),
     execute: async (_id, params) => {
@@ -178,7 +179,7 @@ export default function (pi: ExtensionAPI) {
     name: "files_mkdir",
     label: "Mkdir bot folder",
     description:
-      "Create a directory under this bot's ~/shared workspace. ",
+      "Create a directory under this bot's private ~/files. ",
     parameters: Type.Object({
       path: Type.Optional(
         Type.String({ description: "Parent directory (default '.')" }),
@@ -209,16 +210,16 @@ export default function (pi: ExtensionAPI) {
     name: "files_delete",
     label: "Delete bot file",
     description:
-      "Delete a file or directory under this bot's ~/shared workspace. ",
+      "Delete a file or directory under this bot's private ~/files. ",
     parameters: Type.Object({
-      path: Type.String({ description: "Relative path to delete (not the shared root)" }),
+      path: Type.String({ description: "Relative path to delete (not the ~/files root)" }),
     }),
     execute: async (_id, params) => {
       const cfg = apiConfig();
       if (!cfg) return textResult("Autonomous API not configured.");
       const path = String(params.path || "").trim();
       if (!path || path === ".") {
-        return textResult("Refuse to delete shared root — give a relative path.", {
+        return textResult("Refuse to delete ~/files root — give a relative path.", {
           error: true,
         });
       }
@@ -237,14 +238,14 @@ export default function (pi: ExtensionAPI) {
     name: "files_share_image",
     label: "Share image in chat",
     description:
-      "Prepare a workspace IMAGE (~/shared) to show INSIDE your reply text. " +
+      "Prepare an image from this bot's private ~/files to show INSIDE your reply text. " +
       "Returns a markdown image line — you MUST paste that exact markdown into your " +
       "assistant text (rendered inline). png/jpg/webp/gif/svg/bmp. " +
       "For PDF/zip/other non-preview files use files_attach instead. " +
       "No desk required, no vm_screenshot.",
     parameters: Type.Object({
       path: Type.String({
-        description: "Relative image path under ~/shared, e.g. 'crabe.png'",
+        description: "Relative image path under ~/files, e.g. 'crabe.png'",
       }),
       caption: Type.Optional(
         Type.String({ description: "Alt text / caption for the markdown image" }),
@@ -285,7 +286,7 @@ export default function (pi: ExtensionAPI) {
       "",
     parameters: Type.Object({
       path: Type.String({
-        description: "Relative path under ~/shared, e.g. 'report.pdf'",
+        description: "Relative path under ~/files, e.g. 'report.pdf'",
       }),
     }),
     execute: async (_id, params) => {
@@ -313,7 +314,7 @@ export default function (pi: ExtensionAPI) {
     label: "Place mail attachment",
     description:
       "Move a file received via inter-bot mail from staging "
-      + "(.autonomous/mail-inbox/<id>/…) to a destination under YOUR ~/shared. "
+      + "(.autonomous/mail-inbox/<id>/…) to a destination under YOUR private ~/files. "
       + "Use after bot_tell/bot_ask delivered attachments — you choose the final path. "
       + "Does not leave a copy in staging.",
     parameters: Type.Object({
@@ -323,7 +324,7 @@ export default function (pi: ExtensionAPI) {
       }),
       dest: Type.String({
         description:
-          "Destination relative path under ~/shared, e.g. 'projects/chat/spec.md'",
+          "Destination relative path under ~/files, e.g. 'projects/chat/spec.md'",
       }),
     }),
     execute: async (_id, params) => {

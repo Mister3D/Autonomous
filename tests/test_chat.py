@@ -53,7 +53,7 @@ def test_chat_file_upload_and_message(auth_client, home):
     assert att["name"] == "rapport.pdf"
     assert att["path"].startswith("upload/")
     assert att["path"].endswith("/rapport.pdf")
-    # On disk under bot home (=~/shared)
+    # On disk under bot home (=~/files)
     disk = Path(home) / "bots" / "filebot" / "home" / att["path"]
     assert disk.is_file()
     assert disk.read_bytes() == data
