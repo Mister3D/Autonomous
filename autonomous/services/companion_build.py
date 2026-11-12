@@ -424,6 +424,16 @@ def _build_docker(home: Path, src: Path, wd: Path, digest: str) -> None:
                          "notes": notes, "started_at": time.time(), "builder": "docker"})
     (wd / "docker-target").mkdir(exist_ok=True)
     (wd / "docker-cargo").mkdir(exist_ok=True)
+    dockerfile = dockerfile_dir(src) / "Dockerfile"
+    if not dockerfile.is_file():
+        _write_status(home, {
+            "state": "failed",
+            "hash": digest,
+            "error": f"missing {dockerfile}",
+            "finished_at": time.time(),
+            "builder": "docker",
+        })
+        return
     image = builder_image(src)
     artifacts: list[dict[str, Any]] = []
     errors: list[str] = []

@@ -6,6 +6,7 @@ from flask import g, request
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 
+from autonomous.services import pi_packages as pi_packages_svc
 from autonomous.services import setup as setup_svc
 from autonomous.services import setup_config as cfg_svc
 from autonomous.services import updates as updates_svc
@@ -147,6 +148,31 @@ class SetupUpdateCheck(MethodView):
         """Force a remote check (invalidates the 24 h cache)."""
         try:
             return updates_svc.status(home=g.home, force=True)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/pi-packages")
+class SetupPiPackages(MethodView):
+    def get(self):
+        """Pi and npm plugin versions. Cached 6 h unless ?force=1."""
+        force = request.args.get("force") in ("1", "true", "yes")
+        try:
+            return pi_packages_svc.check(home=g.home, force=force)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/pi-packages/apply")
+class SetupPiPackagesApply(MethodView):
+    def post(self):
+        """Update the checked ids (``pi`` and/or a configured package source)."""
+        body = _body()
+        items = body.get("items")
+        if not isinstance(items, list):
+            items = []
+        try:
+            return pi_packages_svc.start_apply([str(item) for item in items], home=g.home), 202
         except AutonomousError as exc:
             _handle(exc)
 

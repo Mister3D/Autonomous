@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" fill="none">
+  <defs>
+    <radialGradient id="cloud" cx="82%" cy="8%" r="70%">
+      <stop offset="0%" stop-color="#fffdfb" stop-opacity="1"/>
+      <stop offset="46%" stop-color="#fff8f4" stop-opacity="0.96"/>
+      <stop offset="72%" stop-color="#f8e6dc" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#f3ddd4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#cloud)" d="M900 0H430c40 70 8 150 90 210 70 52 70 120 170 150 90 28 150 8 210-30V0Z"/>
+</svg>

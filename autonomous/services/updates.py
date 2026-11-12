@@ -40,6 +40,7 @@ SERVICE_NAMES = (
 )
 
 _MIGRATION_RE = re.compile(r"^(\d+)_.*\.sql$")
+_VERSION_RE = re.compile(r"^__version__\s*=\s*[\"']([^\"']+)[\"']", re.M)
 # Safe git branch / ref name (no shell metacharacters, no path escape).
 _BRANCH_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 # https / ssh only — http:// and git:// are rejected (cleartext / unauthenticated).
@@ -72,6 +73,25 @@ def _git(*args: str, timeout: float = 60.0, check: bool = False) -> subprocess.C
         timeout=timeout,
         check=check,
     )
+
+
+def version_in_source(text: str) -> str:
+    match = _VERSION_RE.search(text or "")
+    return match.group(1).strip() if match else ""
+
+
+def _version_at(rev: str) -> str:
+    """``__version__`` at a git revision, or empty when the file cannot be read."""
+    rev = str(rev or "").strip()
+    if not rev or not git_available():
+        return ""
+    try:
+        proc = _git("show", f"{rev}:autonomous/__init__.py", timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return version_in_source(proc.stdout or "")
 
 
 def git_available() -> bool:
@@ -449,8 +469,15 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
 
 
 def status(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
+    from autonomous import __version__ as app_version
+
     st = check(home=home, force=force)
     st["channels"] = list(CHANNELS)
+    st["version"] = app_version
+    remote_version = ""
+    if st.get("git") is not False and st.get("remote_sha"):
+        remote_version = _version_at(str(st.get("remote_sha") or ""))
+    st["latest_version"] = remote_version or app_version
     st["remote_url"] = remote_url(home)
     st["origin_url"] = origin_url() if git_available() else None
     current = channel(home)

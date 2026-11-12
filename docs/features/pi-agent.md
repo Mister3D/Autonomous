@@ -2,12 +2,12 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{batch,vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-12 (a missing `+` in an extension string kills the Pi process)
+**Last updated**: 2026-11-13 (home Pi rows match the Autonomous version row)
 
 ## User behaviour
 
 - Bottom left: **round settings button** (no more flag). Menu = open settings, log out. **Delete all bots** is under Settings → Générale, same arm → check (`.action-confirm`) pattern as the bot Details manage list — tooltip says Confirm? only. Each bot: same `DELETE` (Pi session + desktop + dir wipe).
-- Home page (Autonomous brand): banner if Pi is not ready → link to model/provider config docs.
+- Home page (Autonomous brand): banner if Pi is not ready → link to model/provider config docs. Each Pi install and npm plugin is a row `{name} - {version}` with refresh and an **Up to date** pill; a newer release shows `→ {latest}` and **Update** on that row only (`POST /setup/pi-packages/apply`). See [setup.md](./setup.md).
 - Each bot = one **Pi session** on the **host** machine (`data/bots/<name>/pi/`). Pi id = `autonomous-<uuid>`; the chat ↔ session link is `bots.pi_session_id` (not the slug).
 - Web messages → Pi prompt; assistant tokens over **SSE** (`message.delta` then `message.updated`).
 - Emoji reaction: the `react` tool puts an emoji on the turn's user bubble (`meta.reactions`), without a tool card, only when it is justified (thanks, a joke, good news). Most turns get none; a plain question does not get one just because it was answered. It does not end the turn: the reply text follows if needed. See [`reactions.md`](./reactions.md).

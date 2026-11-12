@@ -26,9 +26,11 @@ PUT    /settings                    # incl. timezone (IANA); not update.channel 
 GET    /pi/status                   # Pi install + readiness
 GET    /pi/models                   # models listed by `pi --list-models`
 GET    /events                      # SSE global (multi-tab)
-GET|PUT /setup/update               # self-update status; PUT {channel?, remote_url?, confirm_dev?}
+GET|PUT /setup/update               # status includes version + latest_version; PUT {channel?, remote_url?, confirm_dev?}
 POST   /setup/update/check
 POST   /setup/update/apply
+GET    /setup/pi-packages           # Pi + npm plugins; ?force=1 skips the 6 h cache
+POST   /setup/pi-packages/apply     # {items: ["pi", "npm:…"]} — one row or several
 
 GET    /auth/status                 # + must_change_password
 POST   /auth/login                  # may return must_change_password
@@ -159,6 +161,7 @@ GET    /memory/entries/:key
 DELETE /memory/entries/:key
 GET    /memory/search?q=
 POST   /memory/proposals              # agent → chat card (non-blocking)
+GET    /memory/proposals/count         # {count} of proposals still pending
 GET    /memory/proposals/:id
 POST   /memory/proposals/:id/resolve  # approve|deny
 

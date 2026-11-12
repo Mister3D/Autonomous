@@ -48,6 +48,22 @@ def test_core_block_once_per_conversation_respects_access(home):
     assert memory_svc.prompt_prefix_for_bot("lone", home=home) == ""
 
 
+def test_count_pending_proposals(home, auth_client):
+    assert memory_svc.count_proposals(home=home) == 0
+    bots_svc.create_bot("bob", label="Bob", home=home)
+    memory_svc.propose(
+        "bob",
+        action="set",
+        key="preferred_name",
+        value="Alex",
+        home=home,
+    )
+    assert memory_svc.count_proposals(home=home) == 1
+    listed = auth_client.get("/api/v1/memory/proposals/count")
+    assert listed.status_code == 200
+    assert listed.get_json()["count"] == 1
+
+
 def test_propose_non_blocking_and_resolve(home, auth_client):
     bots_svc.create_bot("bob", label="Bob", home=home)
     prop = memory_svc.propose(

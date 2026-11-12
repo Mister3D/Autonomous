@@ -18,6 +18,11 @@ def _clean_cache(home):
     updates_svc.invalidate_cache(home)
 
 
+def test_version_in_source():
+    assert updates_svc.version_in_source('__version__ = "0.1.0"\n') == "0.1.0"
+    assert updates_svc.version_in_source("no version here") == ""
+
+
 def test_default_channel_is_main(home):
     assert updates_svc.channel(home) == "main"
     assert updates_svc.remote_url(home) == ""
@@ -118,6 +123,8 @@ def test_status_endpoint_cached(auth_client, home, monkeypatch):
     body = r.get_json()
     assert body["channel"] == "main"
     assert "channels" in body
+    assert body["version"]
+    assert body["latest_version"]
     assert calls["n"] == 1
 
 

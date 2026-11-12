@@ -228,6 +228,7 @@ export const api = {
   resolveVaultRequest: (id, body) =>
     request(`/vault/requests/${id}/resolve`, { method: "POST", body }),
   memoryEntries: () => request("/memory/entries"),
+  memoryPendingCount: () => request("/memory/proposals/count"),
   createMemoryEntry: (body) => request("/memory/entries", { method: "POST", body }),
   deleteMemoryEntry: (key) =>
     request(`/memory/entries/${encodeURIComponent(key)}`, { method: "DELETE" }),
@@ -317,4 +318,9 @@ export const api = {
   checkUpdate: () => request("/setup/update/check", { method: "POST", body: {} }),
   applyUpdate: (force = false) =>
     request("/setup/update/apply", { method: "POST", body: force ? { force: true } : {} }),
+  piPackages: (force = false) =>
+    request(`/setup/pi-packages${force ? "?force=1" : ""}`),
+  checkPiPackages: () => request("/setup/pi-packages?force=1"),
+  applyPiPackages: (items) =>
+    request("/setup/pi-packages/apply", { method: "POST", body: { items } }),
 };

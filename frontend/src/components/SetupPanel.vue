@@ -1,7 +1,7 @@
 <template>
-  <div class="setup-panel">
+  <div class="setup-panel" :class="{ 'is-home': !showChecklist }">
     <img class="setup-logo" src="/logo.png" :alt="t('brand')" />
-    <template v-if="!setup">
+    <template v-if="showChecklist && !setup">
       <p class="hint">{{ t("setup.loading") }}</p>
     </template>
     <template v-else-if="showChecklist">
@@ -40,29 +40,131 @@
     </template>
     <template v-else>
       <p class="tagline">{{ t("tagline") }}</p>
-      <div v-if="brokenOptional.length" class="setup-banner" role="status">
-        {{ t("setup.optionalBroken", { items: brokenOptional.map((c) => t(c.label)).join(", ") }) }}
-        <router-link to="/setup">{{ t("setup.open") }}</router-link>
-      </div>
-      <div v-if="showFirstChatCta" class="setup-first-chat setup-first-chat-home">
-        <button
-          class="btn primary"
-          type="button"
-          :disabled="starting"
-          @click="startFirstChat"
-        >
-          {{ starting ? t("setup.firstChatBusy") : t("setup.firstChat") }}
-        </button>
-        <p class="hint">{{ t("setup.firstChatHintReady") }}</p>
+      <div class="home-hero">
+        <div class="home-hero-copy">
+          <h2 class="home-title">{{ t("home.welcome") }}</h2>
+          <template v-if="showFirstChatCta">
+            <p class="hint">{{ t("setup.firstChatHintReady") }}</p>
+            <button
+              class="home-cta"
+              type="button"
+              :disabled="starting"
+              @click="startFirstChat"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path fill="currentColor" d="M5 5.8A2.8 2.8 0 0 1 7.8 3h8.4A2.8 2.8 0 0 1 19 5.8v6.2a2.8 2.8 0 0 1-2.8 2.8H11l-3.8 2.6c-.7.48-1.7-.05-1.7-.9V14.8H7.8A2.8 2.8 0 0 1 5 12V5.8Z" />
+              </svg>
+              {{ starting ? t("setup.firstChatBusy") : t("setup.firstChat") }}
+            </button>
+          </template>
+          <p v-else-if="firstChatGateReady" class="home-greeting">{{ t("home.greeting") }}</p>
+        </div>
+        <img class="home-fox" src="/home-fox.png" alt="" />
       </div>
       <p v-if="error" class="vault-error">{{ error }}</p>
-      <div class="setup-home-foot">
-        <router-link class="setup-link" to="/setup">{{ t("setup.link") }}</router-link>
-      </div>
+      <section class="home-card">
+        <router-link class="home-card-head" to="/setup">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 3.2v2.1M12 18.7v2.1M4.9 6.6l1.5 1.5M17.6 15.9l1.5 1.5M3.2 12h2.1M18.7 12h2.1M4.9 17.4l1.5-1.5M17.6 8.1l1.5-1.5" />
+          </svg>
+          {{ t("setup.link") }}
+        </router-link>
+        <div v-if="brokenOptional.length" class="setup-banner" role="status">
+          {{ t("setup.optionalBroken", { items: brokenOptional.map((c) => t(c.label)).join(", ") }) }}
+          <router-link to="/setup">{{ t("setup.open") }}</router-link>
+        </div>
+        <div v-if="showUpdateUi" class="home-status" role="status">
+          <span class="home-status-name">
+            {{ t("home.updateLine", { channel: updateInfo.channel, version: updateInfo.version || "—" }) }}
+            <span v-if="updateJump" class="home-status-jump">→ {{ updateJump }}</span>
+          </span>
+          <span class="home-status-side">
+            <button
+              type="button"
+              class="home-refresh"
+              :class="{ 'is-busy': updateBusy && !updateApplying }"
+              :disabled="updateBusy"
+              :aria-label="t('update.check')"
+              :title="t('update.check')"
+              @click="forceCheckUpdate"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 0 0-9-9 9.2 9.2 0 0 0-6.4 2.6L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.2 9.2 0 0 0 6.4-2.6L21 16" />
+                <path d="M21 21v-5h-5" />
+              </svg>
+            </button>
+            <span v-if="updateUpToDate" class="home-pill">{{ t("update.upToDateShort") }}</span>
+            <button
+              v-else-if="canApplyUpdate || updateApplying"
+              class="home-apply"
+              type="button"
+              :disabled="!canApplyUpdate || updateBusy"
+              @click="runApplyUpdate"
+            >
+              {{ updateApplying ? t("update.applying") : t("update.apply") }}
+            </button>
+            <button
+              v-if="showForceUpdate && !updateApplying"
+              class="home-apply"
+              type="button"
+              :disabled="updateBusy"
+              @click="runForceUpdate"
+            >
+              {{ t("update.force") }}
+            </button>
+          </span>
+          <p v-if="updateNote" class="home-status-note">{{ updateNote }}</p>
+          <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
+          <p v-if="updateError" class="vault-error">{{ updateError }}</p>
+        </div>
+        <p v-if="piChecking && !piItems.length" class="home-quiet">{{ t("piPackages.checking") }}</p>
+        <ul v-else-if="piItems.length" class="home-status-list" :aria-label="t('piPackages.title')">
+          <li v-for="item in piItems" :key="item.id" class="home-status">
+            <span class="home-status-name">
+              {{ t("home.moduleLine", { name: item.label, version: item.current || "—" }) }}
+              <span v-if="item.update && item.latest" class="home-status-jump">→ {{ item.latest }}</span>
+            </span>
+            <span class="home-status-side">
+              <button
+                type="button"
+                class="home-refresh"
+                :class="{ 'is-busy': piChecking }"
+                :disabled="piBusy"
+                :aria-label="t('update.check')"
+                :title="t('update.check')"
+                @click="loadPiPackages(true)"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 0 0-9-9 9.2 9.2 0 0 0-6.4 2.6L3 8" />
+                  <path d="M3 3v5h5" />
+                  <path d="M3 12a9 9 0 0 0 9 9 9.2 9.2 0 0 0 6.4-2.6L21 16" />
+                  <path d="M21 21v-5h-5" />
+                </svg>
+              </button>
+              <span v-if="!item.update && !item.error" class="home-pill">{{ t("update.upToDateShort") }}</span>
+              <button
+                v-else-if="item.update"
+                type="button"
+                class="home-apply"
+                :disabled="piBusy"
+                @click="runPiUpdates([item.id])"
+              >
+                {{ piBusy ? t("piPackages.applying") : t("piPackages.apply") }}
+              </button>
+            </span>
+            <p v-if="item.error" class="home-status-note">{{ item.error }}</p>
+          </li>
+        </ul>
+        <p v-if="piError" class="vault-error">{{ piError }}</p>
+        <pre v-if="piLog.length" class="setup-log">{{ piLog.join("\n") }}</pre>
+      </section>
     </template>
     <!-- Updates must stay reachable during incomplete setup (checklist), not only on the ready home. -->
     <div
-      v-if="setup && showUpdateUi"
+      v-if="showChecklist && setup && showUpdateUi"
       class="setup-update"
       :class="{
         'is-action': updateNeedsAction,
@@ -167,27 +269,39 @@ const error = ref("");
 const forceList = ref(false);
 const firstChatDone = ref(false);
 const hasMemoryPrefs = ref(false);
+const firstChatGateReady = ref(false);
 const updateInfo = ref(readUpdateStatus());
 const updateBusy = ref(false);
 const updateApplying = ref(false);
 const updateError = ref("");
 const updateLog = ref([]);
 let updateJobId = "";
+const piPackages = ref(null);
+const piBusy = ref(false);
+const piChecking = ref(false);
+const piError = ref("");
+const piLog = ref([]);
+let piJobId = "";
+const piItems = computed(() => piPackages.value?.items || []);
 /** job kind → { id, state, log[] } */
 const logs = reactive({});
 let timer = 0;
 
 const setup = computed(() => state.setup);
-const showChecklist = computed(
-  () => route.name === "setup" || forceList.value || !setup.value?.ready ||
-    (setup.value?.checks || []).some((c) => c.status === "running"),
-);
+const showChecklist = computed(() => {
+  if (route.name === "setup" || forceList.value) return true;
+  // Home stays on screen while the status request is in flight.
+  if (!setup.value) return false;
+  return !setup.value.ready || (setup.value.checks || []).some((c) => c.status === "running");
+});
 const required = computed(() => (setup.value?.checks || []).filter((c) => c.required));
 const optional = computed(() => (setup.value?.checks || []).filter((c) => !c.required));
 const brokenOptional = computed(() => optional.value.filter((c) => c.status === "error"));
 const canStartFirstChat = computed(() => setupReady());
-/** Only rule: 0 shared-memory entries → show the setup conversation CTA. */
-const showFirstChatCta = computed(() => !hasMemoryPrefs.value);
+/** Show the setup conversation only once we know memory is empty and nothing is waiting. */
+const showFirstChatCta = computed(
+  () => firstChatGateReady.value && !hasMemoryPrefs.value,
+);
 const canApplyUpdate = computed(() => {
   const u = updateInfo.value;
   return !!(u?.available && !u?.dirty && !u?.applying && u?.git !== false);
@@ -216,6 +330,26 @@ const updateNeedsAction = computed(() => {
   if (u.available) return true;
   return false;
 });
+const updateUpToDate = computed(() => showUpdateUi.value && !updateNeedsAction.value);
+const updateJump = computed(() => {
+  const u = updateInfo.value;
+  if (!u?.available) return "";
+  const latest = String(u.latest_version || "");
+  const current = String(u.version || "");
+  if (!latest || latest === current) return "";
+  return latest;
+});
+const updateNote = computed(() => {
+  const u = updateInfo.value;
+  if (!u || updateUpToDate.value) return "";
+  if (u.code === "fetch_failed") return t("update.fetchFailed", { detail: u.message || "" });
+  if (u.dirty && u.available) return t("update.dirty", { channel: u.channel, n: u.behind || 0 });
+  if (u.available && !updateJump.value) {
+    return t("update.available", { channel: u.channel, n: u.behind || 0 });
+  }
+  return "";
+});
+
 const updateSummary = computed(() => {
   const u = updateInfo.value;
   if (!u) return "";
@@ -253,6 +387,54 @@ const updateMeta = computed(() => {
   }
   return "";
 });
+
+async function loadPiPackages(force = false) {
+  piChecking.value = true;
+  try {
+    const data = force ? await api.checkPiPackages() : await api.piPackages(false);
+    piPackages.value = data;
+    piError.value = "";
+  } catch (e) {
+    piError.value = e.message || String(e);
+  } finally {
+    piChecking.value = false;
+  }
+}
+
+async function runPiUpdates(ids) {
+  const wanted = (Array.isArray(ids) ? ids : []).filter(Boolean);
+  if (piBusy.value || !wanted.length) return;
+  piBusy.value = true;
+  piError.value = "";
+  piLog.value = [];
+  try {
+    const job = await api.applyPiPackages(wanted);
+    piJobId = job.id;
+    piLog.value = job.log || [];
+    pollPiJob();
+  } catch (e) {
+    piError.value = e.message || String(e);
+    piBusy.value = false;
+  }
+}
+
+async function pollPiJob() {
+  if (!piJobId) return;
+  try {
+    const job = await api.getJob(piJobId);
+    piLog.value = job.log || [];
+    if (job.state === "pending" || job.state === "running") {
+      setTimeout(pollPiJob, 1200);
+      return;
+    }
+    piBusy.value = false;
+    const failed = job.state === "failed" ? job.error || t("piPackages.failed") : "";
+    await loadPiPackages(true);
+    if (failed) piError.value = failed;
+  } catch {
+    setTimeout(pollPiJob, 2000);
+  }
+}
 
 async function loadUpdate(force = false) {
   if (!force) {
@@ -386,12 +568,15 @@ async function pollUpdateJob() {
 
 async function refreshFirstChatGate() {
   try {
-    const [settings, memory] = await Promise.all([
+    const [settings, memory, pendingCount] = await Promise.all([
       api.settings(),
       api.memoryEntries(),
+      api.memoryPendingCount(),
     ]);
     const entries = Array.isArray(memory) ? memory : memory?.entries || [];
-    hasMemoryPrefs.value = entries.length > 0;
+    const waiting = Number(pendingCount?.count) || 0;
+    // Saved facts or a proposal still waiting both mean preferences already exist.
+    hasMemoryPrefs.value = entries.length > 0 || waiting > 0;
     const pending = settings?.first_chat_prefs_pending;
     state.firstChatPrefsPending =
       typeof pending === "string" && pending.trim() ? pending.trim() : null;
@@ -440,6 +625,8 @@ async function refreshFirstChatGate() {
     }
   } catch {
     /* keep last known gate */
+  } finally {
+    firstChatGateReady.value = true;
   }
 }
 
@@ -669,6 +856,7 @@ onMounted(async () => {
     refreshSetup(route.name === "setup"),
     refreshFirstChatGate(),
     loadUpdate(false),
+    loadPiPackages(false),
   ]);
   poll();
 });

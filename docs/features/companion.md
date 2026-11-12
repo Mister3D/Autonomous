@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-10 (nudge compagnon après 10s en waiting)
+**Last updated**: 2026-11-13 (track companion/build/Dockerfile — was ignored by root `build/`)
 
 ## User behaviour
 

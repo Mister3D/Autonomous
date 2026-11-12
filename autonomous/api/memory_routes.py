@@ -65,6 +65,10 @@ class MemoryOkSchema(Schema):
     ok = fields.Bool()
 
 
+class MemoryProposalCountSchema(Schema):
+    count = fields.Int()
+
+
 def _handle(exc: AutonomousError):
     abort(exc.http_status, message=exc.message, error_code=exc.code)
 
@@ -159,6 +163,14 @@ class MemoryProposals(MethodView):
             )
         except AutonomousError as exc:
             _handle(exc)
+
+
+@blp.route("/proposals/count")
+class MemoryProposalCount(MethodView):
+    @blp.response(200, MemoryProposalCountSchema)
+    def get(self):
+        """Pending memory proposals. The home hides the first-run line when this is > 0."""
+        return {"count": memory_svc.count_proposals(state="pending", home=g.home)}
 
 
 @blp.route("/proposals/<string:proposal_id>")
