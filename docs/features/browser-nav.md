@@ -2,22 +2,22 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-11-12 (browser_navigate is the first open only)
+**Last updated**: 2026-11-12 (DOM finds the point; the click is always a real pointer)
 
 ## Action loop (enforced order)
 
-The page is driven by what is on screen, not by the DOM.
+The DOM says **where**. The pointer does the **click**. A CDP click (`browser_click_selector`, `el.click()`) is a bot signal and is not the path.
 
 | Step | Tool | Role |
 |-------|--------|------|
-| 1. Eyes | **`vm_look`** | First observe, and the check after every gesture. Text description of the fresh capture. Not gated on a DOM read. Its x/y are guesses: never click them. No two looks in a row with no gesture between them |
-| 2. Gesture type | (from what was seen) | `left_click` / `right_click` / `double` / `drag` |
-| 3. Localisation | **`vm_ground`** | The control you saw, in English. Slow (~10 s). If `ok=false`, do not click |
-| 4. Execution | **`vm_click`** / **`vm_drag`** / **`vm_type`** / **`vm_scroll`** | Real VNC input, only at a point `vm_ground` just returned |
+| 1. Read | **`browser_snapshot`** / **`browser_frames_snapshot`** | Controls with `screen=x,y`, overlays, `[FOCUSED]`, `[filled N chars]`. No gesture |
+| 2. Locate the rest | **`vm_ground`** | Only when the control is absent from that read (canvas, image, native dialog, drawn widget). Slow (~10 s). If `ok=false`, do not click |
+| 3. Act | **`vm_click`** / **`vm_drag`** / **`vm_type`** / **`vm_scroll`** | Real VNC pointer and keys. The mouse glides to the point |
+| 4. Eyes | **`vm_look`** | When the snapshot is empty or inconclusive, or before reporting an error. Not before every click. Its x/y are guesses |
 
-`browser_snapshot` / `browser_frames_snapshot` / `browser_text` / `browser_html` / `browser_links` are **not** the click path. Their tool text no longer prints `screen=` coordinates, `[FOCUSED]`, or `[filled N chars]` — those sent the agent into focus and backspace loops while the screen was fine. Do not steer the site with CDP scripts, in-page `fetch`, `curl`, or `wget`.
+Do not steer the site with CDP scripts, in-page `fetch`, `curl`, or `wget`. Do not mash Backspace because `[filled N chars]` disagrees with the screen: one `vm_look`, then move on.
 
-**One DOM exception**: a `SLIDE-TO-VERIFY WIDGET` line from `browser_navigate` / `browser_wait_load` is one `vm_drag` at the printed coordinates, then `vm_look`.
+**Slider**: a `SLIDE-TO-VERIFY WIDGET` line is one `vm_drag` at the printed coordinates (still a real drag).
 
 **Navigation discipline** (enforced): `browser_navigate` is the **first open** only. If the tab is already an http(s) page, every URL change is refused (`code=url_change`) — including reload and a link that is on the page. The first URL must be one a **user** message wrote, or that site's homepage (`code=invented_url` otherwise). An assistant sentence that names a path does not make it allowed. After that, take the **shortest path** on screen: click the visible target, do not detour. A Google search is the address bar (query, then Enter), never a site URL. A reload is one click on the refresh icon. Never bypass a browser security warning.
 
@@ -27,9 +27,9 @@ The page is driven by what is on screen, not by the DOM.
 
 **Waiting for load**: `browser_wait_load` (`POST /bots/:name/browser/wait_load {timeout?}`, default 15 s, max 30 s) replaces `sleep N`: `readyState == complete` on 2 consecutive polls, CDP reconnection if Chrome starts / changes page, and **never blocking** — a page that loads forever returns `timed_out=true` (often already usable). `browser_navigate` already waits for `load` (20 s max).
 
-**Forms**: `vm_look` to see the field, `vm_ground` to locate it, then click and type. A point **rejected** by `vm_ground` must never be clicked (real case: it was a "send a code by e-mail" button instead of the password field → false OTP block). Do not reload the form or mash Backspace because a DOM counter disagreed with the screen.
+**Forms**: `browser_snapshot` `screen=` → `vm_click` (real mouse) → type. A point **rejected** by `vm_ground` must never be clicked (real case: it was a "send a code by e-mail" button instead of the password field → false OTP block). Do not reload the form or mash Backspace because a DOM counter disagreed with the screen.
 
-**Verification widgets** (cross-origin iframe): `vm_look`, then one `vm_ground` of the handle or checkbox, then one `vm_drag` or `vm_click`. A single careful attempt then look; don't stretch a drag beyond ~320px. **No** instructions specific to a site or captcha vendor in the prompts. The slider line printed by `browser_navigate` / `browser_wait_load` is the only DOM coordinate still acted on.
+**Verification widgets** (cross-origin iframe): `browser_frames_snapshot` `screen=` when the control is readable, otherwise one `vm_ground`, then one `vm_drag` or `vm_click` (real pointer). A single careful attempt then check; don't stretch a drag beyond ~320px. **No** instructions specific to a site or captcha vendor in the prompts. The slider line printed by `browser_navigate` / `browser_wait_load` is one `vm_drag`.
 
 **Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a reputation decision, not a puzzle: no reload loops, **no curl/wget** to the site from the VM (same IP), no home-made CDP/websocket scripts, no package installs; one click on the refresh icon, then report to the user if it is still blocked (text seen + what was tried). See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
 
@@ -50,9 +50,9 @@ Moving **directly** to an offset without the wheel (jump) is often a bot signal.
 
 | Layer | Tools | Role |
 |--------|--------|------|
-| Vision | `vm_look`, then `vm_ground` → click or drag | What is on screen, and where to act |
-| VNC | `vm_scroll`, `vm_key`, `vm_click`, `vm_drag`, `vm_type` | Gestures at a grounded point |
-| CDP | `browser_tabs`, `browser_navigate`, `browser_wait_load` | Chrome is up, open a URL already seen, wait for load. Snapshot tools are not the click plan |
+| CDP read | `browser_snapshot`, `browser_frames_snapshot`, `browser_tabs`, `browser_wait_load` | Where the control is. `browser_navigate` is the first open only |
+| VNC | `vm_scroll`, `vm_key`, `vm_click`, `vm_drag`, `vm_type` | The gesture. Always a real pointer, including when the point came from the DOM |
+| Vision | `vm_look`, `vm_ground` | When the DOM does not list the control, or the read is inconclusive |
 
 ## API
 

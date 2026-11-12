@@ -321,11 +321,13 @@ export default function (pi: ExtensionAPI) {
       "description: page/site, exact visible text (errors, banners, dialogs), blockers " +
       "(consent layer, modal, verification widget, access-denied page, login wall), form " +
       "state (empty / filled / validation errors) and key data shown. " +
-      "This IS the page observation: call it before the first click, and again " +
-      "after a gesture to see what changed. Do not call it twice in a row with " +
-      "no gesture between them. Optional `question` is answered first. NEVER use " +
-      "it for pixel coordinates: any x/y it states is a guess — get click " +
-      "positions only from vm_ground (ok=true), never from the DOM.",
+      "Not the first step when browser_snapshot already lists the control. Use it " +
+      "when that read was empty or inconclusive, after a gesture you cannot " +
+      "verify, and before you tell the user what went wrong. Do not call it " +
+      "twice in a row with no gesture between them. Optional `question` is " +
+      "answered first. NEVER click coordinates it states — they are guesses. " +
+      "Click screen= from browser_snapshot, or vm_ground when the control is not " +
+      "in the DOM.",
     parameters: Type.Object({
       question: Type.Optional(
         Type.String({
@@ -371,9 +373,10 @@ export default function (pi: ExtensionAPI) {
     label: "GUI ground",
     description:
       "Locate a UI element on a FRESH desk screenshot via UI-TARS + optional judge. " +
-      "Returns geometry only — does NOT act. Call AFTER vm_look, once you have " +
-      "chosen the gesture (left_click / right_click / double / drag) from what " +
-      "you saw. Do not locate from a DOM snapshot. " +
+      "Returns geometry only — does NOT act. Use it when browser_snapshot / " +
+      "browser_frames_snapshot does NOT list the control (canvas, image, native " +
+      "dialog, drawn widget). If the control has screen=x,y, vm_click that " +
+      "instead — this call is slow. " +
       "Pass that choice as action_hint. Instruction in English. If ok=false, " +
       "do not invent coordinates. Then: action=click → vm_click; action=drag → " +
       "vm_drag(x,y,x2,y2) press-drag-release (never click a slider).",
@@ -470,12 +473,13 @@ export default function (pi: ExtensionAPI) {
     name: "vm_click",
     label: "VM click",
     description:
-      "Click at desktop pixel coordinates (VNC). Coordinates come from vm_ground " +
-      "(ok=true) only — never from vm_look, never from browser_snapshot / " +
-      "browser_frames_snapshot, never a point vm_ground rejected. Do NOT use it " +
-      "on sliders — use vm_drag. button: left (default), right, middle, double, " +
-      "or move = HOVER only (no click: menus, tooltips and dropdowns that open " +
-      "on mouse-over; then vm_look again).",
+      "Click at desktop pixel coordinates with a real pointer (VNC): the mouse " +
+      "glides there. This is the only click. Coordinates come from " +
+      "browser_snapshot / browser_frames_snapshot (screen=x,y) or from vm_ground " +
+      "(ok=true). Never from vm_look, never a point vm_ground rejected, never " +
+      "browser_click_selector. Do NOT use it on sliders — use vm_drag. " +
+      "button: left (default), right, middle, double, or move = HOVER only " +
+      "(menus that open on mouse-over; then snapshot again).",
     parameters: Type.Object({
       x: Type.Number({ description: "X pixel on the original screenshot / desk" }),
       y: Type.Number({ description: "Y pixel on the original screenshot / desk" }),

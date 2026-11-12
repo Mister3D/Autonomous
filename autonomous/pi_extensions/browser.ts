@@ -1,8 +1,8 @@
 /**
  * Chrome CDP tools for Pi (generic web nav — no site-specific logic).
  *
- * Page navigation is visual: vm_look → vm_ground → vm_click / vm_drag.
- * These CDP tools are not the click path. Do not treat screen= as a target.
+ * Find controls in the DOM (screen=x,y). Act only with VNC (vm_click / vm_drag /
+ * vm_scroll) so the pointer moves like a hand. Never CDP-click.
  * Reveal off-screen targets with vm_scroll (VNC wheel), not CDP jump.
  * Never attach screenshots here.
  */
@@ -440,10 +440,11 @@ export default function (pi: ExtensionAPI) {
     name: "browser_snapshot",
     label: "Browser DOM snapshot",
     description:
-      "NOT navigation. Compact DOM list for debugging only — do not click anything " +
-      "from it, and do not use it to decide which field is focused or filled. " +
-      "To see the page and act: vm_look, then vm_ground, then vm_click. " +
-      "Coordinates are omitted on purpose. Optional query filters text/name/href.",
+      "Read interactive controls WITHOUT scrolling or clicking. Each in-view " +
+      "control has screen=x,y = desk pixels for vm_click (real mouse — never " +
+      "browser_click_selector). Skip [COVERED] controls until the overlay is " +
+      "gone. Off-screen: vm_scroll first. Optional query filters text/name/href. " +
+      "vm_ground only if the control is absent here.",
     parameters: Type.Object({
       max_elements: Type.Optional(
         Type.Number({ description: "Max controls to return (default 60, max 120)" }),
@@ -471,7 +472,7 @@ export default function (pi: ExtensionAPI) {
       const d = res.data || {};
       const els = Array.isArray(d.elements) ? d.elements : [];
       const lines = [
-        "NOT click coordinates. Navigate with vm_look, then vm_ground, then vm_click.",
+        "Click with vm_click at screen= (real mouse). Never browser_click_selector.",
         `url: ${d.url || "?"}`,
         `title: ${d.title || "?"}`,
         `scrollY: ${d.scrollY ?? "?"} / height: ${d.scrollHeight ?? "?"} (viewport ${d.innerHeight ?? "?"})`,
@@ -481,14 +482,14 @@ export default function (pi: ExtensionAPI) {
       const overlays = Array.isArray(d.overlays) ? d.overlays : [];
       if (overlays.length) {
         lines.push(
-          "!! BLOCKING OVERLAY on top of the page. Dismiss it with vm_look + vm_ground, " +
-            "not with these labels:",
+          "!! BLOCKING OVERLAY — vm_click its screen= point first (real mouse), then snapshot again:",
         );
         for (const ov of overlays) {
           lines.push(`   [${ov.kind}] "${String(ov.text || "").slice(0, 200)}"`);
           for (const c of Array.isArray(ov.controls) ? ov.controls : []) {
+            const s = c.screen || {};
             lines.push(
-              `   - ${c.tag} "${String(c.text || "").slice(0, 60)}"`,
+              `   - ${c.tag} "${String(c.text || "").slice(0, 60)}" screen=${s.x},${s.y}`,
             );
           }
         }
@@ -498,19 +499,23 @@ export default function (pi: ExtensionAPI) {
         const bits = [
           el.in_viewport === false ? "[offscreen]" : "[in-view]",
           el.occluded_by ? `[COVERED by ${el.occluded_by}]` : "",
+          el.focused ? "[FOCUSED]" : "",
+          typeof el.filled === "number" ? `[filled ${el.filled} chars]` : "",
           el.tag || "?",
           el.type ? `type=${el.type}` : "",
           el.role ? `role=${el.role}` : "",
           el.text ? `"${String(el.text).slice(0, 80)}"` : "",
           el.name ? `name=${el.name}` : "",
           el.href ? `→ ${String(el.href).slice(0, 100)}` : "",
+          el.screen ? `screen=${el.screen.x},${el.screen.y}` : "",
         ].filter(Boolean);
         lines.push("- " + bits.join(" "));
       }
       if (!els.length) {
         lines.push(
-          "(no control in the top document. If vm_look shows a form or widget, " +
-            "locate it with vm_ground — do not click a DOM coordinate.)",
+          "(no control in the top document. If a form or widget is visible, " +
+            "call browser_frames_snapshot. If it is only drawn, vm_ground it. " +
+            "Do not invent a coordinate.)",
         );
       }
       return textResult(lines.join("\n"), {
@@ -525,10 +530,10 @@ export default function (pi: ExtensionAPI) {
     name: "browser_frames_snapshot",
     label: "Browser frames snapshot",
     description:
-      "NOT the normal navigation path. Walks cross-origin iframes. Do not click " +
-      "the controls it lists — locate them with vm_look + vm_ground. The one " +
-      "exception is a printed « SLIDER WIDGET » line: one vm_drag at those " +
-      "coordinates, then vm_look. Prefer calling it WITHOUT query.",
+      "Like browser_snapshot, and also walks cross-origin iframes. screen= points " +
+      "are for vm_click / vm_drag (real mouse), not a CDP click. A « SLIDER WIDGET » " +
+      "line is one vm_drag at those coordinates. Prefer calling it WITHOUT query. " +
+      "A drawn widget with no controls: vm_ground inside the box, do not click its center.",
     parameters: Type.Object({
       max_elements: Type.Optional(
         Type.Number({ description: "Max controls per frame (default 60)" }),
@@ -585,11 +590,13 @@ export default function (pi: ExtensionAPI) {
           );
         }
         for (const el of Array.isArray(fr.elements) ? fr.elements : []) {
+          const c = el.center_screen || {};
           const bits = [
             el.tag || "?",
             el.className ? `class=${String(el.className).slice(0, 60)}` : "",
             el.id ? `id=${el.id}` : "",
             el.text ? `"${String(el.text).slice(0, 60)}"` : "",
+            c.x != null ? `screen=${c.x},${c.y}` : "",
           ].filter(Boolean);
           lines.push("- " + bits.join(" "));
         }
@@ -607,8 +614,8 @@ export default function (pi: ExtensionAPI) {
     name: "browser_click_selector",
     label: "Browser click selector",
     description:
-      "CDP click + scrollIntoView — not navigation. Do not use it. " +
-      "Look with vm_look, locate with vm_ground, act with vm_click or vm_drag.",
+      "CDP click + scrollIntoView. Do not use it: anti-bot systems flag a click " +
+      "with no real pointer. Use vm_click / vm_drag at the snapshot screen= point.",
     parameters: Type.Object({
       selector: Type.String({ description: "CSS selector" }),
     }),

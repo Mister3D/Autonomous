@@ -92,9 +92,10 @@ def _require_editable_focus(bot: str, *, home: Path | None) -> None:
         return
     raise ValidationError(
         "No editable field is focused in the browser (focused: "
-        f"{info.get('tag') or 'none'}). Nothing was typed. vm_ground the field "
-        "you see, vm_click that point, then retry. Do not click a DOM coordinate "
-        "or a coordinate guessed from vm_look."
+        f"{info.get('tag') or 'none'}). Nothing was typed. vm_click the field "
+        "at its screen= point from browser_snapshot (vm_ground only if the "
+        "snapshot does not list it), then retry. Do not click a coordinate "
+        "guessed from vm_look, and do not use a CDP click."
     )
 
 

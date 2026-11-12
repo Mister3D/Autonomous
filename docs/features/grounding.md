@@ -69,7 +69,7 @@ POST /bots/:name/screen/ground
 - Restart the Pi session after changing `vm.ts`.
 - After `ok`: Pi tools `vm_click` / `vm_drag` / `vm_type` / `vm_scroll` depending on `action`.
 - Pi often omits `args` on `tool_execution_end`: Autonomous **keeps** those from the start + parses the result text → `meta.pointer` / `x,y,x2,y2` for the UI.
-- Web nav: see [`browser-nav.md`](./browser-nav.md) — look with `vm_look`, decide the gesture, then `vm_ground` (`action_hint`). Do not click DOM coordinates.
+- Web nav: see [`browser-nav.md`](./browser-nav.md) — a control listed by `browser_snapshot` is clicked at `screen=` with `vm_click`. `vm_ground` is for what that read does not list.
 - Slide drag: stretch only if `|dx|<160` and capped at ~240–320px (not 30% of the screen). Handle and target on the **same** Y row; `chrome_h` (~87) to map iframe→screen.
 
 ## Quick check
