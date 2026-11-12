@@ -271,7 +271,7 @@ export default function (pi: ExtensionAPI) {
       "such a block is tied to the session state, not to you. NOT for a login page, " +
       "a verification widget you can still act on, or a slow page. " +
       "Then click the refresh icon and start over from what you see (fresh visit). " +
-      "Do not browser_navigate to another URL. "
+      "Do not browser_navigate to another URL. " +
       "You will be logged out of that site; log in again afterwards. At most 2 resets " +
       "per site, then report to the user.",
     parameters: Type.Object({}),

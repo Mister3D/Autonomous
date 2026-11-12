@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{batch,vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-12 (thinking silence no longer shows « agent looks stuck »)
+**Last updated**: 2026-11-12 (a missing `+` in an extension string kills the Pi process)
 
 ## User behaviour
 
@@ -81,6 +81,7 @@ Pi is **not** in the VMs. It's on the host.
 
 ## Pitfalls / non-regressions
 
+- Pi's extension loader does **not** concatenate adjacent string literals. A description line that drops the `+` is a parse error, the process exits at once, and every bot answers `⚠️ pi process ended`. Every continued string in `pi_extensions/*.ts` needs `+`.
 - Never feed raw chat text to `marked` without escaping `<`/`>` first: a literal `<script …>` (e.g. Vue SFC) opens a real tag, DOMPurify strips it, and **the rest of the bubble disappears**.
 - PATH: serve with `~/.local/bin` visible (the code enriches `PATH` for subprocesses).
 - Host Pi tools active (web search + vault + terminal + VM screenshot). Computer-use / click = next step.

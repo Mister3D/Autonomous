@@ -373,7 +373,7 @@ export default function (pi: ExtensionAPI) {
       "Locate a UI element on a FRESH desk screenshot via UI-TARS + optional judge. " +
       "Returns geometry only — does NOT act. Call AFTER vm_look, once you have " +
       "chosen the gesture (left_click / right_click / double / drag) from what " +
-      "you saw. Do not locate from a DOM snapshot. "
+      "you saw. Do not locate from a DOM snapshot. " +
       "Pass that choice as action_hint. Instruction in English. If ok=false, " +
       "do not invent coordinates. Then: action=click → vm_click; action=drag → " +
       "vm_drag(x,y,x2,y2) press-drag-release (never click a slider).",
