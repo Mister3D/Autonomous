@@ -453,7 +453,7 @@ class BotHouseholdModels(MethodView):
 class BotHouseholdCreate(MethodView):
     @blp.arguments(HouseholdCreateSchema)
     def post(self, data, name):
-        """Manager: create one or more bots (model optional → Settings default)."""
+        """Manager: create one or more bots. Model is always Settings → LLM default."""
         try:
             from autonomous.services import household as household_svc
 

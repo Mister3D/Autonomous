@@ -46,7 +46,7 @@ POST   /bots/:name/capability
 GET    /bots/:name/mail/peers          # Manager only — other bots for orchestration
 POST   /bots/:name/mail/delegate       # Manager only — text-only sugar {to, task, expect_reply?}
 GET    /bots/:name/household/models    # Manager — Pi models + bots.default_model
-POST   /bots/:name/household/bots      # Manager — create bots [{name, model?}, …]
+POST   /bots/:name/household/bots      # Manager — create bots [{name}, …]; model is always bots.default_model
 POST   /bots/:name/household/delete-requests           # Manager — checkbox delete card
 GET|POST /bots/:name/household/delete-requests/:id     # poll / confirm|deny (+ bots[])
 

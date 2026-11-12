@@ -196,8 +196,7 @@ export default function (pi: ExtensionAPI) {
     name: "bot_models",
     label: "List models",
     description:
-      "MANAGER ONLY: list available Pi models (provider/id refs) and the Settings "
-      + "default used when bot_create omits model=. Call this before inventing a ref.",
+      "MANAGER ONLY: list Pi models (provider/id refs).",
     parameters: Type.Object({}),
     execute: async () => {
       const cfg = apiConfig();
@@ -216,13 +215,9 @@ export default function (pi: ExtensionAPI) {
             + (res.status === 403 ? " (Manager flag required.)" : ""),
         );
       }
-      const def = String(res.data?.default_model || "").trim();
       const models = Array.isArray(res.data?.models) ? res.data.models : [];
       if (!models.length) {
-        return textResult(
-          (def ? `Default model: ${def}\n` : "No default model set in Settings → LLM.\n")
-            + "No models listed by Pi right now.",
-        );
+        return textResult("No models listed by Pi right now.");
       }
       const lines = models.slice(0, 80).map((m: any) => {
         const ref = m.ref || `${m.provider}/${m.id}`;
@@ -231,12 +226,7 @@ export default function (pi: ExtensionAPI) {
       });
       const more =
         models.length > 80 ? `\n…and ${models.length - 80} more.` : "";
-      return textResult(
-        (def ? `Default model: ${def}\n` : "No default model set in Settings → LLM.\n")
-          + "Available models (use ref with bot_create model=):\n"
-          + lines.join("\n")
-          + more,
-      );
+      return textResult(lines.join("\n") + more);
     },
   });
 
@@ -245,19 +235,11 @@ export default function (pi: ExtensionAPI) {
     label: "Create bots",
     description:
       "MANAGER ONLY: create one or more Autonomous bots. "
-      + "Pass bots:[{name, model?}]. Omit model to use Settings → LLM default; "
-      + "when the user names a model (e.g. gpt-4o / openai), set model on each bot "
-      + "or call bot_models first. Does not create another Manager.",
+      + "Pass bots:[{name}]. Does not create another Manager.",
     parameters: Type.Object({
       bots: Type.Array(
         Type.Object({
           name: Type.String({ description: "Display name (spaces OK)" }),
-          model: Type.Optional(
-            Type.String({
-              description:
-                "Pi model ref (provider/id) or clear hint; default = Settings LLM",
-            }),
-          ),
         }),
         { minItems: 1 },
       ),
@@ -290,8 +272,7 @@ export default function (pi: ExtensionAPI) {
       const lines = created.map(
         (b: any) =>
           `- @${b.name}`
-          + (b.label && b.label !== b.name ? ` (${b.label})` : "")
-          + (b.model ? ` · ${b.model}` : ""),
+          + (b.label && b.label !== b.name ? ` (${b.label})` : ""),
       );
       return textResult(
         `Created ${created.length} bot(s):\n` + lines.join("\n"),

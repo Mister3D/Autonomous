@@ -16,12 +16,12 @@ def manager(home):
     return bots_svc.create_bot("Assistant", is_manager=True, home=home)
 
 
-def test_create_bots_uses_default_and_override(manager, home):
+def test_create_bots_uses_settings_default_only(manager, home):
     created = household_svc.create_bots(
         "assistant",
         [
             {"name": "Alpha"},
-            {"name": "Beta", "model": "test/provider:fixture"},
+            {"name": "Beta", "model": "other/not-the-default"},
         ],
         home=home,
     )
@@ -82,10 +82,17 @@ def test_household_api(auth_client, home):
     assert auth_client.post("/api/v1/bots", json={"name": "Mgr", "is_manager": True}).status_code == 201
     r = auth_client.post(
         "/api/v1/bots/mgr/household/bots",
-        json={"bots": [{"name": "Worker One"}, {"name": "Worker Two"}]},
+        json={
+            "bots": [
+                {"name": "Worker One"},
+                {"name": "Worker Two", "model": "other/not-the-default"},
+            ]
+        },
     )
     assert r.status_code == 200, r.data
     assert {c["name"] for c in r.json["created"]} == {"worker-one", "worker-two"}
+    by_name = {c["name"]: c for c in r.json["created"]}
+    assert by_name["worker-two"]["model"] == "test/provider:fixture"
 
     d = auth_client.post(
         "/api/v1/bots/mgr/household/delete-requests",

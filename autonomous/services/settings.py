@@ -32,7 +32,7 @@ DEFAULTS: dict[str, Any] = {
     "update.remote_url": "",
     # When false, public companion pairing (/devices/pair + pair-poll) is refused.
     "companions.enabled": True,
-    # Default Pi model ref (provider/id) for Manager-created bots when no model is passed.
+    # Default Pi model ref (provider/id). The only model for new bots the Manager creates.
     "bots.default_model": "",
 }
 

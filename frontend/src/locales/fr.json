@@ -584,7 +584,7 @@
   "llm.title": "Modèle de langage (LLM)",
   "llm.hint": "Providers OpenAI-compatibles stockés dans le models.json de Pi.",
   "llm.defaultModelTitle": "Modèle par défaut",
-  "llm.defaultModelHint": "Utilisé quand le Manager crée un bot sans préciser de modèle. Le Manager peut toujours en choisir un autre.",
+  "llm.defaultModelHint": "Modèle des nouveaux bots.",
   "botDelete.title": "Supprimer des bots",
   "botDelete.confirm": "Supprimer",
   "botDelete.cancel": "Annuler",

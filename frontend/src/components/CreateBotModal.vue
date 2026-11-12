@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { CompanionAvatarPicker, CHARACTER_IDS } from "@companion-avatar";
@@ -113,6 +113,16 @@ function defaultAvatar() {
 
 const avatar = ref(defaultAvatar());
 const avatarColor = ref(0);
+
+onMounted(async () => {
+  try {
+    const settings = await api.settings();
+    const picked = String(settings?.["bots.default_model"] || "").trim();
+    if (picked) model.value = picked;
+  } catch {
+    /* leave the picker empty when settings cannot be read */
+  }
+});
 
 /** Aperçu du slug technique (l’API le finalise / déduplique). */
 function slugifyBotName(raw) {

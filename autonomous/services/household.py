@@ -46,78 +46,6 @@ def list_available_models(*, home: Path | None = None) -> list[dict[str, Any]]:
     return pi_status.list_models()
 
 
-def resolve_model_ref(hint: str | None, *, home: Path | None = None) -> str:
-    """Resolve a model hint (or the Settings default) to a Pi ``provider/id`` ref."""
-    raw = (hint or "").strip() or default_model(home=home)
-    if not raw:
-        raise ValidationError(
-            "No model: set Settings → LLM default model, or pass model=.",
-            code="model_required",
-        )
-    models = list_available_models(home=home)
-    if not models:
-        # Allow the raw string when Pi list is empty (tests / offline).
-        return raw
-
-    by_ref = {str(m.get("ref") or ""): m for m in models if m.get("ref")}
-    if raw in by_ref:
-        return raw
-    lower_refs = {k.lower(): k for k in by_ref}
-    if raw.lower() in lower_refs:
-        return lower_refs[raw.lower()]
-
-    # Unique id / leaf match.
-    by_id: dict[str, list[str]] = {}
-    for m in models:
-        ref = str(m.get("ref") or "")
-        mid = str(m.get("id") or "")
-        if not ref or not mid:
-            continue
-        by_id.setdefault(mid.lower(), []).append(ref)
-        leaf = mid.split("/")[-1].lower()
-        by_id.setdefault(leaf, []).append(ref)
-
-    key = raw.lower()
-    # "openai/gpt-4o" already handled; try "gpt-4o" or "gpt-4o openai"
-    tokens = [
-        t
-        for t in key.replace(",", " ").replace("·", " ").split()
-        if t and t not in ("de", "of", "from", "avec", "with")
-    ]
-    if key in by_id and len(set(by_id[key])) == 1:
-        return by_id[key][0]
-
-    if len(tokens) >= 2:
-        # Prefer provider + id when both appear.
-        for m in models:
-            provider = str(m.get("provider") or "").lower()
-            mid = str(m.get("id") or "").lower()
-            leaf = mid.split("/")[-1]
-            ref = str(m.get("ref") or "")
-            if provider in tokens and (mid in key or leaf in tokens or mid in tokens):
-                return ref
-
-    matches: list[str] = []
-    for t in tokens or [key]:
-        if t in by_id:
-            matches.extend(by_id[t])
-    uniq = sorted(set(matches))
-    if len(uniq) == 1:
-        return uniq[0]
-    if len(uniq) > 1:
-        raise ValidationError(
-            f"Ambiguous model {raw!r}; candidates: {', '.join(uniq[:8])}",
-            code="model_ambiguous",
-        )
-    # Explicit provider/id (or test fixture) not in the live Pi list — keep as-is.
-    if "/" in raw or ":" in raw:
-        return raw
-    raise ValidationError(
-        f"Unknown model {raw!r}. Call bot_models or use a provider/id ref.",
-        code="model_unknown",
-    )
-
-
 def create_bots(
     manager: str,
     specs: list[dict[str, Any]],
@@ -128,6 +56,12 @@ def create_bots(
     require_manager(manager, home=home)
     if not specs:
         raise ValidationError("bots list required", code="bots_required")
+    model = default_model(home=home)
+    if not model:
+        raise ValidationError(
+            "No default model.",
+            code="model_required",
+        )
     created: list[dict[str, Any]] = []
     errors: list[str] = []
     for spec in specs:
@@ -136,7 +70,6 @@ def create_bots(
             errors.append("empty name")
             continue
         try:
-            model = resolve_model_ref((spec or {}).get("model"), home=home)
             bot = bots_svc.create_bot(
                 name,
                 label=(spec or {}).get("label"),

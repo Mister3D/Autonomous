@@ -9,14 +9,14 @@
 - `frontend/src/components/{BotDeleteCard,LlmSettings}.vue`
 - settings key `bots.default_model`
 
-**Last updated**: 2026-11-09
+**Last updated**: 2026-11-13
 
 ## User behaviour
 
-- Settings → **LLM → Default model**: Pi model used when the Manager creates a bot without naming one.
-- The **Manager** (e.g. Assistant) can create bots from chat: `bot_create({ bots:[{name, model?},…] })`.
-  - Omit `model` → Settings default.
-  - Pass a ref (`openai/gpt-4o`) or a clear hint; `bot_models` lists available refs.
+- Settings → **LLM → Default model**: the only model for a bot the Manager creates. A `model` field on `bot_create` is ignored.
+- The **Manager** (e.g. Assistant) can create bots from chat: `bot_create({ bots:[{name},…] })`.
+  - The bot always receives `bots.default_model`. If that setting is empty, creation fails with `model_required`.
+  - `bot_models` lists refs and states the default. It does not let the Manager pick.
 - To delete bots: `bot_delete({ bots:[…], prompt? })` shows a **checkbox card** (all checked by default). The user may uncheck some, then **Delete** or **Cancel**. The tool blocks until then.
 - The Manager cannot delete itself via this card.
 - Clearing chat history does not affect this flow. Typing in chat while the card is pending cancels it (same idea as `ask_approval`).

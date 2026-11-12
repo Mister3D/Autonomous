@@ -391,7 +391,7 @@ class SettingsSchema(Schema):
         data_key="bots.default_model",
         allow_none=True,
         metadata={
-            "description": "Default Pi model ref (provider/id) when the Manager creates a bot without model="
+            "description": "Default Pi model ref (provider/id). New bots and Manager-created bots use only this."
         },
     )
 
@@ -506,12 +506,10 @@ class BotMailPeerSchema(Schema):
 
 
 class HouseholdBotSpecSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
     name = fields.Str(required=True, validate=validate.Length(min=1, max=64))
-    model = fields.Str(
-        load_default=None,
-        allow_none=True,
-        metadata={"description": "Pi model ref or hint; falls back to bots.default_model"},
-    )
     label = fields.Str(load_default=None, allow_none=True)
     slug = fields.Str(load_default=None, allow_none=True)
     internet = fields.Bool(load_default=True)
