@@ -108,6 +108,9 @@ def navigate(bot: str, url: str, *, home: Path | None = None) -> dict[str, Any]:
     url = (url or "").strip()
     if not url:
         raise ValidationError("url required")
+    from autonomous.services.url_policy import assert_seen_url
+
+    url = assert_seen_url(bot, url, home=home)
     result = _run(bot, ["navigate", "--url", url], home=home)
     _wander_async(bot, home=home)
     return result

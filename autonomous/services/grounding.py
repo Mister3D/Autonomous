@@ -978,11 +978,10 @@ def describe_screen(
 ) -> dict[str, Any]:
     """Fresh screenshot → multimodal model → plain-text description (no gesture).
 
-    Gives a DOM-blind agent eyes (captcha iframes, canvas, block pages, overlays)
+    Gives the agent eyes (captcha iframes, canvas, block pages, overlays)
     without ever attaching the PNG to the agent LLM itself.
 
-    Soft-gated: when Chrome/CDP is up, require a prior DOM observe
-    (``browser_snapshot`` / frames / text) and refuse back-to-back looks.
+    Not gated on a DOM read: page navigation is vm_look then vm_ground.
     """
     bots_svc.get_bot(bot, home=home)
     from autonomous.services.observe_gate import note_vm_look, refuse_vm_look_message

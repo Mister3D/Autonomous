@@ -1,8 +1,8 @@
 /**
  * Chrome CDP tools for Pi (generic web nav — no site-specific logic).
  *
- * Action loop: browser_snapshot (DOM, no scroll) → choose gesture
- * (left/right/drag) → vm_ground(action_hint) → vm_click / vm_drag.
+ * Page navigation is visual: vm_look → vm_ground → vm_click / vm_drag.
+ * These CDP tools are not the click path. Do not treat screen= as a target.
  * Reveal off-screen targets with vm_scroll (VNC wheel), not CDP jump.
  * Never attach screenshots here.
  */
@@ -190,8 +190,13 @@ export default function (pi: ExtensionAPI) {
     name: "browser_navigate",
     label: "Browser navigate",
     description:
-      "Navigate the active Chrome tab to a URL (CDP). Prefer opening via bot-chrome " +
-      "once, then navigate. Generic — no site-specific helpers.",
+      "FIRST OPEN ONLY. The server refuses this as soon as a page is already " +
+      "open (code=url_change), including a reload or a link you can see. " +
+      "The first URL must be one the user wrote, or that site's homepage — " +
+      "a guessed path is refused (code=invented_url). After the open: click " +
+      "what you see (shortest path). Google search: click the address bar, " +
+      "type the query, Enter. Reload: click the refresh icon. Never type a " +
+      "site URL into the address bar.",
     parameters: Type.Object({
       url: Type.String({ description: "Absolute URL, e.g. https://example.com" }),
     }),
@@ -265,7 +270,8 @@ export default function (pi: ExtensionAPI) {
       "page that just says access is restricted / blocked with nothing to act on: " +
       "such a block is tied to the session state, not to you. NOT for a login page, " +
       "a verification widget you can still act on, or a slow page. " +
-      "Then browser_navigate to the site's homepage and start over (fresh visit). " +
+      "Then click the refresh icon and start over from what you see (fresh visit). " +
+      "Do not browser_navigate to another URL. "
       "You will be logged out of that site; log in again afterwards. At most 2 resets " +
       "per site, then report to the user.",
     parameters: Type.Object({}),
@@ -283,7 +289,7 @@ export default function (pi: ExtensionAPI) {
       const d = res.data || {};
       return textResult(
         `Session cleared for ${d.origin || "current site"} (${(d.cleared || []).join(", ")}). ` +
-          "Now browser_navigate to the homepage and begin again.",
+          "Now click the refresh icon and begin again from what you see. Do not browser_navigate.",
         { ok: true, cleared: d.cleared },
       );
     },
@@ -434,12 +440,10 @@ export default function (pi: ExtensionAPI) {
     name: "browser_snapshot",
     label: "Browser DOM snapshot",
     description:
-      "Read a compact list of interactive controls (buttons, links, inputs, sliders) " +
-      "via CDP WITHOUT scrolling or clicking — invisible to the page visually. " +
-      "Each in-view control has screen=x,y = desk pixels, CLICK-READY for vm_click " +
-      "(no vm_ground needed when the control is in the DOM and not [COVERED]). " +
-      "Use BEFORE choosing a gesture and BEFORE vm_ground. " +
-      "Check in_viewport: if false, vm_scroll first. Optional query filters text/name/href.",
+      "NOT navigation. Compact DOM list for debugging only — do not click anything " +
+      "from it, and do not use it to decide which field is focused or filled. " +
+      "To see the page and act: vm_look, then vm_ground, then vm_click. " +
+      "Coordinates are omitted on purpose. Optional query filters text/name/href.",
     parameters: Type.Object({
       max_elements: Type.Optional(
         Type.Number({ description: "Max controls to return (default 60, max 120)" }),
@@ -467,6 +471,7 @@ export default function (pi: ExtensionAPI) {
       const d = res.data || {};
       const els = Array.isArray(d.elements) ? d.elements : [];
       const lines = [
+        "NOT click coordinates. Navigate with vm_look, then vm_ground, then vm_click.",
         `url: ${d.url || "?"}`,
         `title: ${d.title || "?"}`,
         `scrollY: ${d.scrollY ?? "?"} / height: ${d.scrollHeight ?? "?"} (viewport ${d.innerHeight ?? "?"})`,
@@ -476,15 +481,14 @@ export default function (pi: ExtensionAPI) {
       const overlays = Array.isArray(d.overlays) ? d.overlays : [];
       if (overlays.length) {
         lines.push(
-          "!! BLOCKING OVERLAY on top of the page — clicks on the page underneath land " +
-            "on this layer. Deal with it FIRST (accept / refuse / close), then re-snapshot:",
+          "!! BLOCKING OVERLAY on top of the page. Dismiss it with vm_look + vm_ground, " +
+            "not with these labels:",
         );
         for (const ov of overlays) {
           lines.push(`   [${ov.kind}] "${String(ov.text || "").slice(0, 200)}"`);
           for (const c of Array.isArray(ov.controls) ? ov.controls : []) {
-            const b = c.bbox || {};
             lines.push(
-              `   - ${c.tag} "${String(c.text || "").slice(0, 60)}" screen=${c.screen?.x},${c.screen?.y} bbox=${b.x},${b.y} ${b.w}x${b.h}`,
+              `   - ${c.tag} "${String(c.text || "").slice(0, 60)}"`,
             );
           }
         }
@@ -494,26 +498,19 @@ export default function (pi: ExtensionAPI) {
         const bits = [
           el.in_viewport === false ? "[offscreen]" : "[in-view]",
           el.occluded_by ? `[COVERED by ${el.occluded_by}]` : "",
-          el.focused ? "[FOCUSED]" : "",
-          typeof el.filled === "number" ? `[filled ${el.filled} chars]` : "",
           el.tag || "?",
           el.type ? `type=${el.type}` : "",
           el.role ? `role=${el.role}` : "",
           el.text ? `"${String(el.text).slice(0, 80)}"` : "",
           el.name ? `name=${el.name}` : "",
           el.href ? `→ ${String(el.href).slice(0, 100)}` : "",
-          el.screen ? `screen=${el.screen.x},${el.screen.y}` : "",
-          el.bbox
-            ? `bbox=${el.bbox.x},${el.bbox.y} ${el.bbox.w}x${el.bbox.h}`
-            : "",
         ].filter(Boolean);
         lines.push("- " + bits.join(" "));
       }
       if (!els.length) {
         lines.push(
-          "(no control in the top document. If vm_look / the screen shows a form or widget, " +
-            "it lives inside an iframe: call browser_frames_snapshot — it returns screen=x,y " +
-            "for those controls, so you do NOT need vm_ground.)",
+          "(no control in the top document. If vm_look shows a form or widget, " +
+            "locate it with vm_ground — do not click a DOM coordinate.)",
         );
       }
       return textResult(lines.join("\n"), {
@@ -528,15 +525,10 @@ export default function (pi: ExtensionAPI) {
     name: "browser_frames_snapshot",
     label: "Browser frames snapshot",
     description:
-      "Like browser_snapshot but ALSO walks cross-origin iframes (verification " +
-      "widgets, embedded forms). Prefer calling it WITHOUT query (a query that matches " +
-      "nothing falls back to the full list). A slide-to-verify widget is detected and the " +
-      "ready-to-use vm_drag(x,y,x2,y2) is printed as « SLIDER WIDGET ». " +
-      "Returns center_screen / bbox_screen in desk pixels for " +
-      "vm_click / vm_drag. Use when the visible UI is a widget but browser_text is " +
-      "empty. Draggable handle: vm_drag from the handle's center_screen to the far end " +
-      "of its track (or to the target element if one exists). Retry/reload buttons: " +
-      "vm_click their center_screen first.",
+      "NOT the normal navigation path. Walks cross-origin iframes. Do not click " +
+      "the controls it lists — locate them with vm_look + vm_ground. The one " +
+      "exception is a printed « SLIDER WIDGET » line: one vm_drag at those " +
+      "coordinates, then vm_look. Prefer calling it WITHOUT query.",
     parameters: Type.Object({
       max_elements: Type.Optional(
         Type.Number({ description: "Max controls per frame (default 60)" }),
@@ -584,27 +576,20 @@ export default function (pi: ExtensionAPI) {
       for (const fr of Array.isArray(d.frames) ? d.frames : []) {
         const fb = fr.box_screen;
         lines.push(
-          `## ${fr.type || "frame"} ${(fr.url || "").toString().slice(0, 100)}` +
-            (fb ? ` [box=${fb.x},${fb.y} ${fb.w}x${fb.h}]` : ""),
+          `## ${fr.type || "frame"} ${(fr.url || "").toString().slice(0, 100)}`,
         );
         if (fr.type === "iframe" && !(fr.elements || []).length && fb && fb.w > 40 && fb.h > 20) {
           lines.push(
-            "- (no readable controls: the widget is drawn inside the iframe — locate its " +
-              "checkbox/button with vm_ground inside this box, or vm_look; the box center is " +
-              `screen=${fb.x + Math.floor(fb.w / 2)},${fb.y + Math.floor(fb.h / 2)})`,
+            "- (no readable controls: the widget is drawn inside the iframe — " +
+              "vm_look, then vm_ground its checkbox or button. Do not click the box center.)",
           );
         }
         for (const el of Array.isArray(fr.elements) ? fr.elements : []) {
-          const c = el.center_screen || {};
           const bits = [
             el.tag || "?",
             el.className ? `class=${String(el.className).slice(0, 60)}` : "",
             el.id ? `id=${el.id}` : "",
             el.text ? `"${String(el.text).slice(0, 60)}"` : "",
-            `screen=${c.x},${c.y}`,
-            el.bbox_screen
-              ? `box=${el.bbox_screen.x},${el.bbox_screen.y} ${el.bbox_screen.w}x${el.bbox_screen.h}`
-              : "",
           ].filter(Boolean);
           lines.push("- " + bits.join(" "));
         }
@@ -622,8 +607,8 @@ export default function (pi: ExtensionAPI) {
     name: "browser_click_selector",
     label: "Browser click selector",
     description:
-      "CDP click + scrollIntoView — easy for anti-bot to spot. Prefer " +
-      "browser_snapshot → gesture → vm_ground → vm_click/vm_drag on protected sites.",
+      "CDP click + scrollIntoView — not navigation. Do not use it. " +
+      "Look with vm_look, locate with vm_ground, act with vm_click or vm_drag.",
     parameters: Type.Object({
       selector: Type.String({ description: "CSS selector" }),
     }),

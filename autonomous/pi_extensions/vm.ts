@@ -321,15 +321,11 @@ export default function (pi: ExtensionAPI) {
       "description: page/site, exact visible text (errors, banners, dialogs), blockers " +
       "(consent layer, modal, verification widget, access-denied page, login wall), form " +
       "state (empty / filled / validation errors) and key data shown. " +
-      "NOT the first observe when Chrome is up: call browser_snapshot (no query) first. " +
-      "Use vm_look only when that DOM read was empty/inconclusive, after a " +
-      "submit/login/click whose outcome you cannot read, and BEFORE you tell the user " +
-      "what went wrong — never report an error you did not read. " +
-      "Do not chain two vm_look calls without a fresh browser_snapshot / " +
-      "browser_frames_snapshot / browser_text between them. Optional `question` is " +
-      "answered first. NEVER use it for pixel coordinates: any x/y it states is a guess " +
-      "in an unknown scale — get click positions from browser_snapshot / " +
-      "browser_frames_snapshot (screen=x,y) or vm_ground.",
+      "This IS the page observation: call it before the first click, and again " +
+      "after a gesture to see what changed. Do not call it twice in a row with " +
+      "no gesture between them. Optional `question` is answered first. NEVER use " +
+      "it for pixel coordinates: any x/y it states is a guess — get click " +
+      "positions only from vm_ground (ok=true), never from the DOM.",
     parameters: Type.Object({
       question: Type.Optional(
         Type.String({
@@ -357,9 +353,9 @@ export default function (pi: ExtensionAPI) {
       if (res.data?.ok === false) {
         const why = String(res.data?.text || errMessage(res.data, res.status) || "").trim();
         return textResult(
-          why.startsWith("Call browser_")
-            ? why
-            : `vm_look refused: ${why || "observe the DOM first (browser_snapshot)."}`,
+          why
+            ? `vm_look refused: ${why}`
+            : "vm_look refused.",
           { error: true, code: res.data?.code || "dom_observe_required" },
         );
       }
@@ -375,8 +371,9 @@ export default function (pi: ExtensionAPI) {
     label: "GUI ground",
     description:
       "Locate a UI element on a FRESH desk screenshot via UI-TARS + optional judge. " +
-      "Returns geometry only — does NOT act. Call AFTER choosing the gesture " +
-      "(left_click / right_click / double / drag) from browser_snapshot / page text. " +
+      "Returns geometry only — does NOT act. Call AFTER vm_look, once you have " +
+      "chosen the gesture (left_click / right_click / double / drag) from what " +
+      "you saw. Do not locate from a DOM snapshot. "
       "Pass that choice as action_hint. Instruction in English. If ok=false, " +
       "do not invent coordinates. Then: action=click → vm_click; action=drag → " +
       "vm_drag(x,y,x2,y2) press-drag-release (never click a slider).",
@@ -473,11 +470,12 @@ export default function (pi: ExtensionAPI) {
     name: "vm_click",
     label: "VM click",
     description:
-      "Click at desktop pixel coordinates (VNC). Coordinates come from browser_snapshot / " +
-      "browser_frames_snapshot (screen=x,y) or from vm_ground (ok=true) — never from vm_look, " +
-      "never a point vm_ground rejected. Do NOT use it on sliders — use vm_drag. " +
-      "button: left (default), right, middle, double, or move = HOVER only (no click: menus, " +
-      "tooltips and dropdowns that open on mouse-over; then browser_snapshot / vm_look again).",
+      "Click at desktop pixel coordinates (VNC). Coordinates come from vm_ground " +
+      "(ok=true) only — never from vm_look, never from browser_snapshot / " +
+      "browser_frames_snapshot, never a point vm_ground rejected. Do NOT use it " +
+      "on sliders — use vm_drag. button: left (default), right, middle, double, " +
+      "or move = HOVER only (no click: menus, tooltips and dropdowns that open " +
+      "on mouse-over; then vm_look again).",
     parameters: Type.Object({
       x: Type.Number({ description: "X pixel on the original screenshot / desk" }),
       y: Type.Number({ description: "Y pixel on the original screenshot / desk" }),
@@ -521,7 +519,8 @@ export default function (pi: ExtensionAPI) {
     description:
       "Type or paste text into the currently focused desk window via VNC keystrokes. " +
       "Click the field first (vm_click) — never use it for secrets (use vault_type). " +
-      "method=type (default) or paste.",
+      "The address bar is only for a Google search: click it, type the query, " +
+      "Enter. Never type a site URL there. method=type (default) or paste.",
     parameters: Type.Object({
       text: Type.String({ description: "Text to type into the focused control" }),
       method: Type.Optional(
