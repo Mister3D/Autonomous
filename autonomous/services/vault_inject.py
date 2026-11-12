@@ -175,6 +175,10 @@ def inject(
         # Best-effort: avoid lingering cleartext in locals via overwrite intent.
         secret = ""  # noqa: F841
 
+    if completed.returncode == 0:
+        from autonomous.services.observe_gate import note_gesture
+
+        note_gesture(bot)
     if completed.returncode != 0:
         err = (completed.stderr or completed.stdout or b"unknown error").decode(
             "utf-8", errors="replace"

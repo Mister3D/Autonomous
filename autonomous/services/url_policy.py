@@ -109,9 +109,33 @@ def browser_already_open(location: str) -> bool:
     return normalize_url(location) is not None
 
 
+def vault_origin_urls(*, home: Path | None = None) -> set[str]:
+    """http(s) origins the user stored in the vault, plus each homepage.
+
+    The user already recorded the site. That is not an invented path.
+    A label that is not a URL adds nothing.
+    """
+    from autonomous.services import vault as vault_svc
+
+    found: set[str] = set()
+    try:
+        entries = vault_svc.list_entries(home=home)
+    except Exception:
+        return found
+    for entry in entries:
+        norm = normalize_url(str(entry.get("origin") or ""))
+        if not norm:
+            continue
+        found.add(norm)
+        root = origin_root(norm)
+        if root:
+            found.add(root)
+    return found
+
+
 def first_open_urls(bot: str, *, home: Path | None = None) -> set[str]:
-    """User-written URLs plus each of those sites' homepages."""
-    allowed = user_written_urls(bot, home=home)
+    """User-written URLs, vault origins, plus each of those sites' homepages."""
+    allowed = user_written_urls(bot, home=home) | vault_origin_urls(home=home)
     for url in list(allowed):
         root = origin_root(url)
         if root:

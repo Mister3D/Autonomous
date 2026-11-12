@@ -194,6 +194,25 @@ def exec_command(
     if not command:
         raise AutonomousError("command required", code="validation_error")
 
+    sleep_wait = re.fullmatch(
+        r"sleep\s+(\d+(?:\.\d+)?)(?:\s*&&\s*echo\b.*)?",
+        command,
+        flags=re.IGNORECASE,
+    )
+    # A few seconds of sleep is the model waiting on a page. A long sleep
+    # stays a real command (the cancel test uses sleep 30).
+    if sleep_wait and float(sleep_wait.group(1)) <= 15:
+        return append_log(
+            bot,
+            command,
+            exit_code=0,
+            output=(
+                "Do not sleep to wait for a page. "
+                "Call browser_wait_load or browser_snapshot."
+            ),
+            home=home,
+        )
+
     canned = _llm_test_clock(bot, command, home=home)
     if canned is not None:
         return canned

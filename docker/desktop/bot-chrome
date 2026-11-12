@@ -61,7 +61,7 @@ fi
 # --no-first-run alone is not enough on recent Google Chrome builds.
 : >"$udd/First Run"
 python3 - "$udd/Default/Preferences" <<'PY' 2>/dev/null || true
-import json, os, sys
+import json, os, sys, time
 p = sys.argv[1]
 try:
     d = json.load(open(p))
@@ -99,6 +99,12 @@ dist["make_chrome_default_for_user"] = False
 d.setdefault("signin", {})["allowed"] = False
 d["search"] = d.get("search") or {}
 d["search"]["suggest_enabled"] = False
+# EU first-run "choose a search engine" dialog. A completion timestamp
+# plus --disable-features=SearchEngineChoice skips it on a fresh profile.
+dsp = d.setdefault("default_search_provider", {})
+dsp["enabled"] = True
+choice = dsp.setdefault("choice_screen", {})
+choice["completion_timestamp"] = str(int((time.time() + 11644473600) * 1_000_000))
 # Metrics / privacy onboarding noise
 d.setdefault("user_experience_metrics", {})["reporting_enabled"] = False
 ps = d.setdefault("privacy_sandbox", {})
@@ -169,7 +175,7 @@ fi
   --no-first-run \
   --no-default-browser-check \
   --password-store=basic \
-  --disable-features=Translate,TranslateUI \
+  --disable-features=Translate,TranslateUI,SearchEngineChoice \
   --disable-default-apps \
   --disable-sync \
   --no-service-autorun \

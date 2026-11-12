@@ -13,6 +13,14 @@ from autonomous.services import terminal as term_svc
 from autonomous.services.errors import AutonomousError
 
 
+def test_sleep_is_not_executed(home):
+    bots_svc.create_bot("Termsleep", slug="termsleep", home=home)
+    out = term_svc.exec_command("termsleep", "sleep 5 && echo ok", home=home)
+    assert out["exit_code"] == 0
+    assert "browser_snapshot" in out["output"]
+    assert "ok" not in out["output"].split()
+
+
 def test_exec_requires_capability(home):
     bots_svc.create_bot("Termbot", slug="termbot", home=home)
     with pytest.raises(AutonomousError) as exc:

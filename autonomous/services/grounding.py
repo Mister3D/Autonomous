@@ -540,6 +540,11 @@ def locate(
     chat = bool(show_in_chat)
 
     bots_svc.get_bot(bot, home=home)
+    from autonomous.services.observe_gate import shortcut_ground
+
+    early = shortcut_ground(bot, instruction, action_hint=action_hint)
+    if early is not None:
+        return early
     shot = shot_svc.capture(bot, show_in_chat=False, home=home)
     png_path = shot_svc.resolve_png(bot, shot["id"], home=home)
 
@@ -981,7 +986,7 @@ def describe_screen(
     Gives the agent eyes (captcha iframes, canvas, block pages, overlays)
     without ever attaching the PNG to the agent LLM itself.
 
-    Not gated on a DOM read: page navigation is vm_look then vm_ground.
+    Skipped when a fresh snapshot already lists controls (that call is slow).
     """
     bots_svc.get_bot(bot, home=home)
     from autonomous.services.observe_gate import note_vm_look, refuse_vm_look_message

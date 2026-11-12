@@ -54,6 +54,24 @@ def test_already_open_refuses_every_url_change(home, monkeypatch):
     assert again.value.code == "url_change"
 
 
+def test_first_open_accepts_a_vault_origin(home, monkeypatch):
+    bots_svc.create_bot("urlbot4", home=home)
+    monkeypatch.setattr(browser_svc, "evaluate", lambda *a, **k: _page("about:blank"))
+    monkeypatch.setattr(
+        "autonomous.services.vault.list_entries",
+        lambda home=None: [{"origin": "https://shop.example/login"}],
+    )
+    assert url_policy.assert_seen_url(
+        "urlbot4", "https://shop.example/login", home=home
+    )
+    assert url_policy.assert_seen_url("urlbot4", "https://shop.example/", home=home)
+    with pytest.raises(ValidationError) as raised:
+        url_policy.assert_seen_url(
+            "urlbot4", "https://shop.example/orders", home=home
+        )
+    assert raised.value.code == "invented_url"
+
+
 def test_first_open_still_refuses_an_invented_path(home, monkeypatch):
     bots_svc.create_bot("urlbot3", home=home)
     chat_svc.create_message(

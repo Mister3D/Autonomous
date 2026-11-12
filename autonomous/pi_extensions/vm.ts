@@ -450,6 +450,12 @@ export default function (pi: ExtensionAPI) {
       if (d.x2 != null) lines.push(`x2: ${d.x2}`, `y2: ${d.y2}`);
       if (d.direction) lines.push(`direction: ${d.direction}`);
       if (d.verifier?.answer) lines.push(`verifier: ${d.verifier.answer}`);
+      if (d.source === "snapshot") {
+        lines.push(
+          "This point is the snapshot screen= point. vm_click it now. " +
+            "Do not vm_look or vm_ground again before that click.",
+        );
+      }
       if (action === "drag") {
         lines.push(
           "NEXT REQUIRED: call vm_drag with these x,y,x2,y2 (press–drag–release). Do NOT vm_click.",

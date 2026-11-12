@@ -2,11 +2,11 @@
 
 **Status**: in place (localisation only — no click)  
 **Key files**: `autonomous/services/grounding{,_image,_parse}.py`, `POST /bots/:name/screen/ground`, `vm_ground` (`pi_extensions/vm.ts`), `grounding.md`  
-**Last updated**: 2026-11-12 (grounding loop lines stay visible in the open tool list)
+**Last updated**: 2026-11-12 (a fresh snapshot answers the call without vision)
 
 ## User behaviour
 
-- The Pi agent calls **`vm_ground`** (instruction in English).
+- The Pi agent calls **`vm_ground`** (instruction in English). When the latest `browser_snapshot` already lists the control, the server returns that `screen=` point and does not call the vision model. Vision still runs for a canvas, a native dialog, or a drawn widget.
 - In the **chat**, capture, loop notes (UI-TARS, verdict, nudge, failure) and contiguous tools form a `ToolGroup`.
 - **During the run** (unsealed group): **live preview of the last tool call** (any of them: `vm_*`, `browser_*`, … — args + result).
 - **As soon as a message follows** (assistant, vault, etc.): the group is **sealed** → menu **collapsed** (unless the user opened it).

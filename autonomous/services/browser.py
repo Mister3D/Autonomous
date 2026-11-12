@@ -226,9 +226,11 @@ def snapshot(
     if query:
         args.extend(["--query", query])
     out = _run(bot, args, home=home)
-    from autonomous.services.observe_gate import mark_dom_observe
+    from autonomous.services.observe_gate import mark_dom_observe, remember_browser_read
 
     mark_dom_observe(bot)
+    if not query and isinstance(out, dict):
+        remember_browser_read(bot, out)
     return out
 
 
@@ -244,9 +246,11 @@ def frames_snapshot(
     if query:
         args.extend(["--query", query])
     out = _run(bot, args, home=home)
-    from autonomous.services.observe_gate import mark_dom_observe
+    from autonomous.services.observe_gate import mark_dom_observe, remember_browser_read
 
     mark_dom_observe(bot)
+    if not query and isinstance(out, dict):
+        remember_browser_read(bot, out)
     return out
 
 

@@ -19,7 +19,7 @@
 - **Persistent CDP profile**: `BOT_CHROME_USER_DATA_DIR` = **`$HOME/shared/.autonomous-chrome`** (host bind-mount `data/bots/<bot>/home`). Cookies / localStorage / anti-bot "clearance" cookies survive a container **recreate**. The old path `$HOME/.autonomous-chrome` (container layer) is migrated on first launch. Not `~/.config/google-chrome` (Chrome ≥136 ignores remote-debugging on it).
 - **Locale / TZ**: desk `TZ=Europe/Paris`, `LANG=fr_FR.UTF-8` (otherwise `UTC` + `en-US` vs FR IP = anti-bot signal).
 - **Translate disabled**: policy `TranslateEnabled: false`, prefs `translate.enabled=false` + blocked languages, flag `--disable-features=Translate,TranslateUI`.
-- **No welcome / EULA screens**: `First Run` sentinel file in the profile, prefs `distribution.require_eula=false`, `--no-first-run` / `--no-default-browser-check`, and a `dismiss-chrome-tos.py` safety net (xdotool → Accept) if the native modal still appears.
+- **No welcome / EULA screens**: `First Run` sentinel file in the profile, prefs `distribution.require_eula=false`, `--no-first-run` / `--no-default-browser-check`, and a `dismiss-chrome-tos.py` safety net (xdotool → Accept) if the native modal still appears. The EU search-engine choice dialog is skipped with `--disable-features=SearchEngineChoice` and `default_search_provider.choice_screen.completion_timestamp`.
 - Spoofed WebGL fingerprint (Intel UHD 620 via CDP) — see env `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL`. Without an active spoof, Chrome exposes **`llvmpipe`** (software GPU) → very bot-like (detected by anti-bots).
 - Spoof OK ≠ site OK: an anti-bot may still show an interstitial (CDP remote-debugging, etc.). The GPU is only one signal.
 

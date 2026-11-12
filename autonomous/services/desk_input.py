@@ -16,6 +16,12 @@ _WORKER = Path(__file__).resolve().parent / "vnc_type_worker.py"
 _CONTAINER_WORKER = "/home/autonomous/workspace/.autonomous/_vnc_type_worker.py"
 
 
+def _note_gesture(bot: str) -> None:
+    from autonomous.services.observe_gate import note_gesture
+
+    note_gesture(bot)
+
+
 def _chown_bot(path: Path) -> None:
     try:
         os.chown(path, 1000, 1000)
@@ -107,6 +113,7 @@ def click(
         ["click", "--x", str(x), "--y", str(y), "--button", button],
         home=home,
     )
+    _note_gesture(bot)
     return {"ok": True, "bot": bot, "x": x, "y": y, "button": button, "detail": out}
 
 
@@ -124,6 +131,7 @@ def type_text(
     if method not in ("type", "paste"):
         raise ValidationError("method must be type|paste")
     out = _run_worker(bot, [method], stdin=text.encode("utf-8"), home=home)
+    _note_gesture(bot)
     chars = len(text)
     for part in out.split():
         if part.startswith("chars="):
@@ -158,6 +166,7 @@ def scroll(
     if y > 0:
         args.extend(["--y", str(int(y))])
     out = _run_worker(bot, args, home=home)
+    _note_gesture(bot)
     return {"ok": True, "bot": bot, "dy": dy, "x": int(x), "y": int(y), "detail": out}
 
 
@@ -177,6 +186,7 @@ def key(
         ["key", "--key", name, "--repeat", str(repeats)],
         home=home,
     )
+    _note_gesture(bot)
     return {"ok": True, "bot": bot, "key": name, "repeats": repeats, "detail": out}
 
 
@@ -198,6 +208,7 @@ def drag(
         ["drag", "--x", str(x1), "--y", str(y1), "--x2", str(x2), "--y2", str(y2)],
         home=home,
     )
+    _note_gesture(bot)
     return {
         "ok": True,
         "bot": bot,

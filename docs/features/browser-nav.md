@@ -2,7 +2,7 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-11-12 (DOM finds the point; the click is always a real pointer)
+**Last updated**: 2026-11-12 (a fresh snapshot answers vm_ground / vm_look; vision only when it lists nothing)
 
 ## Action loop (enforced order)
 
@@ -11,17 +11,17 @@ The DOM says **where**. The pointer does the **click**. A CDP click (`browser_cl
 | Step | Tool | Role |
 |-------|--------|------|
 | 1. Read | **`browser_snapshot`** / **`browser_frames_snapshot`** | Controls with `screen=x,y`, overlays, `[FOCUSED]`, `[filled N chars]`. No gesture |
-| 2. Locate the rest | **`vm_ground`** | Only when the control is absent from that read (canvas, image, native dialog, drawn widget). Slow (~10 s). If `ok=false`, do not click |
+| 2. Locate the rest | **`vm_ground`** | Vision only when the control is absent from that read (canvas, image, native dialog, drawn widget). If the snapshot already lists it, the server returns that `screen=` point with no vision call. A read older than the last click is refused: snapshot again |
 | 3. Act | **`vm_click`** / **`vm_drag`** / **`vm_type`** / **`vm_scroll`** | Real VNC pointer and keys. The mouse glides to the point |
-| 4. Eyes | **`vm_look`** | When the snapshot is empty or inconclusive, or before reporting an error. Not before every click. Its x/y are guesses |
+| 4. Eyes | **`vm_look`** | When the snapshot is empty. Refused while that read still lists controls. Its x/y are guesses |
 
 Do not steer the site with CDP scripts, in-page `fetch`, `curl`, or `wget`. Do not mash Backspace because `[filled N chars]` disagrees with the screen: one `vm_look`, then move on.
 
 **Slider**: a `SLIDE-TO-VERIFY WIDGET` line is one `vm_drag` at the printed coordinates (still a real drag).
 
-**Navigation discipline** (enforced): `browser_navigate` is the **first open** only. If the tab is already an http(s) page, every URL change is refused (`code=url_change`) — including reload and a link that is on the page. The first URL must be one a **user** message wrote, or that site's homepage (`code=invented_url` otherwise). An assistant sentence that names a path does not make it allowed. After that, take the **shortest path** on screen: click the visible target, do not detour. A Google search is the address bar (query, then Enter), never a site URL. A reload is one click on the refresh icon. Never bypass a browser security warning.
+**Navigation discipline** (enforced): `browser_navigate` is the **first open** only. If the tab is already an http(s) page, every URL change is refused (`code=url_change`) — including reload and a link that is on the page. The first URL must be one a **user** message wrote, an http(s) **vault origin** the user stored, or that site's homepage (`code=invented_url` otherwise). An assistant sentence that names a path does not make it allowed. After that, take the **shortest path** on screen: click the visible target, do not detour. A Google search is the address bar (query, then Enter), never a site URL. A reload is one click on the refresh icon. Never bypass a browser security warning.
 
-**Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a decision about the **session** (cookies/state), not a puzzle: no reload loops, **no curl/wget** to the site from the VM, no home-made CDP/websocket scripts, no package installs. Recovery (only if `vm_look` confirms the page): `browser_reset_session` → click the refresh icon → start over from what is on screen (log in again), **2 resets max** per site, otherwise report to the user (text seen + attempts). Do not `browser_navigate` to a new URL. See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
+**Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a decision about the **session** (cookies/state), not a puzzle: no reload loops, **no curl/wget** to the site from the VM, no home-made CDP/websocket scripts, no package installs. A failed verification widget is one more try on that widget — do **not** `browser_reset_session` (wiping cookies throws the attempt away). Reset only when `vm_look` shows a page with nothing to click that says access is denied, then one click on the refresh icon, **once**, otherwise report to the user. Do not `browser_navigate` to a new URL. See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
 
 **Typing secrets / fields**: `vm_look` says which field is filled. `vault_type` **refuses** to type if the Chrome window has focus and the active element is not an editable field (iframe / terminal / CDP unavailable: not blocked), and accepts `password` as an alias when the entry has only one secret. The retry is `vm_ground` + `vm_click` on the field you see. `vm_look` must **never** provide coordinates.
 
