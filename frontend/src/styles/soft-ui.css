@@ -179,11 +179,11 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
-.bot-list li button:hover {
+.bot-list li button:not(.settings-orb):hover {
   background: var(--bg-soft);
 }
 
-.bot-list li button.active {
+.bot-list li button:not(.settings-orb).active {
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px rgba(240, 140, 18, 0.22);
 }

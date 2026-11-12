@@ -29,6 +29,7 @@
           <UiIcon name="search" />
         </button>
         <button
+          v-if="state.bots.length"
           class="settings-orb"
           type="button"
           :aria-label="t('nav.create')"
@@ -101,8 +102,21 @@
       </div>
 
       <ul class="bot-list">
-        <li v-if="!railManagers.length && !railWorkers.length" class="rail-empty">
-          {{ t("nav.bots") }}
+        <li v-if="!state.bots.length" class="rail-empty">
+          <p>{{ t("nav.emptyBotsGone") }}</p>
+          <p>{{ t("nav.emptyBotsNone") }}</p>
+          <p>{{ t("nav.emptyBotsNow") }}</p>
+          <button
+            class="settings-orb"
+            type="button"
+            :aria-label="t('nav.create')"
+            :title="canCreate ? t('nav.create') : t('setup.createBlocked')"
+            :disabled="!canCreate"
+            :aria-disabled="!canCreate"
+            @click="openCreate"
+          >
+            <UiIcon name="plus" />
+          </button>
         </li>
         <li v-for="b in railWorkers" :key="b.name">
           <button

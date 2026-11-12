@@ -209,13 +209,35 @@ a:focus-visible {
   min-height: 0;
 }
 
-.rail-empty {
-  color: var(--muted);
-  font-size: 0.85rem;
-  padding: 0.8rem 0.7rem;
+.bot-list:has(> .rail-empty) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.bot-list li button {
+.rail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.rail-empty p {
+  margin: 0;
+}
+
+.rail-empty .settings-orb {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  margin-top: 0.55rem;
+}
+
+.bot-list li button:not(.settings-orb) {
   width: 100%;
   text-align: left;
   border: 2px solid transparent;
@@ -228,8 +250,8 @@ a:focus-visible {
   align-items: center;
 }
 
-.bot-list li button:hover,
-.bot-list li button.active {
+.bot-list li button:not(.settings-orb):hover,
+.bot-list li button:not(.settings-orb).active {
   background: #f2f2f4;
 }
 
@@ -6762,7 +6784,7 @@ a.bot-mention:hover,
     background: #ececef;
   }
 
-  .bot-list li button {
+  .bot-list li button:not(.settings-orb) {
     min-height: 3.1rem;
     padding: 0.55rem 0.65rem;
   }
@@ -6895,7 +6917,8 @@ a.bot-mention:hover,
   height: var(--control-h-sm);
 }
 .rail-logo img { width: 22px; height: 22px; }
-.rail-top .settings-orb:disabled { opacity: 0.4; cursor: not-allowed; }
+.rail-top .settings-orb:disabled,
+.rail-empty .settings-orb:disabled { opacity: 0.4; cursor: not-allowed; }
 .login-brand { margin: 0 0 4px; }
 .login-logo { width: min(280px, 80%); height: auto; display: block; margin: 0 auto; }
 .setup-panel { width: min(760px, 100%); margin: 0 auto; padding: 24px 16px 48px; text-align: left; overflow-y: auto; max-height: 100%; }

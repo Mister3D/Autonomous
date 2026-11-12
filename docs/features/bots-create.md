@@ -7,11 +7,11 @@
 - `autonomous/models/schemas.py` (`BotCreateSchema`)
 - `frontend/src/api.js` (`formatApiError` for flask-smorest 422)
 
-**Last updated**: 2026-11-13 (create dialog opens on the Settings default model)
+**Last updated**: 2026-11-13 (empty rail invites creating a bot with the +)
 
 ## User behaviour
 
-- The rail's **Create** button is a round white bordered button, same size as the settings menu (40px).
+- The rail's **Create** button is a round white bordered button, same size as the settings menu (40px). When the rail has no bots at all, that top button is hidden. A centred empty state asks where they went, then shows the same **+** under “Create one now”. As soon as a bot exists, the **+** returns to the top and the empty state goes away. A search that hides every bot does not show that hint.
 - The **Create a bot** modal fits on screen: fields on the left, character and colour on the right (about 820 px). Below 760 px, everything goes back to a single column, and the modal scrolls if needed (`max-height`).
 - No **Role** persona: no UI field, no `bots.role` column, no injection into the Pi prompt, no `--role` CLI. `POST` / `PATCH /bots` reject an unknown `role`.
 - **Right panel** (Details / Events / Files): open by default on large screens. Chevron at the top right of the panel, **aligned** with the tab bar / the two lists (same height, disc on hover). It collapses the panel; the main area takes the width. To reopen it: round button in that same bar, with a space to its left. `localStorage` preference `autonomous.inspectorCollapsed` (absent = open). Below 1080 px the panel stays a drawer, the chevron closes it without remembering the desktop collapse.
