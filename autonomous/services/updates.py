@@ -371,6 +371,11 @@ def configure(
     return out
 
 
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    """True when ``ancestor`` is contained in ``descendant`` (a fast-forward is possible)."""
+    return _git("merge-base", "--is-ancestor", ancestor, descendant).returncode == 0
+
+
 def _behind_count(local: str, remote: str) -> int:
     p = _git("rev-list", "--count", f"{local}..{remote}")
     if p.returncode != 0:
@@ -442,7 +447,11 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
     try:
         fetch = _git("fetch", "--quiet", remote_name, ch, timeout=90.0)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        base.update(ok=False, code="fetch_failed", message=str(exc)[:300])
+        base.update(
+            ok=False,
+            code="fetch_failed",
+            message=(str(exc) or "Could not reach the remote.")[:300],
+        )
         _write_cache(home, base)
         return base
 
@@ -457,12 +466,16 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
     if local and remote_sha and local != remote_sha:
         behind = _behind_count(local, remote_sha)
         base["behind"] = behind
-        base["available"] = behind > 0
-        if behind == 0:
-            base["message"] = (
-                f"Local branch differs from {remote_name}; fast-forward update may not apply."
-            )
+        if _is_ancestor(local, remote_sha):
+            base["available"] = behind > 0
+        else:
+            # Remote history was rewritten (force-push). A fast-forward cannot apply.
+            # Commits on the remote still count as an update; apply resets to that tip.
             base["code"] = "diverged"
+            base["available"] = behind > 0
+            base["message"] = (
+                "Remote history was rewritten. Update will match the remote tip."
+            )
     elif local and remote_sha and local == remote_sha:
         base["available"] = False
         base["behind"] = 0
@@ -529,24 +542,29 @@ def _schedule_systemd_restart(unit: str, log) -> None:
             try:
                 p = subprocess.run(argv, capture_output=True, text=True, timeout=60)
             except (OSError, subprocess.TimeoutExpired) as exc:
-                log(f"restart attempt failed ({' '.join(argv)}): {exc}")
+                log("Restart attempt failed.")
                 continue
             if p.returncode == 0:
-                log(f"restarted via {' '.join(argv)}")
+                log("Service restarted.")
                 return
-            err = (p.stderr or p.stdout or "").strip()[:200]
-            log(f"restart refused ({' '.join(argv)}): {err or p.returncode}")
+            log("Restart was refused.")
         log("Could not restart automatically — restart autonomous serve / systemctl manually.")
 
     threading.Thread(target=worker, name="autonomous-restart", daemon=True).start()
 
 
-def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
+def _stream_argv(
+    job_id: str,
+    argv: list[str],
+    home: Path | None,
+    *,
+    cwd: str | None = None,
+) -> int:
     from autonomous.services import jobs as jobs_svc
 
     env = os.environ.copy()
     env.setdefault("DEBIAN_FRONTEND", "noninteractive")
-    jobs_svc.update_job(job_id, log_line="$ " + " ".join(argv), home=home)
+    jobs_svc.update_job(job_id, log_line=("$ " + " ".join(argv))[:500], home=home)
     proc = subprocess.Popen(
         argv,
         stdout=subprocess.PIPE,
@@ -554,13 +572,15 @@ def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
         text=True,
         bufsize=1,
         env=env,
-        cwd=str(_repo_root()),
+        cwd=cwd or str(_repo_root()),
     )
     assert proc.stdout is not None
     last = 0.0
     buf: list[str] = []
     for line in proc.stdout:
-        buf.append(line.rstrip()[:500])
+        shown = line.rstrip()[:500]
+        if shown:
+            buf.append(shown)
         if time.monotonic() - last > 0.4:
             for b in buf:
                 jobs_svc.update_job(job_id, log_line=b, home=home)
@@ -571,16 +591,27 @@ def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
     return proc.wait()
 
 
-def sync_steps(remote_name: str, branch: str, *, force: bool) -> list[tuple[str, list[str]]]:
-    """Fixed git argv. Force discards local commits and tracked edits, then matches the remote tip."""
+def sync_steps(
+    remote_name: str,
+    branch: str,
+    *,
+    force: bool,
+    match_remote: bool = False,
+) -> list[tuple[str, list[str]]]:
+    """Fixed git argv. Force discards local commits and tracked edits, then matches the remote tip.
+
+    ``match_remote`` is the rewritten-history path: same branch reset, without deleting
+    untracked files.
+    """
     root = str(_repo_root())
     tip = f"{remote_name}/{branch}"
     steps: list[tuple[str, list[str]]] = [
         ("fetch", ["git", "-C", root, "fetch", remote_name, branch]),
     ]
-    if force:
-        # Untracked files (not ignored ones: data/, .venv, node_modules stay).
-        steps.append(("clean", ["git", "-C", root, "clean", "-fd"]))
+    if force or match_remote:
+        if force:
+            # Untracked files (not ignored ones: data/, .venv, node_modules stay).
+            steps.append(("clean", ["git", "-C", root, "clean", "-fd"]))
         steps.append(("reset", ["git", "-C", root, "checkout", "-f", "-B", branch, tip]))
         return steps
     if _git("show-ref", "--verify", "--quiet", f"refs/heads/{branch}").returncode != 0:
@@ -622,7 +653,9 @@ def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, A
     job = jobs_svc.create_job(setup_svc.SETUP_BOT, "setup.self_update", home=home)
 
     def log(line: str) -> None:
-        jobs_svc.update_job(job["id"], log_line=line[:500], home=home)
+        text = str(line or "").rstrip()
+        if text:
+            jobs_svc.update_job(job["id"], log_line=text[:500], home=home)
 
     def worker() -> None:
         global _apply_running
@@ -630,11 +663,34 @@ def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, A
         try:
             jobs_svc.update_job(job["id"], state="running", progress=5, home=home)
             log(f"Updating channel={ch} remote={remote_name} force={force}")
-            for label, argv in sync_steps(remote_name, ch, force=force):
+            planned = sync_steps(remote_name, ch, force=force)
+            index = 0
+            while index < len(planned):
+                label, argv = planned[index]
                 jobs_svc.update_job(job["id"], progress=15, home=home)
                 rc = _stream_argv(job["id"], argv, home)
                 if rc != 0:
                     raise RuntimeError(f"{label} failed (exit {rc})")
+                if label == "fetch" and not force:
+                    local = _rev_parse("HEAD")
+                    tip = _rev_parse(f"{remote_name}/{ch}")
+                    if (
+                        local
+                        and tip
+                        and local != tip
+                        and not _is_ancestor(local, tip)
+                    ):
+                        log("The remote branch was rewritten. Matching its tip.")
+                        planned = [
+                            step
+                            for step in sync_steps(
+                                remote_name, ch, force=False, match_remote=True
+                            )
+                            if step[0] != "fetch"
+                        ]
+                        index = 0
+                        continue
+                index += 1
 
             venv_python = root / ".venv" / "bin" / "python"
             npm = shutil.which("npm")
@@ -644,25 +700,12 @@ def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, A
                 raise RuntimeError(".venv missing — re-run install.sh")
 
             jobs_svc.update_job(job["id"], progress=40, home=home)
-            env = os.environ.copy()
             frontend = root / "frontend"
             for label, argv in (
                 ("npm ci", [npm, "ci", "--no-audit", "--no-fund", "--loglevel=error"]),
                 ("npm run build", [npm, "run", "build", "--silent"]),
             ):
-                log(f"$ cd frontend && {' '.join(argv)}")
-                proc = subprocess.Popen(
-                    argv,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    cwd=str(frontend),
-                    env=env,
-                )
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    log(line.rstrip()[:500])
-                rc = proc.wait()
+                rc = _stream_argv(job["id"], argv, home, cwd=str(frontend))
                 if rc != 0:
                     raise RuntimeError(f"{label} failed (exit {rc})")
 
@@ -685,7 +728,7 @@ def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, A
 
             unit = _systemd_unit_active()
             if unit:
-                log(f"Scheduling restart of {unit}…")
+                log("Restarting the service…")
                 _schedule_systemd_restart(unit, log)
                 jobs_svc.update_job(
                     job["id"],

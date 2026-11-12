@@ -309,7 +309,10 @@ const canApplyUpdate = computed(() => {
 const showForceUpdate = computed(() => {
   const u = updateInfo.value;
   const err = String(updateError.value || "").toLowerCase();
-  if (u?.dirty || u?.code === "dirty" || u?.code === "diverged") return true;
+  if (u?.dirty || u?.code === "dirty") return true;
+  // Rewritten history with commits to take is a normal Update (it matches the tip).
+  // Force stays for a diverged copy that has nothing new on the remote, or a failed fast-forward.
+  if (u?.code === "diverged" && !u?.available) return true;
   return (
     err.includes("local changes") ||
     err.includes("fast-forward") ||
@@ -343,6 +346,7 @@ const updateNote = computed(() => {
   const u = updateInfo.value;
   if (!u || updateUpToDate.value) return "";
   if (u.code === "fetch_failed") return t("update.fetchFailed", { detail: u.message || "" });
+  if (u.code === "diverged" && u.available) return t("update.rewritten");
   if (u.dirty && u.available) return t("update.dirty", { channel: u.channel, n: u.behind || 0 });
   if (u.available && !updateJump.value) {
     return t("update.available", { channel: u.channel, n: u.behind || 0 });
@@ -354,6 +358,7 @@ const updateSummary = computed(() => {
   const u = updateInfo.value;
   if (!u) return "";
   if (u.code === "fetch_failed") return t("update.fetchFailed", { detail: u.message || "" });
+  if (u.code === "diverged" && u.available) return t("update.rewritten");
   if (u.dirty && u.available) return t("update.dirty", { channel: u.channel, n: u.behind || 0 });
   if (u.available) {
     return t("update.available", {

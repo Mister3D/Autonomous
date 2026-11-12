@@ -394,6 +394,7 @@
   "update.forceHint": "Reprend la branche du dépôt. Les commits locaux et les fichiers modifiés ici sont remplacés.",
   "update.divergedTitle": "La copie locale diffère",
   "update.divergedMeta": "Branche : {channel}",
+  "update.rewritten": "L’historique de cette branche a été réécrit. Mettre à jour aligne la copie sur le dépôt.",
   "update.applying": "Mise à jour…",
   "update.restarting": "Mise à jour appliquée — attente du redémarrage du service, puis rechargement…",
   "update.failed": "Échec de la mise à jour — voir le journal.",

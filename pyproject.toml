@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autonomous"
-version = "0.1.14"
+version = "0.1.15"
 description = "Autonomous bot hub — Vue + Flask + SQLite + Docker desktop VMs"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -2,14 +2,14 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/updates.py`, `autonomous/api/setup_routes.py` (`/setup/update*`), `frontend/src/components/SetupPanel.vue`, Settings → General  
-**Last updated**: 2026-11-13 (home row shows version, refresh icon, pill; force update still resets to the remote tip)
+**Last updated**: 2026-11-13 (a rewritten branch updates by matching the remote tip)
 
 ## User behaviour
 
 - On the ready home (`/` tagline), the status card row reads `Autonomous - {branch} - {version}` with a refresh icon and a green **Up to date** pill. When the remote tip’s `__version__` is newer, the row adds `→ {latest}` and **Update** replaces the pill. A dirty or diverged tree shows **Force** on that row. Hidden if the install is not a git checkout. `GET /setup/update` includes `version` and `latest_version`.
 - The same update card stays at the bottom of the incomplete setup checklist (`/setup`, or home while required items are missing), so you can apply an update before finishing config.
 - **Check** forces a remote check (otherwise results are cached **24 h** under `$AUTONOMOUS_HOME/update-check.json`). The home line also keeps that result in the browser (`localStorage`) for the same 24 h, so a page load does not call `/setup/update` again and the line does not pop in late. Changing the branch or the remote URL drops that copy. After an apply, it is dropped so the restarted page checks once.
-- **Update** fast-forwards to `<remote>/<branch>`, runs `npm ci` + `npm run build` in `frontend/`, `pip install -e .` in the venv, then **restarts** `autonomous.service` via `systemctl` when a unit is active (delayed ~2 s). Manual restart if no unit.
+- **Update** fast-forwards to `<remote>/<branch>`, runs `npm ci` + `npm run build` in `frontend/`, `pip install -e .` in the venv, then **restarts** `autonomous.service` via `systemctl` when a unit is active (delayed ~2 s). Manual restart if no unit. If the remote history was rewritten (a force-push: the local commit is not an ancestor of the remote tip) and the tree is clean, Update resets the branch to that tip instead of aborting on `merge --ff-only`. Untracked files stay. The home card shows the update log: each command and its output.
 - **Force** (home card, next to a dirty or diverged state, including the “local changes” error) and **Force update** (Settings → General → Updates) do the same rebuild, but first discard local commits and tracked edits (`git checkout -f -B <branch> <remote>/<branch>`) and untracked files (`git clean -fd`, ignored paths such as `data/` and `.venv` stay). Use it when a fast-forward cannot apply — a dirty tree, or a rewritten local commit.
 - Settings → General → **Updates**:
   - **Repository URL** (optional): empty keeps `origin`; a fork URL configures a dedicated git remote named `updates`. Only `https://`, `ssh://`, or `git@…` — applying an update from that remote runs `npm`/`pip` and may restart the service (**code execution**).

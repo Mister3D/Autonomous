@@ -394,6 +394,7 @@
   "update.forceHint": "Takes the remote branch. Local commits and files changed here are replaced.",
   "update.divergedTitle": "Local copy differs",
   "update.divergedMeta": "Branch: {channel}",
+  "update.rewritten": "This branch history was rewritten. Update matches the remote tip.",
   "update.applying": "Updating…",
   "update.restarting": "Update applied — waiting for the service to come back, then reloading…",
   "update.failed": "Update failed — see the log.",

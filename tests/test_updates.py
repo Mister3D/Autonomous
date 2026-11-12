@@ -151,6 +151,42 @@ def test_check_endpoint_forces(auth_client, monkeypatch):
     assert r.get_json()["available"] is True
 
 
+def test_match_remote_resets_without_deleting_untracked():
+    steps = dict(
+        updates_svc.sync_steps("origin", "dev_peter", force=False, match_remote=True)
+    )
+    assert "clean" not in steps
+    assert "ff-only" not in steps
+    assert steps["reset"][-4:] == ["-f", "-B", "dev_peter", "origin/dev_peter"]
+
+
+def test_rewritten_remote_is_an_update(home, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "_dirty", lambda: False)
+    monkeypatch.setattr(updates_svc, "_fetch_remote_name", lambda home=None: "origin")
+    monkeypatch.setattr(updates_svc, "origin_url", lambda: None)
+    monkeypatch.setattr(updates_svc, "channel", lambda home=None: "dev_peter")
+    monkeypatch.setattr(
+        updates_svc,
+        "_rev_parse",
+        lambda ref: {"HEAD": "local", "origin/dev_peter": "remote"}.get(ref),
+    )
+    monkeypatch.setattr(updates_svc, "_behind_count", lambda local, remote: 4)
+    monkeypatch.setattr(updates_svc, "_is_ancestor", lambda ancestor, descendant: False)
+
+    class _Ok:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(updates_svc, "_git", lambda *args, **kwargs: _Ok())
+    updates_svc.invalidate_cache(home)
+    status = updates_svc.check(home=home, force=True)
+    assert status["code"] == "diverged"
+    assert status["available"] is True
+    assert status["behind"] == 4
+
+
 def test_force_sync_resets_to_remote_tip():
     steps = dict(updates_svc.sync_steps("origin", "dev_peter", force=True))
     assert steps["fetch"][-3:] == ["fetch", "origin", "dev_peter"]
@@ -284,3 +320,4 @@ def test_cache_roundtrip(home, monkeypatch):
     out = updates_svc.check(home=home, force=False)
     assert out["cached"] is True
     assert out["local_sha"] == "aaa"
+
