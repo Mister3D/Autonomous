@@ -40,6 +40,10 @@ SERVICE_NAMES = (
 )
 
 _MIGRATION_RE = re.compile(r"^(\d+)_.*\.sql$")
+# 001_schema.sql replaced the old incremental files 1..22. A branch that
+# still has that squash already contains this schema; those version ints
+# must not look like the database is ahead of the branch.
+_SQUASH_THROUGH = 22
 _VERSION_RE = re.compile(r"^__version__\s*=\s*[\"']([^\"']+)[\"']", re.M)
 # Safe git branch / ref name (no shell metacharacters, no path escape).
 _BRANCH_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
@@ -291,7 +295,10 @@ def can_switch_to(target: str, *, home: Path | None = None) -> dict[str, Any]:
     # Also union working-tree files if we're already on that branch tip.
     if not target_migs:
         target_migs = _migration_versions_in_tree(None)
-    extra = sorted(applied - target_migs)
+    covered = set(target_migs)
+    if 1 in covered:
+        covered.update(v for v in applied if v <= _SQUASH_THROUGH)
+    extra = sorted(applied - covered)
     if extra:
         return {
             "ok": False,

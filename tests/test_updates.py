@@ -221,6 +221,45 @@ def test_migrations_ahead_blocks_main(home, monkeypatch, tmp_path):
     assert exc.value.code == "migrations_ahead"
 
 
+def test_squashed_migration_numbers_do_not_block_switch(home, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "_rev_parse", lambda ref: "deadbeef" if ref else None)
+    monkeypatch.setattr(
+        updates_svc,
+        "_git",
+        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    settings_svc.set_value("update.channel", "main", home=home)
+    from autonomous.db import get_db
+
+    with get_db(home) as conn:
+        for version in (2, 22, 23):
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))",
+                (version,),
+            )
+    monkeypatch.setattr(
+        updates_svc,
+        "_migration_versions_in_tree",
+        lambda ref=None: {1, 23, 24, 25},
+    )
+    gate = updates_svc.can_switch_to("dev_peter", home=home)
+    assert gate["ok"] is True
+
+    with get_db(home) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (25, datetime('now'))"
+        )
+    monkeypatch.setattr(
+        updates_svc,
+        "_migration_versions_in_tree",
+        lambda ref=None: {1, 23},
+    )
+    blocked = updates_svc.can_switch_to("old", home=home)
+    assert blocked["ok"] is False
+    assert blocked["code"] == "migrations_ahead"
+
+
 def test_cache_roundtrip(home, monkeypatch):
     payload = {
         "ok": True,

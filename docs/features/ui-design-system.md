@@ -9,12 +9,12 @@
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-11 (cross-link Vue catalogue)
+**Last updated**: 2026-11-13 (LLM settings is four cards)
 
 ## User behaviour
 
 - Light Soft UI: soft canvas (`--bg-canvas`), elevated white cards, orange accent, soft shadows.
-- Settings sections are card-based with icon badges (Générale, LLM, Grounding, Tokens, vault, memory, companions). Tokens is a flush full-height chart (no cards). LLM card (`.llm-settings`) stacks sections with one flex gap + shared subhead rule (no mixed per-block margins).
+- Settings sections are card-based with icon badges (Générale, LLM, Grounding, Tokens, vault, memory, companions). Tokens is a flush full-height chart (no cards). General stays a single full-width column. The language switch is centered. The default-model picker spans its card. **Add a provider** and **Add a model** are centered under their lists. The grounding attempt field and **Test notification** sit on the right of their row. LLM settings (`.llm-settings`) is four cards — default model, providers, models, other models — each body a flex column with one gap.
 - `UiIcon` `memory` = [SVG Repo brain](https://www.svgrepo.com/svg/521533/brain) (filled `currentColor`) — settings nav Mémoire + inspector Mémoire.
 - Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**. Manager uses `UiToggleRow` `tip` (custom bubble on the switch) instead of the `<small>` hint; when locked, the tip shows the “already a Manager” reason.
 - Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (arm → check; tooltip = « Confirmer ? »).

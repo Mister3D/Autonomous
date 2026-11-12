@@ -26,14 +26,6 @@
       <TokenUsageChart v-if="section === 'tokens'" />
       <LlmSettings v-if="section === 'llm'" />
       <GroundingSettings v-if="section === 'grounding'" />
-      <UiCard v-if="section === 'agent'" :title="t('pi.version')">
-        <template #icon>
-          <UiIcon name="tag" :size="18" />
-        </template>
-        <p class="settings-version-value">
-          {{ loading ? "…" : status?.version || "—" }}
-        </p>
-      </UiCard>
 
       <UiCard
         v-if="section === 'agent'"
@@ -219,112 +211,112 @@
         <template #icon>
           <UiIcon name="update" :size="18" />
         </template>
-        <div class="settings-field">
-          <span>{{ t("update.remoteUrl") }}</span>
-          <input
-            v-model="updateRemoteDraft"
-            type="url"
-            :placeholder="t('update.remoteUrlPlaceholder')"
-            :disabled="updateChannelBusy || !updateGit"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <small v-if="updateRemoteKeepUrl">{{
-            t("update.remoteUrlHint", { url: updateRemoteKeepUrl })
-          }}</small>
-          <button
-            class="btn"
-            type="button"
-            :disabled="updateChannelBusy || !updateGit || updateRemoteDraft.trim() === updateRemoteSaved"
-            @click="saveUpdateRemote"
-          >
-            {{ t("update.remoteUrlSave") }}
-          </button>
-        </div>
-        <div class="settings-field">
-          <span>{{ t("update.channel") }}</span>
-          <div
-            class="update-channel-seg update-channel-seg-3"
-            role="radiogroup"
-            :aria-label="t('update.channel')"
-            :aria-disabled="updateChannelBusy || !updateGit ? 'true' : undefined"
-          >
-            <button
-              type="button"
-              role="radio"
-              class="update-channel-opt"
-              :class="{ active: updatePreset === 'main' }"
-              :aria-checked="updatePreset === 'main'"
-              :disabled="updateChannelBusy || !updateGit"
-              @click="pickUpdateChannel('main')"
-            >
-              <strong>{{ t("update.channelMain") }}</strong>
-              <small>{{ t("update.channelMainHint") }}</small>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              class="update-channel-opt"
-              :class="{ active: updatePreset === 'dev' }"
-              :aria-checked="updatePreset === 'dev'"
-              :disabled="updateChannelBusy || !updateGit"
-              @click="pickUpdateChannel('dev')"
-            >
-              <strong>{{ t("update.channelDev") }}</strong>
-              <small>{{ t("update.channelDevHint") }}</small>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              class="update-channel-opt"
-              :class="{ active: updatePreset === 'custom' }"
-              :aria-checked="updatePreset === 'custom'"
-              :disabled="updateChannelBusy || !updateGit"
-              @click="pickUpdateChannel('custom')"
-            >
-              <strong>{{ t("update.channelCustom") }}</strong>
-              <small>{{ t("update.channelCustomHint") }}</small>
-            </button>
+        <div class="update-panel">
+          <div class="settings-field">
+            <span>{{ t("update.remoteUrl") }}</span>
+            <div class="settings-field-row">
+              <input
+                v-model="updateRemoteDraft"
+                type="url"
+                :placeholder="t('update.remoteUrlPlaceholder')"
+                :disabled="updateChannelBusy || !updateGit"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button
+                class="btn"
+                type="button"
+                :disabled="updateChannelBusy || !updateGit || updateRemoteDraft.trim() === updateRemoteSaved"
+                @click="saveUpdateRemote"
+              >
+                {{ t("update.remoteUrlSave") }}
+              </button>
+            </div>
+            <small>{{ t("update.remoteUrlHint") }}</small>
           </div>
-          <div v-if="updatePreset === 'custom'" class="update-custom-branch">
-            <label>
-              <span>{{ t("update.customBranch") }}</span>
+          <div class="settings-field">
+            <span>{{ t("update.channel") }}</span>
+            <div
+              class="update-channel-seg update-channel-seg-3"
+              role="radiogroup"
+              :aria-label="t('update.channel')"
+              :aria-disabled="updateChannelBusy || !updateGit ? 'true' : undefined"
+            >
+              <button
+                type="button"
+                role="radio"
+                class="update-channel-opt"
+                :class="{ active: updatePreset === 'main' }"
+                :aria-checked="updatePreset === 'main'"
+                :disabled="updateChannelBusy || !updateGit"
+                @click="pickUpdateChannel('main')"
+              >
+                <strong>{{ t("update.channelMain") }}</strong>
+                <small>{{ t("update.channelMainHint") }}</small>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                class="update-channel-opt"
+                :class="{ active: updatePreset === 'dev' }"
+                :aria-checked="updatePreset === 'dev'"
+                :disabled="updateChannelBusy || !updateGit"
+                @click="pickUpdateChannel('dev')"
+              >
+                <strong>{{ t("update.channelDev") }}</strong>
+                <small>{{ t("update.channelDevHint") }}</small>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                class="update-channel-opt"
+                :class="{ active: updatePreset === 'custom' }"
+                :aria-checked="updatePreset === 'custom'"
+                :disabled="updateChannelBusy || !updateGit"
+                @click="pickUpdateChannel('custom')"
+              >
+                <strong>{{ t("update.channelCustom") }}</strong>
+                <small>{{ t("update.channelCustomHint") }}</small>
+              </button>
+            </div>
+            <div v-if="updatePreset === 'custom'" class="settings-field-row update-custom-branch">
               <input
                 v-model="updateCustomBranch"
                 type="text"
                 :placeholder="t('update.customBranchPlaceholder')"
                 :disabled="updateChannelBusy || !updateGit"
+                :aria-label="t('update.customBranch')"
                 autocomplete="off"
                 spellcheck="false"
                 @keydown.enter.prevent="saveCustomBranch"
               />
-            </label>
+              <button
+                class="btn primary"
+                type="button"
+                :disabled="
+                  updateChannelBusy ||
+                  !updateGit ||
+                  !updateCustomBranch.trim() ||
+                  updateCustomBranch.trim() === updateChannelSaved
+                "
+                @click="saveCustomBranch"
+              >
+                {{ t("update.customBranchSave") }}
+              </button>
+            </div>
+            <small>{{ t("update.channelHelp") }}</small>
+          </div>
+          <div class="settings-field">
             <button
               class="btn"
               type="button"
-              :disabled="
-                updateChannelBusy ||
-                !updateGit ||
-                !updateCustomBranch.trim() ||
-                updateCustomBranch.trim() === updateChannelSaved
-              "
-              @click="saveCustomBranch"
+              :disabled="updateChannelBusy || updateForcing || !updateGit"
+              @click="forceUpdate"
             >
-              {{ t("update.customBranchSave") }}
+              {{ updateForcing ? t("update.applying") : t("update.forceApply") }}
             </button>
+            <small>{{ t("update.forceHint") }}</small>
           </div>
-          <small>{{ t("update.channelHelp") }}</small>
-        </div>
-        <div class="settings-field">
-          <button
-            class="btn"
-            type="button"
-            :disabled="updateChannelBusy || updateForcing || !updateGit"
-            @click="forceUpdate"
-          >
-            {{ updateForcing ? t("update.applying") : t("update.forceApply") }}
-          </button>
-          <small>{{ t("update.forceHint") }}</small>
         </div>
         <pre v-if="updateForceLog.length" class="setup-log">{{ updateForceLog.join("\n") }}</pre>
         <p v-if="!updateGit" class="hint">{{ t("update.noGit") }}</p>
@@ -340,8 +332,11 @@
         <template #icon>
           <UiIcon name="crosshair" :size="18" />
         </template>
-        <label class="settings-field">
-          <span>{{ t("guard.reviewEvery") }}</span>
+        <label class="settings-field settings-inline">
+          <span class="settings-inline-copy">
+            <span>{{ t("guard.reviewEvery") }}</span>
+            <small>{{ t("guard.reviewEveryHint") }}</small>
+          </span>
           <input
             v-model.number="guard.reviewEvery"
             type="number"
@@ -350,10 +345,12 @@
             step="1"
             @change="flushGuard"
           />
-          <small>{{ t("guard.reviewEveryHint") }}</small>
         </label>
-        <label class="settings-field">
-          <span>{{ t("guard.maxActions") }}</span>
+        <label class="settings-field settings-inline">
+          <span class="settings-inline-copy">
+            <span>{{ t("guard.maxActions") }}</span>
+            <small>{{ t("guard.maxActionsHint") }}</small>
+          </span>
           <input
             v-model.number="guard.maxActions"
             type="number"
@@ -362,7 +359,6 @@
             step="1"
             @change="flushGuard"
           />
-          <small>{{ t("guard.maxActionsHint") }}</small>
         </label>
         <p v-if="guardError" class="vault-error">{{ guardError }}</p>
       </UiCard>
@@ -520,10 +516,18 @@
           <p v-if="notifyNote" class="hint">{{ notifyNote }}</p>
         </div>
         <p v-else-if="devicesReady && !devicePending.length" class="hint">{{ t("companion.empty") }}</p>
-        <div class="companion-download">
-          <h4>{{ t("companion.downloadTitle") }}</h4>
-          <p class="hint justified">{{ t("companion.downloadHint") }}</p>
-          <p v-if="buildError" class="vault-error">{{ buildError }}</p>
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'companions'"
+        class="companion-download"
+        :title="t('companion.downloadTitle')"
+        :hint="t('companion.downloadHint')"
+      >
+        <template #icon>
+          <UiIcon name="harddrive" :size="18" />
+        </template>
+        <p v-if="buildError" class="vault-error">{{ buildError }}</p>
           <template v-if="companionBuild">
             <p class="hint">
               {{ t("companion.version") }} {{ companionBuild.version || "?" }} ·
@@ -589,7 +593,6 @@
               <pre class="companion-cmd">{{ companionBuild.rustup_hint }}</pre>
             </template>
           </template>
-        </div>
       </UiCard>
       </div>
     </div>
@@ -674,8 +677,6 @@ watch(
   },
   { immediate: true },
 );
-const status = ref(null);
-const loading = ref(true);
 const entries = ref([]);
 const vaultError = ref("");
 const devicePending = ref([]);
@@ -723,18 +724,16 @@ const updateCustomBranch = ref("");
 const updateRemoteDraft = ref("");
 const updateRemoteSaved = ref("");
 const updateOriginUrl = ref("");
+const updateChoice = ref("");
 let updateChannelSaved = "main";
 
 const updatePreset = computed(() => {
+  if (updateChoice.value === "custom") return "custom";
   const ch = updateChannel.value;
   if (ch === "main" || ch === "dev") return ch;
-  return "custom";
+  if (ch) return "custom";
+  return updateChoice.value || "main";
 });
-
-/** URL kept when the remote field is left empty (custom remote, else origin). */
-const updateRemoteKeepUrl = computed(
-  () => String(updateRemoteSaved.value || updateOriginUrl.value || "").trim(),
-);
 
 const pwCanSubmit = computed(
   () =>
@@ -1229,6 +1228,7 @@ async function loadUpdateChannel() {
     const ch = String(st.channel || "main").trim() || "main";
     updateChannel.value = ch;
     updateChannelSaved = ch;
+    updateChoice.value = "";
     updateCustomBranch.value = ch === "main" || ch === "dev" ? "" : ch;
     updateRemoteSaved.value = String(st.remote_url || "").trim();
     updateRemoteDraft.value = updateRemoteSaved.value;
@@ -1260,12 +1260,20 @@ async function applyUpdateBranch(want) {
     });
     forgetUpdateStatus();
     updateChannelSaved = branch;
+    updateChoice.value = "";
     if (branch !== "main" && branch !== "dev") {
       updateCustomBranch.value = branch;
     }
   } catch (e) {
-    updateChannelError.value = e.message || String(e);
+    const msg = e.message || String(e);
+    updateChannelError.value = /not available on /i.test(msg)
+      ? t("update.unknownBranch", { branch })
+      : msg;
     updateChannel.value = updateChannelSaved;
+    if (branch !== "main" && branch !== "dev") {
+      updateChoice.value = "custom";
+      updateCustomBranch.value = branch;
+    }
   } finally {
     updateChannelBusy.value = false;
   }
@@ -1273,16 +1281,17 @@ async function applyUpdateBranch(want) {
 
 async function pickUpdateChannel(next) {
   if (next === "custom") {
-    updateChannel.value =
-      updateCustomBranch.value.trim() ||
-      (updateChannelSaved !== "main" && updateChannelSaved !== "dev"
-        ? updateChannelSaved
-        : "");
-    if (!updateCustomBranch.value.trim() && updateChannel.value) {
-      updateCustomBranch.value = updateChannel.value;
+    updateChoice.value = "custom";
+    if (
+      !updateCustomBranch.value.trim() &&
+      updateChannelSaved !== "main" &&
+      updateChannelSaved !== "dev"
+    ) {
+      updateCustomBranch.value = updateChannelSaved;
     }
     return;
   }
+  updateChoice.value = "";
   await applyUpdateBranch(next === "dev" ? "dev" : "main");
 }
 
@@ -1322,13 +1331,6 @@ onMounted(async () => {
   loadUpdateChannel().catch((e) => {
     updateChannelError.value = e.message;
   });
-  try {
-    status.value = await api.piStatus();
-  } catch (e) {
-    status.value = { ready: false, reason: "error", doc_url: "https://pi.dev/docs/latest/models" };
-  } finally {
-    loading.value = false;
-  }
   try {
     await loadGuard();
   } catch (e) {

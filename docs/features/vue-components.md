@@ -84,7 +84,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `LlmSettings.vue` | Settings → LLM providers & models. | [`llm-settings.md`](./llm-settings.md) |
+| `LlmSettings.vue` | Settings → LLM: four cards (default model, providers, models, other models). | [`llm-settings.md`](./llm-settings.md) |
 | `GroundingSettings.vue` | Settings → grounding / UI-TARS keys. | [`grounding.md`](./grounding.md) |
 | `TokenUsageChart.vue` | Settings → Tokens history chart. | [`token-usage.md`](./token-usage.md) |
 | `SetupPanel.vue` | First-run checklist + updates + first chat CTA (home). | [`setup.md`](./setup.md), [`updates.md`](./updates.md) |

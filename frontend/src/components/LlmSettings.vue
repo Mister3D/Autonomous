@@ -1,7 +1,21 @@
 <template>
-  <UiCard class="llm-settings" :title="t('llm.title')" :hint="t('llm.hint')">
+  <div class="llm-settings">
+  <UiCard :title="t('llm.defaultModelTitle')" :hint="t('llm.defaultModelHint')">
     <template #icon>
       <UiIcon name="spark" :size="18" />
+    </template>
+    <p v-if="loadError" class="vault-error">{{ loadError }}</p>
+    <div class="llm-default-model">
+      <ModelPicker field :model="defaultModel" @update:model="onDefaultModel" />
+      <span v-if="defaultModelSaving" class="hint">…</span>
+      <span v-else-if="defaultModelOk" class="setup-ok">{{ defaultModelOk }}</span>
+      <span v-else-if="defaultModelError" class="vault-error">{{ defaultModelError }}</span>
+    </div>
+  </UiCard>
+
+  <UiCard :title="t('llm.providersTitle')" :hint="t('llm.providersHint')">
+    <template #icon>
+      <UiIcon name="link" :size="18" />
     </template>
     <p class="hint">
       {{ t("llm.docsLead") }}
@@ -11,19 +25,6 @@
       ·
       <a :href="docsConfig" target="_blank" rel="noopener noreferrer">{{ t("llm.docsConfig") }}</a>
     </p>
-    <p v-if="loadError" class="vault-error">{{ loadError }}</p>
-
-    <h3 class="llm-subhead">{{ t("llm.defaultModelTitle") }}</h3>
-    <p class="hint llm-providers-hint">{{ t("llm.defaultModelHint") }}</p>
-    <div class="llm-default-model">
-      <ModelPicker field :model="defaultModel" @update:model="onDefaultModel" />
-      <span v-if="defaultModelSaving" class="hint">…</span>
-      <span v-else-if="defaultModelOk" class="setup-ok">{{ defaultModelOk }}</span>
-      <span v-else-if="defaultModelError" class="vault-error">{{ defaultModelError }}</span>
-    </div>
-
-    <h3 class="llm-subhead">{{ t("llm.providersTitle") }}</h3>
-    <p class="hint llm-providers-hint">{{ t("llm.providersHint") }}</p>
 
     <ul v-if="providerDrafts.length" class="llm-provider-list">
       <li
@@ -125,8 +126,12 @@
         {{ t("llm.addProvider") }}
       </button>
     </div>
+  </UiCard>
 
-    <h3 class="llm-subhead">{{ t("llm.modelsTitle") }}</h3>
+  <UiCard :title="t('llm.modelsTitle')">
+    <template #icon>
+      <UiIcon name="cpu" :size="18" />
+    </template>
 
     <ul v-if="modelRows.length" class="llm-provider-list">
       <li
@@ -259,9 +264,12 @@
         {{ t("llm.addModel") }}
       </button>
     </div>
+  </UiCard>
 
-    <h3 class="llm-subhead">{{ t("llm.otherTitle") }}</h3>
-    <p class="hint llm-providers-hint">{{ t("llm.otherHint") }}</p>
+  <UiCard :title="t('llm.otherTitle')" :hint="t('llm.otherHint')">
+    <template #icon>
+      <UiIcon name="database" :size="18" />
+    </template>
     <div v-if="catalogModels.length" class="llm-catalog">
       <div class="llm-catalog-head" role="row">
         <span role="columnheader">{{ t("llm.model") }}</span>
@@ -281,8 +289,8 @@
       </div>
     </div>
     <p v-else class="hint">{{ t("llm.otherEmpty") }}</p>
-
   </UiCard>
+  </div>
 </template>
 
 <script setup>

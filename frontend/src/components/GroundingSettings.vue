@@ -59,7 +59,7 @@
       <template #icon>
         <UiIcon name="update" :size="18" />
       </template>
-      <label class="settings-field">
+      <label class="settings-field settings-inline">
         <span>{{ t("guard.groundingLoops") }}</span>
         <input v-model.number="loops" type="number" min="1" max="8" step="1" />
       </label>

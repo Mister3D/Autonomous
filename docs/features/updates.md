@@ -13,7 +13,7 @@
 - **Force** (home card, next to a dirty or diverged state, including the “local changes” error) and **Force update** (Settings → General → Updates) do the same rebuild, but first discard local commits and tracked edits (`git checkout -f -B <branch> <remote>/<branch>`) and untracked files (`git clean -fd`, ignored paths such as `data/` and `.venv` stay). Use it when a fast-forward cannot apply — a dirty tree, or a rewritten local commit.
 - Settings → General → **Updates**:
   - **Repository URL** (optional): empty keeps `origin`; a fork URL configures a dedicated git remote named `updates`. Only `https://`, `ssh://`, or `git@…` — applying an update from that remote runs `npm`/`pip` and may restart the service (**code execution**).
-  - **Branch**: presets Stable (`main`) / Pre-release (`dev`) / Custom (any valid branch name). Leaving `main` asks for confirmation. Returning to `main` is refused when the DB has migration versions absent from that branch (`migrations_ahead`).
+  - **Branch**: presets Stable (`main`) / Pre-release (`dev`) / Custom (any valid branch name). Leaving `main` asks for confirmation. Returning to `main` is refused when the DB has migration versions absent from that branch (`migrations_ahead`). Versions 1–22 folded into `001_schema.sql` do not count when that file is on the target branch.
 
 ## Implementation
 
@@ -27,7 +27,7 @@
 - Do not hide the update UI behind `setup.ready` — operators on a fresh install must be able to pull before LLM/desk are configured.
 - Dirty tree → a normal apply returns 400 `dirty`; the home card explains it and offers **Force**.
 - Non-git installs (no `.git`) → UI shows unavailable; no fake update path.
-- Do not allow channel / remote_url flips through `set_many` without the migration / confirm guards.
+- Do not allow channel / remote_url flips through `set_many` without the migration / confirm guards. Do not treat squashed ints 1–22 as `migrations_ahead` when the target tree contains `001_schema.sql`.
 - After apply, expect the HTTP process to die if systemd restart succeeds — the job log may truncate. The UI must **not** show `NetworkError`: on job `done` (or a fetch drop while applying), poll `/api/v1/health` then `location.reload()`.
 - Branch names are validated (`[A-Za-z0-9._/-]`, no `..`); remote URLs must be `https://` / `ssh://` / `git@…` (`http://` and `git://` rejected).
 - Do not point `update.remote_url` at a repo you do not control.
