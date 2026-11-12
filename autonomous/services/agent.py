@@ -413,6 +413,51 @@ class NullAgent:
         return None
 
 
+def compaction_notice(record: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """Chat line for a Pi compaction event. None when the record is unrelated.
+
+    The full summary stays inside the Pi session. The thread only records that
+    a summary started, finished, failed, or was cancelled, plus token counts.
+    """
+    rtype = record.get("type")
+    if rtype not in ("compaction_start", "compaction_end"):
+        return None
+    reason = str(record.get("reason") or "").strip()
+    if rtype == "compaction_start":
+        return (
+            "Pi résume la conversation…",
+            {"kind": "compaction", "status": "running", "reason": reason},
+        )
+    result = record.get("result") if isinstance(record.get("result"), dict) else {}
+    aborted = bool(record.get("aborted"))
+    error = str(record.get("errorMessage") or "").strip()
+    if aborted:
+        status = "aborted"
+        text = "Le résumé de la conversation a été annulé."
+    elif error:
+        status = "error"
+        text = "Le résumé de la conversation a échoué."
+    else:
+        status = "done"
+        text = "Pi a résumé la conversation."
+    meta: dict[str, Any] = {
+        "kind": "compaction",
+        "status": status,
+        "reason": reason,
+    }
+    for src, key in (
+        ("tokensBefore", "tokens_before"),
+        ("estimatedTokensAfter", "tokens_after"),
+    ):
+        value = result.get(src)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        meta[key] = int(value)
+    if error:
+        meta["error"] = error[:500]
+    return text, meta
+
+
 class PiAgent:
     """Drive one Pi RPC session per bot; stream tokens via SSE."""
 
@@ -507,6 +552,7 @@ class PiAgent:
             "guard_gate_count": None,  # action_count at which the gate opened
             "guard_gate_violation": False,  # tools attempted while gate open
             "guard_tools_blocked": False,  # gate-only follow-up run: block every tool
+            "compaction_msg_id": None,
             # CONTINUE arrived after a gate abort — settle must resume the task.
             "guard_resume_task": False,
             "pending_secret_reformulate": False,
@@ -610,9 +656,34 @@ class PiAgent:
             state["msg_id"] = None
             state["content"] = ""
 
+        def note_compaction(record: dict[str, Any]) -> None:
+            notice = compaction_notice(record)
+            if notice is None:
+                return
+            text, meta = notice
+            if meta.get("status") == "running":
+                close_assistant()
+            msg_id = state.get("compaction_msg_id")
+            try:
+                if meta.get("status") == "running" or not msg_id:
+                    msg = chat_svc.create_message(
+                        bot, text, role="system", meta=meta, home=home
+                    )
+                    state["compaction_msg_id"] = (
+                        msg["id"] if meta.get("status") == "running" else None
+                    )
+                else:
+                    chat_svc.update_message(bot, msg_id, text, home=home, meta=meta)
+                    state["compaction_msg_id"] = None
+            except Exception:
+                log.exception("compaction notice failed for %s", bot)
+
         def on_event(record: dict[str, Any]) -> None:
             touch_run_progress(bot)
             rtype = record.get("type")
+            if rtype in ("compaction_start", "compaction_end"):
+                note_compaction(record)
+                return
             if rtype == "message_update":
                 ev = record.get("assistantMessageEvent") or {}
                 etype = ev.get("type")

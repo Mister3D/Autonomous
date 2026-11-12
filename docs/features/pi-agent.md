@@ -2,7 +2,7 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{batch,vault,vm}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-13 (home Pi rows match the Autonomous version row)
+**Last updated**: 2026-11-13 (compaction shows in the conversation)
 
 ## User behaviour
 
@@ -109,6 +109,7 @@ Pi is **not** in the VMs. It's on the host.
 - Never leave `data/bots/<name>/pi/sessions` after a bot `DELETE`: Pi resumes the `*.jsonl` if the same `--session-id` comes back.
 - User secret leak (`report_user_secret`): **stop** of the Pi process + scrub of the `*.jsonl` (otherwise the model "remembers" the password at the next message). See [`vault.md`](./vault.md).
 - **Prompt / KV cache**: keep the leading system+tools prefix byte-stable across turns in one Pi session. Forbidden in future work: stamping the current time into `--append-system-prompt` per message, rebuilding the system block on every `prompt()`, or rotating “fresh” memory into the system mid-session. Allowed: append user/assistant/tool messages; Pi compaction; process restart (new freeze). Compaction budgets live in `~/.pi/agent/settings.json` (`compaction.reserveTokens` / `keepRecentTokens`); model `contextWindow` in `models.json` must match the real vLLM `--max-model-len` or Pi compacts / overflows on the wrong number.
+- **Compaction in the thread**: each Pi `compaction_start` / `compaction_end` (threshold, overflow, or manual) becomes one system card in the conversation (`meta.kind = compaction`). While it runs the card says Pi is summarizing; when it finishes the same card stays, with token counts when Pi sends them. The summary text itself stays in the Pi session and is not copied into the chat. A reload still shows the card.
 - Do not fetch every page before the first paint. The newest page shows immediately; older pages load when the reader scrolls up (`loadOlderMessages`). Keep rows already loaded when a later refresh merges the newest page (`paged` stays true). A short page means that direction is exhausted. Search jumps must keep walking until the target id is present.
 
 ## Quick check

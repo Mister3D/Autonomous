@@ -70,6 +70,8 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `AgentResumeCard.vue` | Manual Resume fallback after interrupt (rare; server auto-resumes first). | [`pi-agent.md`](./pi-agent.md) |
 | `BotDeleteCard.vue` | Manager household delete checkboxes. | [`household.md`](./household.md) |
 
+The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as a centred card in the thread (`meta.kind` `guard` or `compaction`). See [`pi-agent.md`](./pi-agent.md).
+
 ## Modals / overlays
 
 | Component | Role | Feature note |

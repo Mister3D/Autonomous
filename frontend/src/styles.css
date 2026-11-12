@@ -4808,6 +4808,34 @@ button.msg-queued-action:disabled {
   background: #fff6f6;
 }
 
+.compaction-card.running {
+  border-color: #e4d3b0;
+  background: #fffaf2;
+}
+
+.compaction-card.running .guard-ico {
+  animation: compaction-pulse 1.1s ease-in-out infinite;
+}
+
+.compaction-card.error {
+  border-color: #f0c9c9;
+  background: #fff6f6;
+}
+
+.compaction-card .guard-title small {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@keyframes compaction-pulse {
+  0%,
+  100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 .guard-ico {
   opacity: 0.8;
   flex: none;

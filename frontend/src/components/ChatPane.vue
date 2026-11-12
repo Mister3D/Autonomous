@@ -131,6 +131,20 @@
             >{{ item.time }}</time>
           </div>
         </article>
+        <article v-else-if="item.kind === 'compaction'" class="msg guard" :data-msg-id="item.id">
+          <div class="guard-card compaction-card" :class="item.status">
+            <span class="guard-ico" aria-hidden="true">{{ item.icon }}</span>
+            <span class="guard-title">
+              {{ item.text }}
+              <small v-if="item.detail">{{ item.detail }}</small>
+            </span>
+            <time
+              v-if="item.time"
+              class="guard-time"
+              :datetime="item.iso"
+            >{{ item.time }}</time>
+          </div>
+        </article>
         <article v-else-if="item.kind === 'secret_leak'" class="msg secret-leak" :data-msg-id="item.id">
           <div class="secret-leak-card">
             <span class="secret-leak-ico" aria-hidden="true">
@@ -1832,6 +1846,64 @@ function isGuardSystem(m) {
   return m?.role === "system" && m?.meta?.kind === "guard";
 }
 
+function isCompaction(m) {
+  return m?.role === "system" && m?.meta?.kind === "compaction";
+}
+
+function formatTok(n) {
+  const value = Number(n);
+  if (!Number.isFinite(value)) return "";
+  if (value >= 1000) return `${Math.round(value / 1000)}k`;
+  return String(value);
+}
+
+function compactionItem(m) {
+  const d = parseDate(m.created_at);
+  const time = d ? formatMsgTime(m.created_at, locale.value) : "";
+  const meta = m.meta || {};
+  const status = String(meta.status || "done");
+  const knownReason = ["threshold", "overflow", "manual"].includes(meta.reason)
+    ? meta.reason
+    : "";
+  const reason = knownReason ? t(`chat.compactionReason.${knownReason}`) : "";
+  let text = t("chat.compactionDone");
+  let icon = "✓";
+  if (status === "running") {
+    text = t("chat.compactionRunning");
+    icon = "…";
+  } else if (status === "error") {
+    text = t("chat.compactionError");
+    icon = "!";
+  } else if (status === "aborted") {
+    text = t("chat.compactionAborted");
+    icon = "–";
+  }
+  const bits = [];
+  if (reason) bits.push(reason);
+  if (
+    status === "done" &&
+    Number.isFinite(Number(meta.tokens_before)) &&
+    Number.isFinite(Number(meta.tokens_after))
+  ) {
+    bits.push(
+      t("chat.compactionTokens", {
+        before: formatTok(meta.tokens_before),
+        after: formatTok(meta.tokens_after),
+      })
+    );
+  }
+  return {
+    kind: "compaction",
+    id: `compaction-${m.id}`,
+    status,
+    icon,
+    text,
+    detail: bits.join(" · "),
+    time,
+    iso: m.created_at || "",
+  };
+}
+
 function isSecretLeak(m) {
   if (m?.role !== "system") return false;
   const kind = m?.meta?.kind;
@@ -2104,6 +2176,10 @@ const thread = computed(() => {
     if (isGuardSystem(m)) {
       const g = guardItem(m);
       if (g) items.push(g);
+      continue;
+    }
+    if (isCompaction(m)) {
+      items.push(compactionItem(m));
       continue;
     }
     const reply = guardReply(m);
