@@ -550,7 +550,8 @@ def cmd_snapshot(ns: argparse.Namespace) -> int:
             scrollHeight: document.documentElement.scrollHeight,
             count: out.length,
             overlays: overlays,
-            elements: out
+            elements: out,
+            text: clip((document.body && document.body.innerText) || '', 800)
           }};
         }}"""
         result = sess.call(

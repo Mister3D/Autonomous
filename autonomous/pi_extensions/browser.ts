@@ -213,10 +213,13 @@ export default function (pi: ExtensionAPI) {
           { error: true },
         );
       }
-      return textResult(`Navigated to ${res.data?.navigated || params.url}.${sliderNote(res.data?.slider_hints)}`, {
-        ok: true,
-        navigated: res.data?.navigated,
-      });
+      const page = res.data?.page ? "\n\n" + res.data.page : "";
+      return textResult(
+        `Navigated to ${res.data?.navigated || params.url}.` +
+          `${sliderNote(res.data?.slider_hints)}` +
+          page,
+        { ok: true, navigated: res.data?.navigated },
+      );
     },
   });
 
@@ -225,10 +228,10 @@ export default function (pi: ExtensionAPI) {
     label: "Browser wait load",
     description:
       "Wait until the active page finished loading (document.readyState complete), " +
-      "bounded by a timeout. USE THIS instead of `sleep N` after a click, a form " +
-      "submit, a redirect or launching Chrome. Never blocks forever: if the page " +
-      "loads endlessly it returns timed_out=true after the timeout — the page is " +
-      "then usually already usable, so go on (browser_snapshot / vm_look).",
+      "bounded by a timeout. vm_click, vm_drag and Return already wait and " +
+      "return the new page — do not call this after them. Use it only after " +
+      "the first browser_navigate if that result has no page. Never blocks " +
+      "forever: timed_out=true means the page is usually already usable.",
     parameters: Type.Object({
       timeout: Type.Optional(
         Type.Number({ description: "Max seconds to wait (default 15, max 30)" }),
@@ -300,7 +303,8 @@ export default function (pi: ExtensionAPI) {
     label: "Browser text",
     description:
       "Read visible text of the active Chrome page (innerText, truncated). " +
-      "Use to understand results / forms without screenshots. Prefer over dumping HTML.",
+      "vm_click and browser_snapshot already include an excerpt: call this " +
+      "only when that excerpt is missing the fact you need. Prefer over dumping HTML.",
     parameters: Type.Object({
       max_chars: Type.Optional(
         Type.Number({ description: "Max characters (default 8000)" }),
@@ -517,6 +521,9 @@ export default function (pi: ExtensionAPI) {
             "call browser_frames_snapshot. If it is only drawn, vm_ground it. " +
             "Do not invent a coordinate.)",
         );
+      }
+      if (d.text) {
+        lines.push("", "Visible text:", String(d.text).slice(0, 800));
       }
       return textResult(lines.join("\n"), {
         ok: true,

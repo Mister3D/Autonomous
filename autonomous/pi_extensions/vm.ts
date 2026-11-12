@@ -485,7 +485,9 @@ export default function (pi: ExtensionAPI) {
       "(ok=true). Never from vm_look, never a point vm_ground rejected, never " +
       "browser_click_selector. Do NOT use it on sliders — use vm_drag. " +
       "button: left (default), right, middle, double, or move = HOVER only " +
-      "(menus that open on mouse-over; then snapshot again).",
+      "(menus that open on mouse-over). The result includes the new page " +
+      "(controls and visible text). Do not call browser_snapshot, " +
+      "browser_wait_load, or browser_text again unless that read is empty.",
     parameters: Type.Object({
       x: Type.Number({ description: "X pixel on the original screenshot / desk" }),
       y: Type.Number({ description: "Y pixel on the original screenshot / desk" }),
@@ -514,12 +516,16 @@ export default function (pi: ExtensionAPI) {
         });
       }
       const d = res.data || {};
-      return textResult(
+      const head =
         d.button === "move"
           ? `Moved the pointer to (${d.x},${d.y}) (hover).`
-          : `Clicked ${d.button || "left"} at (${d.x},${d.y}).`,
-        { ok: true, x: d.x, y: d.y, button: d.button },
-      );
+          : `Clicked ${d.button || "left"} at (${d.x},${d.y}).`;
+      return textResult(head + (d.page ? "\n\n" + d.page : ""), {
+        ok: true,
+        x: d.x,
+        y: d.y,
+        button: d.button,
+      });
     },
   });
 
@@ -570,7 +576,8 @@ export default function (pi: ExtensionAPI) {
     description:
       "Real mouse-wheel scroll on the desk via VNC. dy>0 scrolls content down " +
       "(read further); dy<0 up. Optional x,y = pointer position (defaults center-ish). " +
-      "Prefer this over browser_scroll when browsing visually.",
+      "Prefer this over browser_scroll when browsing visually. " +
+      "The result includes the new page. Do not snapshot again unless it is empty.",
     parameters: Type.Object({
       dy: Type.Number({
         description: "Vertical scroll delta in pixels (e.g. 400). Sign: >0 = down.",
@@ -597,10 +604,11 @@ export default function (pi: ExtensionAPI) {
         });
       }
       const d = res.data || {};
-      return textResult(`Scrolled dy=${d.dy} at (${d.x || 0},${d.y || 0}).`, {
-        ok: true,
-        dy: d.dy,
-      });
+      return textResult(
+        `Scrolled dy=${d.dy} at (${d.x || 0},${d.y || 0}).` +
+          (d.page ? "\n\n" + d.page : ""),
+        { ok: true, dy: d.dy },
+      );
     },
   });
 
@@ -609,7 +617,8 @@ export default function (pi: ExtensionAPI) {
     label: "VM key",
     description:
       "Press a named key via VNC: Return, Tab, Escape, BackSpace, Delete, " +
-      "Left/Up/Right/Down, Page_Up, Page_Down, Home, End, space. Optional repeats.",
+      "Left/Up/Right/Down, Page_Up, Page_Down, Home, End, space. Optional repeats. " +
+      "Return includes the new page. Do not snapshot again unless that read is empty.",
     parameters: Type.Object({
       key: Type.String({ description: "Key name, e.g. Return or Page_Down" }),
       repeats: Type.Optional(
@@ -635,11 +644,10 @@ export default function (pi: ExtensionAPI) {
         });
       }
       const d = res.data || {};
-      return textResult(`Key ${d.key} ×${d.repeats}.`, {
-        ok: true,
-        key: d.key,
-        repeats: d.repeats,
-      });
+      return textResult(
+        `Key ${d.key} ×${d.repeats}.` + (d.page ? "\n\n" + d.page : ""),
+        { ok: true, key: d.key, repeats: d.repeats },
+      );
     },
   });
 
@@ -649,7 +657,8 @@ export default function (pi: ExtensionAPI) {
     description:
       "Drag with the left mouse button from (x,y) to (x2,y2) via VNC. " +
       "Coordinates from browser_frames_snapshot (handle center → end of track) or vm_ground " +
-      "(action=drag). For slide-to-verify widgets: ONE drag. Do not invent coordinates.",
+      "(action=drag). For slide-to-verify widgets: ONE drag. Do not invent coordinates. " +
+      "The result includes the new page. Do not snapshot again unless it is empty.",
     parameters: Type.Object({
       x: Type.Number({ description: "Start X" }),
       y: Type.Number({ description: "Start Y" }),
@@ -679,7 +688,8 @@ export default function (pi: ExtensionAPI) {
       }
       const d = res.data || {};
       return textResult(
-        `Dragged (${d.x},${d.y}) → (${d.x2},${d.y2}).`,
+        `Dragged (${d.x},${d.y}) → (${d.x2},${d.y2}).` +
+          (d.page ? "\n\n" + d.page : ""),
         { ok: true, x: d.x, y: d.y, x2: d.x2, y2: d.y2 },
       );
     },

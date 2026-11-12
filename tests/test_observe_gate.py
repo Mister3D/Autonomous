@@ -1,4 +1,4 @@
-"""Snapshot points answer a ground; vision stays for an empty read."""
+"""Snapshot points answer a ground; a gesture can carry the next page."""
 
 from __future__ import annotations
 
@@ -96,6 +96,43 @@ def test_password_field_is_the_only_password_input():
     early = gate.shortcut_ground("b1", "password field")
     assert early["ok"] is True
     assert (early["x"], early["y"]) == (100, 260)
+
+
+def test_page_did_change_skips_a_focus_click():
+    from autonomous.services.browser import page_did_change
+
+    same = {"url": "https://shop.example/", "title": "Shop", "ready": "complete"}
+    assert page_did_change(same, dict(same)) is False
+    assert page_did_change(same, {**same, "url": "https://shop.example/orders"}) is True
+    assert page_did_change(same, {**same, "title": "Orders"}) is True
+    assert page_did_change(same, {**same, "ready": "loading"}) is True
+    assert page_did_change({}, same) is True
+    assert page_did_change(same, {}) is True
+
+
+def test_format_page_read_includes_the_point_and_the_text():
+    from autonomous.services.browser import format_page_read
+
+    text = format_page_read(
+        {
+            "ok": True,
+            "url": "https://shop.example/",
+            "title": "Shop",
+            "elements": [
+                {
+                    "tag": "a",
+                    "text": "Orders",
+                    "in_viewport": True,
+                    "screen": {"x": 10, "y": 20},
+                }
+            ],
+            "text": "Total 12,00",
+        }
+    )
+    assert "screen=10,20" in text
+    assert "Total 12,00" in text
+    assert "answer now" in text
+    assert "browser_text" in text
 
 
 def test_drag_hint_is_not_shortcut():

@@ -2,7 +2,7 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-11-12 (a fresh snapshot answers vm_ground / vm_look; vision only when it lists nothing)
+**Last updated**: 2026-11-12 (a click returns the next page, so the model does not re-read it)
 
 ## Action loop (enforced order)
 
@@ -12,7 +12,7 @@ The DOM says **where**. The pointer does the **click**. A CDP click (`browser_cl
 |-------|--------|------|
 | 1. Read | **`browser_snapshot`** / **`browser_frames_snapshot`** | Controls with `screen=x,y`, overlays, `[FOCUSED]`, `[filled N chars]`. No gesture |
 | 2. Locate the rest | **`vm_ground`** | Vision only when the control is absent from that read (canvas, image, native dialog, drawn widget). If the snapshot already lists it, the server returns that `screen=` point with no vision call. A read older than the last click is refused: snapshot again |
-| 3. Act | **`vm_click`** / **`vm_drag`** / **`vm_type`** / **`vm_scroll`** | Real VNC pointer and keys. The mouse glides to the point |
+| 3. Act | **`vm_click`** / **`vm_drag`** / **`vm_type`** / **`vm_scroll`** | Real VNC pointer and keys. The mouse glides to the point. A click, drag, scroll, or Return waits briefly and returns the new controls plus a visible-text excerpt — that is the next read |
 | 4. Eyes | **`vm_look`** | When the snapshot is empty. Refused while that read still lists controls. Its x/y are guesses |
 
 Do not steer the site with CDP scripts, in-page `fetch`, `curl`, or `wget`. Do not mash Backspace because `[filled N chars]` disagrees with the screen: one `vm_look`, then move on.
@@ -25,7 +25,7 @@ Do not steer the site with CDP scripts, in-page `fetch`, `curl`, or `wget`. Do n
 
 **Typing secrets / fields**: `vm_look` says which field is filled. `vault_type` **refuses** to type if the Chrome window has focus and the active element is not an editable field (iframe / terminal / CDP unavailable: not blocked), and accepts `password` as an alias when the entry has only one secret. The retry is `vm_ground` + `vm_click` on the field you see. `vm_look` must **never** provide coordinates.
 
-**Waiting for load**: `browser_wait_load` (`POST /bots/:name/browser/wait_load {timeout?}`, default 15 s, max 30 s) replaces `sleep N`: `readyState == complete` on 2 consecutive polls, CDP reconnection if Chrome starts / changes page, and **never blocking** — a page that loads forever returns `timed_out=true` (often already usable). `browser_navigate` already waits for `load` (20 s max).
+**Waiting for load**: a click, drag, or Return returns the new page. The load wait (at most 2.5 s) runs only when the URL, the title, or `readyState` changed. A click that only focuses a field does not wait. If the visible text already states what the user asked, the agent answers and stops. `browser_wait_load` (`POST /bots/:name/browser/wait_load {timeout?}`, default 15 s, max 30 s) remains for the first open when that result has no page: `readyState == complete` on 2 consecutive polls, and **never blocking** — a page that loads forever returns `timed_out=true`. `browser_navigate` already waits for `load` and returns the same page read. The visible-text excerpt is on that read, so `browser_text` is only for a fact the excerpt missed.
 
 **Forms**: `browser_snapshot` `screen=` → `vm_click` (real mouse) → type. A point **rejected** by `vm_ground` must never be clicked (real case: it was a "send a code by e-mail" button instead of the password field → false OTP block). Do not reload the form or mash Backspace because a DOM counter disagreed with the screen.
 

@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +105,123 @@ def tabs(bot: str, *, home: Path | None = None) -> dict[str, Any]:
     return _run(bot, ["tabs"], home=home)
 
 
+def format_page_read(payload: dict[str, Any]) -> str:
+    """One text block: controls with screen= plus a short visible-text excerpt."""
+    if not isinstance(payload, dict):
+        return "(no page read)"
+    if payload.get("ok") is False and not payload.get("elements"):
+        return f"(page read failed: {payload.get('error') or 'error'})"
+    lines = [
+        "Page now. If the visible text already states what the user asked, "
+        "answer now and stop. Otherwise vm_click the next screen= point. "
+        "Do not call browser_snapshot, browser_wait_load, or browser_text "
+        "unless this list is empty.",
+        f"url: {payload.get('url') or '?'}",
+        f"title: {payload.get('title') or '?'}",
+    ]
+    overlays = payload.get("overlays") or []
+    if isinstance(overlays, list) and overlays:
+        lines.append("!! BLOCKING OVERLAY — vm_click its screen= point first:")
+        for overlay in overlays[:3]:
+            if not isinstance(overlay, dict):
+                continue
+            lines.append(
+                f"   [{overlay.get('kind') or 'overlay'}] "
+                f"\"{str(overlay.get('text') or '')[:160]}\""
+            )
+            for control in (overlay.get("controls") or [])[:8]:
+                if not isinstance(control, dict):
+                    continue
+                screen = control.get("screen") or {}
+                lines.append(
+                    f"   - {control.get('tag') or 'control'} "
+                    f"\"{str(control.get('text') or '')[:60]}\" "
+                    f"screen={screen.get('x')},{screen.get('y')}"
+                )
+    elements = payload.get("elements") or []
+    shown = 0
+    if isinstance(elements, list):
+        for el in elements:
+            if not isinstance(el, dict) or shown >= 40:
+                break
+            screen = el.get("screen") or {}
+            bits = [
+                "[offscreen]" if el.get("in_viewport") is False else "[in-view]",
+                f"[COVERED by {el.get('occluded_by')}]" if el.get("occluded_by") else "",
+                "[FOCUSED]" if el.get("focused") else "",
+                f"[filled {el.get('filled')} chars]" if isinstance(el.get("filled"), int) else "",
+                str(el.get("tag") or "?"),
+                f"\"{str(el.get('text') or '')[:80]}\"" if el.get("text") else "",
+                f"screen={screen.get('x')},{screen.get('y')}" if screen else "",
+            ]
+            lines.append("- " + " ".join(bit for bit in bits if bit))
+            shown += 1
+    if shown == 0:
+        lines.append("(no control in the top document)")
+    text = str(payload.get("text") or "").strip()
+    if text:
+        lines.append("")
+        lines.append("Visible text:")
+        lines.append(text[:800])
+    return "\n".join(lines)
+
+
+def page_did_change(before: dict[str, Any] | None, after: dict[str, Any] | None) -> bool:
+    """A load wait is needed when the document navigated or is still loading.
+
+    A click that only focuses a field keeps the same URL, title and
+    ``complete`` state: that one does not wait. Unknown markers wait.
+    """
+    if not before or not after:
+        return True
+    if after.get("ready") != "complete":
+        return True
+    return before.get("url") != after.get("url") or before.get("title") != after.get("title")
+
+
+def page_marker(bot: str, *, home: Path | None = None) -> dict[str, Any]:
+    """Cheap URL / title / readyState sample. Empty when Chrome is not answering."""
+    try:
+        data = evaluate(
+            bot,
+            "({url:location.href,title:document.title,ready:document.readyState})",
+            home=home,
+        )
+    except Exception:
+        return {}
+    value = data.get("value") if isinstance(data, dict) else None
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "url": str(value.get("url") or ""),
+        "title": str(value.get("title") or ""),
+        "ready": str(value.get("ready") or ""),
+    }
+
+
+def read_after_gesture(
+    bot: str,
+    *,
+    wait: bool = True,
+    before: dict[str, Any] | None = None,
+    home: Path | None = None,
+) -> str:
+    """Snapshot after a gesture. Wait for load only if the page changed."""
+    if wait:
+        try:
+            time.sleep(0.15)
+            after = page_marker(bot, home=home)
+            if page_did_change(before, after):
+                wait_load(bot, timeout=2.5, home=home)
+        except Exception:
+            pass
+    try:
+        snap = snapshot(bot, home=home)
+    except Exception as exc:
+        return f"(page read failed: {exc})"
+    return format_page_read(snap)
+
+
 def navigate(bot: str, url: str, *, home: Path | None = None) -> dict[str, Any]:
     url = (url or "").strip()
     if not url:
@@ -113,6 +231,12 @@ def navigate(bot: str, url: str, *, home: Path | None = None) -> dict[str, Any]:
     url = assert_seen_url(bot, url, home=home)
     result = _run(bot, ["navigate", "--url", url], home=home)
     _wander_async(bot, home=home)
+    if isinstance(result, dict):
+        try:
+            result = dict(result)
+            result["page"] = read_after_gesture(bot, wait=False, home=home)
+        except Exception:
+            pass
     return result
 
 

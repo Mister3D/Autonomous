@@ -22,6 +22,31 @@ def _note_gesture(bot: str) -> None:
     note_gesture(bot)
 
 
+def _page_marker(bot: str, home: Path | None) -> dict[str, Any]:
+    try:
+        from autonomous.services.browser import page_marker
+
+        return page_marker(bot, home=home)
+    except Exception:
+        return {}
+
+
+def _page_after(
+    bot: str,
+    *,
+    wait: bool,
+    before: dict[str, Any] | None,
+    home: Path | None,
+) -> str:
+    """The new page, attached to the gesture so the model does not re-read it."""
+    try:
+        from autonomous.services.browser import read_after_gesture
+
+        return read_after_gesture(bot, wait=wait, before=before, home=home)
+    except Exception:
+        return ""
+
+
 def _chown_bot(path: Path) -> None:
     try:
         os.chown(path, 1000, 1000)
@@ -108,13 +133,25 @@ def click(
     button = (button or "left").strip().lower()
     if button not in ("left", "right", "middle", "double", "move"):
         raise ValidationError("button must be left|right|middle|double|move")
+    before = _page_marker(bot, home) if button != "move" else None
     out = _run_worker(
         bot,
         ["click", "--x", str(x), "--y", str(y), "--button", button],
         home=home,
     )
     _note_gesture(bot)
-    return {"ok": True, "bot": bot, "x": x, "y": y, "button": button, "detail": out}
+    result: dict[str, Any] = {
+        "ok": True,
+        "bot": bot,
+        "x": x,
+        "y": y,
+        "button": button,
+        "detail": out,
+    }
+    page = _page_after(bot, wait=button != "move", before=before, home=home)
+    if page:
+        result["page"] = page
+    return result
 
 
 def type_text(
@@ -167,7 +204,18 @@ def scroll(
         args.extend(["--y", str(int(y))])
     out = _run_worker(bot, args, home=home)
     _note_gesture(bot)
-    return {"ok": True, "bot": bot, "dy": dy, "x": int(x), "y": int(y), "detail": out}
+    result: dict[str, Any] = {
+        "ok": True,
+        "bot": bot,
+        "dy": dy,
+        "x": int(x),
+        "y": int(y),
+        "detail": out,
+    }
+    page = _page_after(bot, wait=False, before=None, home=home)
+    if page:
+        result["page"] = page
+    return result
 
 
 def key(
@@ -181,13 +229,26 @@ def key(
     if not name:
         raise ValidationError("key name required")
     repeats = max(1, min(int(repeats), 50))
+    submits = name.lower() in ("return", "enter", "kp_enter")
+    before = _page_marker(bot, home) if submits else None
     out = _run_worker(
         bot,
         ["key", "--key", name, "--repeat", str(repeats)],
         home=home,
     )
     _note_gesture(bot)
-    return {"ok": True, "bot": bot, "key": name, "repeats": repeats, "detail": out}
+    result: dict[str, Any] = {
+        "ok": True,
+        "bot": bot,
+        "key": name,
+        "repeats": repeats,
+        "detail": out,
+    }
+    if submits:
+        page = _page_after(bot, wait=True, before=before, home=home)
+        if page:
+            result["page"] = page
+    return result
 
 
 def drag(
@@ -203,13 +264,14 @@ def drag(
     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
     if min(x1, y1, x2, y2) < 0:
         raise ValidationError("coordinates must be >= 0")
+    before = _page_marker(bot, home)
     out = _run_worker(
         bot,
         ["drag", "--x", str(x1), "--y", str(y1), "--x2", str(x2), "--y2", str(y2)],
         home=home,
     )
     _note_gesture(bot)
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "bot": bot,
         "x": x1,
@@ -218,6 +280,10 @@ def drag(
         "y2": y2,
         "detail": out,
     }
+    page = _page_after(bot, wait=True, before=before, home=home)
+    if page:
+        result["page"] = page
+    return result
 
 
 def wander(bot: str, *, home: Path | None = None) -> dict[str, Any]:

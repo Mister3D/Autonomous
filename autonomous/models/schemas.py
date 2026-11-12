@@ -618,6 +618,7 @@ class DeskClickResultSchema(Schema):
     y = fields.Integer()
     button = fields.Str()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class DeskTypeSchema(Schema):
@@ -649,6 +650,7 @@ class DeskScrollResultSchema(Schema):
     x = fields.Integer()
     y = fields.Integer()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class DeskKeySchema(Schema):
@@ -662,6 +664,7 @@ class DeskKeyResultSchema(Schema):
     key = fields.Str()
     repeats = fields.Integer()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class DeskDragSchema(Schema):
@@ -679,6 +682,7 @@ class DeskDragResultSchema(Schema):
     x2 = fields.Integer()
     y2 = fields.Integer()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class BrowserResultSchema(Schema):
