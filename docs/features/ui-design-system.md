@@ -39,7 +39,7 @@
 - Do **not** hardcode hex for brand surfaces in new UI — use tokens.
 - `--dev` rebuilds via `vite build --watch` into `autonomous/static/` (not Vite HMR on :5173). Wait for rebuild after CSS/Vue edits.
 - Keep UI copy in `locales/{en,fr}.json`; source / docs / prompts stay English.
-- Mobile: settings nav becomes a horizontal scroller; chat uses master–detail (`is-mobile-*` on `.app-shell`).
+- Mobile: settings nav becomes a horizontal scroller that stays inside the screen width; chat uses master–detail (`is-mobile-*` on `.app-shell`).
 
 ## Quick check
 

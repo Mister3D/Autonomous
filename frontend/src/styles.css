@@ -950,12 +950,21 @@ a:focus-visible {
 }
 
 @media (max-width: 760px) {
+  .settings-page {
+    min-width: 0;
+    overflow: hidden;
+  }
+
   .settings-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+    width: 100%;
   }
 
   .settings-side {
+    min-width: 0;
+    max-width: 100%;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
@@ -968,6 +977,9 @@ a:focus-visible {
     flex-direction: row;
     overflow-x: auto;
     flex: none;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
     padding: 0.35rem 0.65rem 0.55rem;
   }
 
@@ -977,6 +989,8 @@ a:focus-visible {
 
   .settings-main {
     --settings-pad-top: 1rem;
+    min-width: 0;
+    max-width: 100%;
     padding: var(--settings-pad-top) 0.85rem 2rem;
   }
 
