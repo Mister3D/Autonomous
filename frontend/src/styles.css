@@ -7372,9 +7372,14 @@ a.bot-mention:hover,
   place-items: center;
   cursor: pointer;
 }
-.home-refresh:hover:not(:disabled) { background: #f3eef8; color: #4a3680; }
-.home-refresh:disabled { opacity: 0.45; cursor: default; }
-.home-refresh.is-busy svg { animation: home-spin 0.8s linear infinite; }
+.home-refresh:hover:not([aria-disabled="true"]) { background: #f3eef8; color: #4a3680; }
+.home-refresh[aria-disabled="true"] { cursor: progress; }
+.home-refresh.is-busy { opacity: 1; }
+.home-refresh.is-busy svg {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: home-spin 0.8s linear infinite;
+}
 @keyframes home-spin { to { transform: rotate(360deg); } }
 .home-pill {
   border: 0;

@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup.py`, `autonomous/api/setup_routes.py`, `frontend/src/components/SetupPanel.vue`, `frontend/src/components/SetupItem.vue`, `frontend/src/store.js` (`setupReady`, `refreshSetup`)  
-**Last updated**: 2026-11-13 (home status rows: product, branch, version, refresh, pill)
+**Last updated**: 2026-11-13 (home update row stays put and its refresh icon spins)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@
 - Clicking the button: creates/opens **Assistant**, navigates immediately, sends a short bubble + language-only prompt (`ask_clarify` Français | English). The free-text field is always shown on that card, even if the agent omits `allow_text`. Sets `first_chat_prefs_pending`. After the user picks a language, the UI **sends a second message** (prefs script in that language — FR/EN templates, or a translate-into-{lang} script for others like German) and sets `first_chat_done`. First bot is always **Manager**, avatar **renard**, colour swatch **0**. If another Manager already exists, it is demoted.
 - On `/`, the welcome home is shown immediately, including while the setup status request is still in flight. The checklist appears only once that status says something required is missing, or on `/setup`.
 - On the ready home (tagline "Your bots. Your desktop."), a welcome line, the same button (pill, chat icon) and the fox illustration sit above a status card. When the button is hidden, a short greeting replaces it (`home.greeting`). The card title is the setup link. The checklist at `/setup` stays the plain list. Arriving on `/` never auto-opens a bot from the rail — see [routing-tabs.md](./routing-tabs.md).
-- The card’s first row is `Autonomous - {branch} - {version}`. On the right: a refresh icon, then a green **Up to date** pill. A refresh forces `POST /setup/update/check`. When the branch is behind and the remote `__version__` differs, the row appends `→ {latest}` (same arrow as a module jump) and the pill is replaced by **Update**. A dirty or diverged tree shows **Force** on that row. Dirty tree, fetch failure, and the apply log stay under that row.
+- The card’s first row is `Autonomous - {branch} - {version}`. On the right: a refresh icon, then a green **Up to date** pill. A refresh forces `POST /setup/update/check`. That row stays on screen for the whole check (last channel, version, and pill); the refresh icon spins. The button is not `disabled` during the check — a disabled control does not animate — repeat clicks are ignored in the handler. When the branch is behind and the remote `__version__` differs, the row appends `→ {latest}` (same arrow as a module jump) and the pill is replaced by **Update**. A dirty or diverged tree shows **Force** on that row. Dirty tree, fetch failure, and the apply log stay under that row.
 - Under it, each Pi install and each `npm:` plugin in `~/.pi/agent/settings.json` is the same kind of row: `{name} - {version}`, refresh, green pill. A newer release appends `→ {latest}` and puts **Update** on that row only (`pi update --self` or `pi update <source>`). Refresh rechecks the whole Pi list (cached 6 hours unless forced).
 - While the checklist is open, the update card stays at the bottom so an update can be applied before setup is finished.
 
@@ -39,6 +39,7 @@
 ## Pitfalls / non-regressions
 
 - Don’t enable the button on optional-only gaps: only `setup.ready` (required).
+- Don’t hide or replace the home update row while a check is in flight, and don’t put `disabled` on its refresh button — the icon must keep spinning on the same line.
 - Don’t prompt for a desk image build in `install.sh` — serve owns that.
 - Don’t hide the CTA for any reason other than « memory has ≥ 1 entry » or « a memory proposal is still pending ». Don’t show it before that check returns.
 - Don’t skip `memory_access` on the auto-created Assistant bot.
