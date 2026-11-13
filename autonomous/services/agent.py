@@ -969,6 +969,18 @@ class PiAgent:
                     err = message_obj.get("errorMessage")
                     if err and message_obj.get("stopReason") == "error":
                         state["error"] = str(err)
+                        from autonomous.services import chat_attachments as attach_svc
+
+                        limit = attach_svc.parse_provider_image_limit(str(err))
+                        if limit is not None:
+                            try:
+                                attach_svc.note_provider_image_limit(
+                                    bot, model, limit, home=home
+                                )
+                            except Exception:
+                                log.exception(
+                                    "remember vision limit failed for %s", bot
+                                )
                     usage = message_obj.get("usage")
                     if isinstance(usage, dict):
                         try:
@@ -1010,30 +1022,21 @@ class PiAgent:
                 if not resp.get("success"):
                     err = str(resp.get("error") or "Pi rejected the prompt")
                     limit = attach_svc.parse_provider_image_limit(err)
-                    if limit is not None and prompt_images and len(prompt_images) > limit:
+                    if limit is not None:
                         log.warning(
                             "Vision limit %s for bot=%s — retrying with %s image(s)",
                             limit,
                             bot,
                             limit,
                         )
-                        try:
-                            from autonomous.services import setup_config as cfg_svc
-
-                            cfg_svc.remember_model_image_limit(model, limit)
-                        except Exception:
-                            pass
-                        try:
-                            settings_svc.set_many(
-                                {"guard.max_images_per_prompt": limit},
-                                home=home,
-                            )
-                        except Exception:
-                            pass
+                        attach_svc.note_provider_image_limit(
+                            bot, model, limit, home=home
+                        )
                         prompt_images = prompt_images[:limit]
                         note = (
                             f"\n\n(Provider limit: at most {limit} image(s) "
-                            f"per prompt — truncated; continue other images later.)"
+                            f"per prompt — older screenshots were left out of this "
+                            f"request; they stay in the chat.)"
                         )
                         resp = session.prompt(
                             prompt_text + note, images=prompt_images or None

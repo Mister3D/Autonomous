@@ -27,7 +27,7 @@
   - `models: [...]` → full list replace for that provider (may be `[]`);
   - `model` → upsert one model on that provider.
 - Writes are **merge-safe**: unknown fields (`cost`, `reasoning`, `compat`, resize profiles…) are kept.
-- Autonomous **overlay**: `max_images_per_prompt(bot=…)` reads the bot’s model ref from Pi JSON and truncates vision prompts; if the provider returns “at most N images”, the limit is written back into that model entry (`remember_model_image_limit`) and the guard fallback is updated.
+- Autonomous **overlay**: `max_images_per_prompt(bot=…)` reads the bot’s model ref from Pi JSON and truncates vision prompts. The same number is passed to Pi as `AUTONOMOUS_MAX_IMAGES`. `vision_budget.ts` applies it to the whole transcript (not only the new message). If the provider returns “at most N images”, the limit is written back into that model entry (`remember_model_image_limit`), the guard fallback, and `bots/<name>/pi/vision_image_cap` so the running Pi uses N on the next call.
 
 ## Pitfalls / non-regressions
 

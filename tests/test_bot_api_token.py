@@ -27,6 +27,7 @@ def test_pi_env_uses_bot_token_not_admin(home):
     assert env["AUTONOMOUS_TOKEN"].startswith(auth_mod.BOT_TOKEN_PREFIX)
     assert env["AUTONOMOUS_TOKEN"] != auth_mod.read_token(home)
     assert env["AUTONOMOUS_BOT"] == "pibot"
+    assert env["AUTONOMOUS_MAX_IMAGES"] == "2"
 
 
 def test_pi_env_uses_in_process_base_before_pid_file(home):

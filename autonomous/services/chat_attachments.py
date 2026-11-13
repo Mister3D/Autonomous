@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from autonomous.paths import bot_dir
+from autonomous.paths import bot_dir, bot_pi_dir
 from autonomous.services.errors import NotFound, ValidationError
 
 _DATA_URL = re.compile(
@@ -62,14 +62,69 @@ def max_images_per_prompt(
     if ref:
         lim = cfg_svc.resolve_model_limits(ref).get("max_images")
         if lim is not None:
-            return max(1, min(32, int(lim)))
+            cap = max(1, min(32, int(lim)))
+            return _tighten_vision_cap(cap, bot, home=home)
 
     raw = settings_svc.get("guard.max_images_per_prompt", home=home, default=2)
     try:
         n = int(raw)
     except (TypeError, ValueError):
         n = 2
-    return max(1, min(8, n))
+    cap = max(1, min(8, n))
+    return _tighten_vision_cap(cap, bot, home=home)
+
+
+def _tighten_vision_cap(cap: int, bot: str | None, *, home: Path | None) -> int:
+    learned = read_vision_cap(bot, home=home) if bot else None
+    if learned is None:
+        return cap
+    return min(cap, learned)
+
+
+def vision_cap_path(bot: str, home: Path | None = None) -> Path:
+    return bot_pi_dir(bot, home) / "vision_image_cap"
+
+
+def read_vision_cap(bot: str | None, *, home: Path | None = None) -> int | None:
+    """Tighter limit learned from a provider 'At most N image(s)' error."""
+    if not bot:
+        return None
+    try:
+        n = int(vision_cap_path(bot, home).read_text(encoding="utf-8").strip())
+    except (OSError, TypeError, ValueError):
+        return None
+    if n < 1 or n > 32:
+        return None
+    return n
+
+
+def write_vision_cap(bot: str, limit: int, *, home: Path | None = None) -> None:
+    n = max(1, min(32, int(limit)))
+    path = vision_cap_path(bot, home)
+    path.write_text(str(n), encoding="utf-8")
+
+
+def note_provider_image_limit(
+    bot: str,
+    model_ref: str | None,
+    limit: int,
+    *,
+    home: Path | None = None,
+) -> None:
+    """Remember a provider image cap for the next request and the next Pi start."""
+    from autonomous.services import settings as settings_svc
+
+    write_vision_cap(bot, limit, home=home)
+    try:
+        from autonomous.services import setup_config as cfg_svc
+
+        cfg_svc.remember_model_image_limit(model_ref or "", limit)
+    except Exception:
+        pass
+    try:
+        settings_svc.set_many({"guard.max_images_per_prompt": int(limit)}, home=home)
+    except Exception:
+        pass
 
 
 def _chown_bot(path: Path) -> None:

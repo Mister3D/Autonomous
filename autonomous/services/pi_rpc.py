@@ -39,6 +39,7 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "approval.ts",
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
+    _EXTENSIONS_DIR / "vision_budget.ts",
 )
 
 _BATCH_SYSTEM_HINT = (
@@ -248,10 +249,12 @@ _REACT_SYSTEM_HINT = (
 
 _VISION_SYSTEM_HINT = (
     "Vision budget: the LLM accepts only a small number of images per prompt "
-    "(often 2). Autonomous already caps attached vision images. If many image "
+    "(often 2). Autonomous already caps attached vision images, and before each "
+    "model call it drops older screenshot pixels from the transcript so a long "
+    "session cannot exceed that limit. The pictures stay in the chat. If you "
+    "need a screen that was omitted, take a fresh screenshot. If many image "
     "files are listed, analyze at most that many per turn, then continue on the "
-    "remaining paths in later turns — never pack every image into one prompt. "
-    "Prefer paths + sequential turns over bulk vision."
+    "remaining paths in later turns — never pack every image into one prompt."
 )
 
 _VAULT_SYSTEM_HINT = """\
@@ -354,6 +357,11 @@ def _pi_session_env(bot: str, home: Path | None = None) -> dict[str, str]:
     env["AUTONOMOUS_TOKEN"] = token
     env["AUTONOMOUS_BOT"] = bot
     env["AUTONOMOUS_HOME"] = str(root)
+    from autonomous.services import chat_attachments as attach_svc
+
+    env["AUTONOMOUS_MAX_IMAGES"] = str(
+        attach_svc.max_images_per_prompt(home=root, bot=bot)
+    )
     return env
 
 

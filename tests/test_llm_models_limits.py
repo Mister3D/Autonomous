@@ -214,6 +214,9 @@ def test_fallback_guard_when_no_pi_limit(fake_home, home):
     bots_svc.patch_bot("plainbot", {"model": "mine/plain"}, home=home)
     settings_svc.set_value("guard.max_images_per_prompt", 2, home=home)
     assert attach_svc.max_images_per_prompt(home=home, bot="plainbot") == 2
+    attach_svc.write_vision_cap("plainbot", 1, home=home)
+    assert attach_svc.read_vision_cap("plainbot", home=home) == 1
+    assert attach_svc.max_images_per_prompt(home=home, bot="plainbot") == 1
 
 
 def test_parse_pi_model_list_keeps_capabilities():
