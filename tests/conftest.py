@@ -26,6 +26,13 @@ def _clear_rate_limits():
 
 
 @pytest.fixture()
+def pairing_on(home):
+    """Pairing is off unless a test turns it on."""
+    settings_svc.set_value("companions.enabled", True, home=home)
+    return home
+
+
+@pytest.fixture()
 def home(tmp_path):
     h = ensure_home(tmp_path / "data")
     migrate(h)

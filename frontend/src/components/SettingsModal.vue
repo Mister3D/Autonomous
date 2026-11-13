@@ -442,7 +442,15 @@
           <UiIcon name="monitor" :size="18" />
         </template>
         <p v-if="needCompanion" class="companion-need">{{ t("companion.needOne") }}</p>
-        <p class="hint justified companion-responsibility">{{ t("companion.responsibility") }}</p>
+        <div class="companion-instance">
+          <div>
+            <span class="companion-instance-label">{{ t("companion.instanceLabel") }}</span>
+            <code class="companion-instance-url">{{ instanceUrl }}</code>
+          </div>
+          <button class="btn" type="button" @click="copyInstanceUrl">
+            {{ instanceCopied ? t("companion.copied") : t("companion.copy") }}
+          </button>
+        </div>
         <label class="settings-field companion-pairing-toggle">
           <span class="settings-notify">
             <span>{{ t("companion.pairingEnabled") }}</span>
@@ -593,6 +601,27 @@
               <pre class="companion-cmd">{{ companionBuild.rustup_hint }}</pre>
             </template>
           </template>
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'companions'"
+        :title="t('companion.mcpTitle')"
+        :hint="t('companion.mcpHint')"
+      >
+        <template #icon>
+          <UiIcon name="puzzle" :size="18" />
+        </template>
+        <ul class="settings-list">
+          <li v-for="item in starterMcps" :key="item.id">
+            <div>
+              <strong>{{ item.name }}</strong>
+              <small>{{ t(item.blurb) }}</small>
+            </div>
+            <a class="btn" :href="item.url" target="_blank" rel="noopener noreferrer">
+              {{ t("companion.mcpOpen") }}
+            </a>
+          </li>
+        </ul>
       </UiCard>
       </div>
     </div>
@@ -997,7 +1026,36 @@ async function removeMemory(e) {
 const companionBuild = ref(null);
 const companionLogEl = ref(null);
 const buildError = ref("");
-const companionsEnabled = ref(true);
+const companionsEnabled = ref(false);
+const instanceCopied = ref(false);
+const instanceUrl = computed(() => String(window.location.origin || "").replace(/\/+$/, ""));
+const starterMcps = [
+  {
+    id: "windows",
+    name: "Windows-MCP",
+    url: "https://github.com/CursorTouch/Windows-MCP",
+    blurb: "companion.mcpWindows",
+  },
+  {
+    id: "filesystem",
+    name: "Filesystem",
+    url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+    blurb: "companion.mcpFilesystem",
+  },
+  {
+    id: "git",
+    name: "Git",
+    url: "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+    blurb: "companion.mcpGit",
+  },
+  {
+    id: "playwright",
+    name: "Playwright",
+    url: "https://github.com/microsoft/playwright-mcp",
+    blurb: "companion.mcpPlaywright",
+  },
+];
+let instanceCopyTimer = 0;
 const companionNotes = computed(() =>
   (companionBuild.value?.notes || []).filter((n) => !/^macOS is not built/i.test(String(n || ""))),
 );
@@ -1021,10 +1079,30 @@ watch(
 async function loadCompanionsEnabled() {
   try {
     const s = await api.settings();
-    companionsEnabled.value = s["companions.enabled"] !== false;
+    companionsEnabled.value = s["companions.enabled"] === true;
   } catch {
-    companionsEnabled.value = true;
+    companionsEnabled.value = false;
   }
+}
+
+async function copyInstanceUrl() {
+  const text = instanceUrl.value;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  instanceCopied.value = true;
+  if (instanceCopyTimer) clearTimeout(instanceCopyTimer);
+  instanceCopyTimer = window.setTimeout(() => {
+    instanceCopied.value = false;
+  }, 1600);
 }
 
 async function flushCompanionsEnabled() {

@@ -79,7 +79,7 @@ def _handle(exc: AutonomousError):
 def _pairing_allowed() -> bool:
     from autonomous.services import settings as settings_svc
 
-    return bool(settings_svc.get("companions.enabled", home=g.home, default=True))
+    return bool(settings_svc.get("companions.enabled", home=g.home, default=False))
 
 
 @blp.route("/pair")

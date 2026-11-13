@@ -782,9 +782,25 @@ a:focus-visible {
   text-align: justify;
 }
 
-.companion-responsibility {
-  margin-top: 0.45rem;
+.companion-instance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.9rem;
 }
+.companion-instance-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 0.2rem;
+}
+.companion-instance-url {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  word-break: break-all;
+}
+.companion-instance .btn { flex: none; }
 
 .companion-need {
   margin: 0 0 0.85rem;

@@ -92,6 +92,17 @@ def test_pair_poll_rate_limited(client):
     assert 429 in codes
 
 
+def test_pairing_off_by_default(client, home):
+    from autonomous.services import settings as settings_svc
+
+    assert settings_svc.get("companions.enabled", home=home) is False
+    r = client.post(
+        "/api/v1/devices/pair",
+        json={"name": "No", "platform": "linux"},
+    )
+    assert r.status_code == 403
+
+
 def test_pairing_disabled_setting(client, auth_client, home):
     from autonomous.services import settings as settings_svc
 
@@ -114,7 +125,7 @@ def test_pairing_disabled_setting(client, auth_client, home):
     assert ok.status_code == 200
 
 
-def test_companion_token_ok_before_upgrade(client, auth_client, home):
+def test_companion_token_ok_before_upgrade(client, auth_client, home, pairing_on):
     started = client.post(
         "/api/v1/devices/pair",
         json={"name": "Desk", "platform": "linux"},

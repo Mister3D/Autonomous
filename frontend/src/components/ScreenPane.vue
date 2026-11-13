@@ -74,13 +74,12 @@
       </button>
     </div>
 
-    <div v-else-if="sleeping && active" class="desk-status">
+    <div v-else-if="sleeping && active" class="desk-status is-center">
       <h3>{{ t("desk.asleep") }}</h3>
-      <p class="desk-status-meta">{{ t("desk.asleepHint") }}</p>
       <button class="btn primary" type="button" :disabled="waking" @click="wake">
         {{ t("desk.wake") }}
       </button>
-      <p v-if="wakeError" style="color: var(--danger)">{{ wakeError }}</p>
+      <p v-if="wakeError" class="desk-wake-error">{{ wakeError }}</p>
     </div>
     <!-- Keep a quiet placeholder while sleeping but tab not visible (v-show mount). -->
     <div v-else-if="sleeping || waking" class="empty" aria-hidden="true" />
@@ -352,8 +351,27 @@ onUnmounted(() => {
   padding: 2rem 1.5rem;
   max-width: 520px;
 }
+.desk-status.is-center {
+  flex: 1;
+  align-self: stretch;
+  max-width: none;
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.85rem;
+}
 .desk-status h3 {
   margin: 0 0 1rem;
+}
+.desk-status.is-center h3 {
+  margin: 0;
+}
+.desk-wake-error {
+  margin: 0;
+  color: var(--danger);
 }
 .desk-step {
   margin: 0 0 0.75rem;

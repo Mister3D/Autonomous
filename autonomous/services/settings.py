@@ -31,7 +31,7 @@ DEFAULTS: dict[str, Any] = {
     # Optional git remote URL for self-update (forks). Empty → use origin.
     "update.remote_url": "",
     # When false, public companion pairing (/devices/pair + pair-poll) is refused.
-    "companions.enabled": True,
+    "companions.enabled": False,
     # Default Pi model ref (provider/id). The only model for new bots the Manager creates.
     "bots.default_model": "",
 }
