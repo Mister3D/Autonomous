@@ -235,7 +235,7 @@ class McpCall(MethodView):
         if not bot or not server or not tool:
             abort(400, message="bot, server and tool are required")
         try:
-            text = link_svc.hub_for(g.home).call_mcp(
+            result = link_svc.hub_for(g.home).call_mcp(
                 server,
                 tool,
                 body.get("arguments") or {},
@@ -247,7 +247,11 @@ class McpCall(MethodView):
             _handle(exc)
         except Exception as exc:
             abort(502, message=str(exc))
-        return {"ok": True, "text": text}
+        return {
+            "ok": True,
+            "text": result.get("text") or "",
+            "images": result.get("images") or [],
+        }
 
 
 @blp.route("/me/focus")

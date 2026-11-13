@@ -317,6 +317,8 @@
   "companion.mcpHint": "These servers are installed on the companion, not inside Autonomous. Open the page, then add the command in the companion.",
   "companion.mcpOpen": "Open",
   "companion.mcpWindows": "Controls the Windows desktop: windows, mouse, and keyboard.",
+  "companion.mcpWindowsSteps": "Python 3.14 or newer, then install UV with pip install uv. In the companion, add the row below. %USERPROFILE% is expanded at launch. Do not add --transport sse and do not use windows-mcp install: the companion has to start the command itself. The first launch downloads the package and can take more than 45 seconds; save the row a second time. Then, in the bot details, open +, choose this companion, then windows-mcp. An already open conversation only sees the tools the next time Pi starts.",
+  "companion.mcpWindowsFields": "Name\nwindows-mcp\n\nCommand\n%USERPROFILE%\\.local\\bin\\uvx.exe\n\nArguments\nwindows-mcp serve",
   "companion.mcpFilesystem": "Reads and writes the folders you choose on this computer.",
   "companion.mcpGit": "Reads the Git repositories on this computer.",
   "companion.mcpPlaywright": "Drives a browser installed on this computer.",

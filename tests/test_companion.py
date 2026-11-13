@@ -33,6 +33,16 @@ def test_frame_roundtrip():
     assert decode_frame(raw) == (OP_OPEN, 7, b"example.com\n443")
 
 
+def test_frame_rejects_oversize():
+    from autonomous.services.companion_proto import MAX_PAYLOAD
+
+    try:
+        encode_frame(OP_DATA, 1, b"x" * (MAX_PAYLOAD + 1))
+    except ValueError:
+        return
+    raise AssertionError("oversize frame was accepted")
+
+
 def test_pairing_approve_and_device_token_is_not_admin(app, client, auth_client, pairing_on):
     started = client.post(
         "/api/v1/devices/pair",
@@ -153,7 +163,7 @@ def test_socks_echo_and_mcp_call():
         conn.sendall(b"ping")
         assert _recvexact(conn, 9) == b"echo:ping"
         conn.close()
-        assert session.call_mcp("files", "list", {}) == "from-pc"
+        assert session.call_mcp("files", "list", {})["text"] == "from-pc"
     finally:
         session.close()
 
@@ -298,6 +308,76 @@ def test_bot_mcp_grant_limits_calls(app, client, auth_client, home, pairing_on):
         hub.detach(device_b, session_b)
         auth_client.delete(f"/api/v1/devices/{device_a}")
         auth_client.delete(f"/api/v1/devices/{device_b}")
+        auth_client.delete(f"/api/v1/bots/{bot}")
+
+
+_PNG_1X1 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def test_mcp_call_saves_screenshot(app, client, auth_client, home, pairing_on):
+    import base64
+    import json
+    from urllib.parse import unquote
+
+    from autonomous.services.agent import _mcp_image_markdowns
+    from autonomous.services.companion_link import CompanionSession, hub_for
+    from autonomous.services import files as files_svc
+
+    created = auth_client.post("/api/v1/bots", json={"name": "Shotbot"})
+    assert created.status_code == 201, created.data
+    bot = created.get_json()["name"]
+    device_id, token = _pair(client, auth_client, "Atelier")
+    _publish(
+        app,
+        token,
+        [{"name": "Windows-MCP", "tools": [{"name": "Screenshot", "description": "screen"}]}],
+    )
+    grant = auth_client.post(
+        f"/api/v1/bots/{bot}/mcp",
+        json={"device_id": device_id, "server": "Windows-MCP"},
+    )
+    assert grant.status_code == 200, grant.data
+    payload = json.dumps(
+        {
+            "ok": True,
+            "text": "Screenshot Size: (1,1)",
+            "images": [
+                {"mime": "image/png", "data": _PNG_1X1},
+                {"mime": "image/png", "data": "not-base64"},
+            ],
+        }
+    ).encode()
+
+    def send(op, stream_id, _payload):
+        if op == OP_MCP_CALL:
+            session.handle_frame(OP_MCP_RESULT, stream_id, payload)
+
+    session = CompanionSession("shot", send)
+    hub = hub_for(home)
+    hub.attach(device_id, session)
+    try:
+        called = auth_client.post(
+            "/api/v1/devices/mcp/call",
+            json={"bot": bot, "server": "Windows-MCP", "tool": "Screenshot"},
+        )
+        assert called.status_code == 200, called.data
+        data = called.get_json()
+        assert data["text"] == "Screenshot Size: (1,1)"
+        assert len(data["images"]) == 1
+        image = data["images"][0]
+        assert image["data"] == _PNG_1X1
+        assert image["markdown"].startswith("![capture](")
+        assert "/files/raw?path=" in image["markdown"]
+        rel = unquote(image["url"].split("path=", 1)[1])
+        assert files_svc.resolve(bot, rel, home=home).read_bytes() == base64.b64decode(_PNG_1X1)
+        assert _mcp_image_markdowns({"details": {"images_md": [image["markdown"], "nope"]}}) == [
+            image["markdown"]
+        ]
+    finally:
+        hub.detach(device_id, session)
+        auth_client.delete(f"/api/v1/devices/{device_id}")
         auth_client.delete(f"/api/v1/bots/{bot}")
 
 

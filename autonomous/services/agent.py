@@ -568,18 +568,21 @@ class PiAgent:
             state["guard_tools_blocked"] = True
 
         def flush_pending_images(*, persist: bool = False) -> None:
-            """Ensure files_share_image markdown is in the assistant text (even if model forgot)."""
+            """Ensure shared-image markdown stays in the assistant text.
+
+            The list is kept until the bubble closes. ``message_end`` replaces
+            the draft with the model's text, and this puts the image back when
+            the model did not paste it.
+            """
             pending = list(state.get("pending_images_md") or [])
             if not pending:
                 return
             content = state.get("content") or ""
             extras = [md for md in pending if md and md not in content]
             if not extras:
-                state["pending_images_md"] = []
                 return
             merged = (content.rstrip() + "\n\n" + "\n\n".join(extras)).strip()
             state["content"] = merged
-            state["pending_images_md"] = []
             msg_id = state.get("msg_id")
             if persist and msg_id:
                 try:
@@ -636,6 +639,7 @@ class PiAgent:
                     log.exception("discard empty assistant failed for %s", bot)
                 state["msg_id"] = None
                 state["content"] = ""
+                state["pending_images_md"] = []
                 return
             meta = {
                 **state["meta_base"],
@@ -651,10 +655,12 @@ class PiAgent:
                 home=home,
                 meta=meta,
             ):
+                state["pending_images_md"] = []
                 return
             chat_svc.finalize_assistant(bot, msg_id, content, home=home, meta=meta)
             state["msg_id"] = None
             state["content"] = ""
+            state["pending_images_md"] = []
 
         def note_compaction(record: dict[str, Any]) -> None:
             notice = compaction_notice(record)
@@ -837,10 +843,18 @@ class PiAgent:
                 # Pi often sends empty args on end — keep those from start.
                 args = end_args or dict(state["tool_args"].get(call_id) or {})
                 is_error = bool(record.get("isError"))
-                if tool_name == "files_share_image" and not is_error:
-                    md = _extract_share_image_markdown(record.get("result"))
-                    if md:
-                        state.setdefault("pending_images_md", []).append(md)
+                if not is_error:
+                    pending = state.setdefault("pending_images_md", [])
+                    found: list[str] = []
+                    if tool_name == "files_share_image":
+                        md = _extract_share_image_markdown(record.get("result"))
+                        if md:
+                            found.append(md)
+                    found.extend(_mcp_image_markdowns(record.get("result")))
+                    for md in found:
+                        if md not in pending:
+                            pending.append(md)
+                    if found:
                         # Open/reuse assistant bubble so the image can appear even
                         # before the model writes surrounding text.
                         ensure_assistant()
@@ -1818,6 +1832,24 @@ def _tool_timed_out(
 _SHARE_IMG_MD = re.compile(
     r"!\[[^\]]*\]\(/api/v1/bots/[^/\s\)]+/files/raw\?path=[^)]+\)"
 )
+
+
+def _mcp_image_markdowns(result: Any) -> list[str]:
+    """Chat markdown for images an MCP tool returned (details.images_md)."""
+    details = _tool_result_details(result)
+    raw = details.get("images_md")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        md = str(item or "").strip()
+        if (
+            md.startswith("![")
+            and "/files/raw?path=" in md
+            and md not in out
+        ):
+            out.append(md)
+    return out
 
 
 def _extract_share_image_markdown(result: Any) -> str | None:

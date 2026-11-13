@@ -27,7 +27,8 @@ OP_PONG = 12
 OP_NOTIFY = 13
 
 _HEADER = struct.Struct("!BII")
-MAX_PAYLOAD = 1024 * 1024
+# One frame. Large enough for a desktop screenshot (base64) plus its text.
+MAX_PAYLOAD = 8 * 1024 * 1024
 
 
 def encode_frame(op: int, stream_id: int, payload: bytes = b"") -> bytes:

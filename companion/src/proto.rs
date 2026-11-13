@@ -14,6 +14,9 @@ pub const PING: u8 = 11;
 pub const PONG: u8 = 12;
 pub const NOTIFY: u8 = 13;
 
+/// One frame. Large enough for a desktop screenshot (base64) plus its text.
+pub const MAX_PAYLOAD: usize = 8 * 1024 * 1024;
+
 pub fn encode(op: u8, stream_id: u32, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(9 + payload.len());
     out.push(op);
@@ -30,7 +33,7 @@ pub fn decode(data: &[u8]) -> Option<(u8, u32, &[u8])> {
     let op = data[0];
     let stream_id = u32::from_be_bytes(data[1..5].try_into().ok()?);
     let len = u32::from_be_bytes(data[5..9].try_into().ok()?) as usize;
-    if data.len() != 9 + len || len > 1024 * 1024 {
+    if data.len() != 9 + len || len > MAX_PAYLOAD {
         return None;
     }
     Some((op, stream_id, &data[9..]))

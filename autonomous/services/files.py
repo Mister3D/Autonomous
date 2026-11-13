@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import re
@@ -201,6 +202,58 @@ def share_image(
         "markdown": markdown,
         "embedded": True,
     }
+
+
+_MCP_IMAGE_EXT = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/bmp": ".bmp",
+}
+_MCP_IMAGE_MAGIC = {
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/gif": b"GIF8",
+    "image/webp": b"RIFF",
+    "image/bmp": b"BM",
+}
+MAX_MCP_IMAGE_BYTES = 4 * 1024 * 1024
+
+
+def save_mcp_image(
+    bot: str,
+    mime: str,
+    data_b64: str,
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Write an MCP image (screenshot, photo) under ~/files/mcp and return share markdown."""
+    kind = (mime or "").split(";", 1)[0].strip().lower()
+    ext = _MCP_IMAGE_EXT.get(kind)
+    magic = _MCP_IMAGE_MAGIC.get(kind)
+    if not ext or not magic:
+        raise ValidationError("Unsupported MCP image type")
+    try:
+        raw = base64.b64decode("".join((data_b64 or "").split()), validate=True)
+    except Exception as exc:
+        raise ValidationError("MCP image is not valid base64") from exc
+    if not raw.startswith(magic):
+        raise ValidationError("MCP image bytes do not match its type")
+    if kind == "image/webp" and (len(raw) < 12 or raw[8:12] != b"WEBP"):
+        raise ValidationError("MCP image bytes do not match its type")
+    if len(raw) > MAX_MCP_IMAGE_BYTES:
+        raise ValidationError("MCP image is too large")
+    rel = f"mcp/{uuid.uuid4().hex}{ext}"
+    target = resolve(bot, rel, home=home)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(raw)
+    try:
+        os.chown(target, 1000, 1000)
+    except OSError:
+        pass
+    _notify_changed(bot, op="upload", path=rel, is_dir=False)
+    return share_image(bot, rel, caption="capture", home=home)
 
 
 def attach_file(

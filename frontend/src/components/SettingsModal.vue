@@ -612,14 +612,20 @@
           <UiIcon name="puzzle" :size="18" />
         </template>
         <ul class="settings-list">
-          <li v-for="item in starterMcps" :key="item.id">
-            <div>
-              <strong>{{ item.name }}</strong>
-              <small>{{ t(item.blurb) }}</small>
+          <li v-for="item in starterMcps" :key="item.id" :class="{ 'has-steps': item.steps }">
+            <div class="companion-mcp-main">
+              <div>
+                <strong>{{ item.name }}</strong>
+                <small>{{ t(item.blurb) }}</small>
+              </div>
+              <a class="btn" :href="item.url" target="_blank" rel="noopener noreferrer">
+                {{ t("companion.mcpOpen") }}
+              </a>
             </div>
-            <a class="btn" :href="item.url" target="_blank" rel="noopener noreferrer">
-              {{ t("companion.mcpOpen") }}
-            </a>
+            <div v-if="item.steps" class="companion-mcp-steps">
+              <p class="hint">{{ t(item.steps) }}</p>
+              <pre class="companion-cmd">{{ t(item.fields) }}</pre>
+            </div>
           </li>
         </ul>
       </UiCard>
@@ -1035,6 +1041,8 @@ const starterMcps = [
     name: "Windows-MCP",
     url: "https://github.com/CursorTouch/Windows-MCP",
     blurb: "companion.mcpWindows",
+    steps: "companion.mcpWindowsSteps",
+    fields: "companion.mcpWindowsFields",
   },
   {
     id: "filesystem",

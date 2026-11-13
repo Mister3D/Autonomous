@@ -35,6 +35,51 @@ _PEER_LOCK = threading.Lock()
 # (home_key, device_id) → (monotonic_ts, ips)
 _PEER_CACHE: dict[tuple[str, str], tuple[float, set[str]]] = {}
 _PEER_TTL = 5.0
+_MAX_MCP_IMAGES = 4
+
+
+def _mcp_images(raw: Any) -> list[dict[str, str]]:
+    """Image parts forwarded by the companion. Bytes stay base64 until saved."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        mime = str(item.get("mime") or item.get("mimeType") or "").split(";", 1)[0].strip().lower()
+        data = "".join(str(item.get("data") or "").split())
+        if not mime.startswith("image/") or not data:
+            continue
+        out.append({"mime": mime, "data": data})
+        if len(out) >= _MAX_MCP_IMAGES:
+            break
+    return out
+
+
+def _store_mcp_images(
+    bot: str, images: list[dict[str, str]], *, home: Path | None
+) -> list[dict[str, str]]:
+    """Save each image into the bot's files and return markdown the chat can show."""
+    from autonomous.services import files as files_svc
+    from autonomous.services.errors import AutonomousError
+
+    stored: list[dict[str, str]] = []
+    for image in images:
+        try:
+            saved = files_svc.save_mcp_image(
+                bot, image["mime"], image["data"], home=home
+            )
+        except AutonomousError:
+            continue
+        stored.append(
+            {
+                "mime": str(saved.get("mime") or image["mime"]),
+                "data": image["data"],
+                "markdown": str(saved.get("markdown") or ""),
+                "url": str(saved.get("url") or ""),
+            }
+        )
+    return stored
 
 
 def _authorized_peer_ips(
@@ -209,7 +254,7 @@ class CompanionSession:
             elif op == OP_CLOSE:
                 stream.inbox.put(None)
 
-    def call_mcp(self, server: str, tool: str, arguments: Any, timeout: float = 90.0) -> str:
+    def call_mcp(self, server: str, tool: str, arguments: Any, timeout: float = 90.0) -> dict[str, Any]:
         payload = json.dumps(
             {"server": server, "tool": tool, "arguments": arguments or {}},
             ensure_ascii=False,
@@ -229,10 +274,15 @@ class CompanionSession:
         try:
             body = json.loads(raw.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return raw.decode("utf-8", errors="replace")[:8000]
+            return {"text": raw.decode("utf-8", errors="replace")[:8000], "images": []}
+        if not isinstance(body, dict):
+            return {"text": str(body)[:8000], "images": []}
         if not body.get("ok", True):
             raise RuntimeError(str(body.get("error") or "MCP call failed"))
-        return str(body.get("text") or "")[:16000]
+        return {
+            "text": str(body.get("text") or "")[:16000],
+            "images": _mcp_images(body.get("images")),
+        }
 
     def _alloc(self) -> tuple[int, Stream]:
         stream = Stream()
@@ -470,7 +520,7 @@ class CompanionHub:
         bot: str,
         companion: str = "",
         home: Path | None,
-    ) -> str:
+    ) -> dict[str, Any]:
         from autonomous.services import devices as devices_svc
 
         catalog = devices_svc.mcp_catalog(bot=bot, home=home)
@@ -504,7 +554,11 @@ class CompanionHub:
         session = self.session_for(device_id)
         if session is None:
             raise RuntimeError("The companion that owns this MCP tool is offline.")
-        return session.call_mcp(server, tool, arguments)
+        result = session.call_mcp(server, tool, arguments)
+        return {
+            "text": result.get("text") or "",
+            "images": _store_mcp_images(bot, result.get("images") or [], home=home),
+        }
 
     def notify_all(self, payload: bytes, *, device_ids: set[str] | None = None) -> int:
         with self._lock:

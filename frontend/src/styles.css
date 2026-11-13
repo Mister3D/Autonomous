@@ -802,6 +802,24 @@ a:focus-visible {
 }
 .companion-instance .btn { flex: none; }
 
+.settings-list li.has-steps {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.companion-mcp-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+.companion-mcp-steps {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-top: 0.55rem;
+}
+.companion-mcp-steps .hint { margin: 0 0 0.45rem; }
+
 .companion-need {
   margin: 0 0 0.85rem;
   padding: 0.7rem 0.85rem;
