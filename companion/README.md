@@ -26,4 +26,8 @@ cargo build --release
 - Linux: same sources. The UI requires the system GTK/tray libs; `cargo test --no-default-features --lib` checks the protocol without a window.
 - macOS: same command `cargo build --release` on a Mac (the server does not build macOS).
 
+The server download is named `autonomous-companion-<Autonomous version>.exe` (Linux: no `.exe`). The version follows Autonomous, not this crate's `0.1.0`.
+
+**Start when you sign in** is a checkbox in the companion (off by default). It runs at login, not before the desktop session exists. Windows: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Autonomous Companion.cmd`. Linux: `~/.config/autostart/autonomous-companion.desktop`. macOS: `~/Library/LaunchAgents/fr.mister3d.autonomous-companion.plist`. Untick to remove it.
+
 The config is in the application folder (`%APPDATA%\Autonomous\config\companion.json` on Windows, `~/.config/autonomous/companion.json` on Linux; an older `%APPDATA%\mister3d\Autonomous\config\companion.json` is still read). Do not commit it: it contains the device token.

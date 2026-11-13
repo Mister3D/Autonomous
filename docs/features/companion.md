@@ -2,11 +2,12 @@
 
 **Status**: in place  
 **Key files**: `companion/` (Rust), `autonomous/services/devices.py`, `autonomous/services/companion_link.py`, `autonomous/services/companion_egress.py`, `autonomous/companion_ws.py`, `autonomous/pi_extensions/companion.ts`, `frontend/src/components/SettingsModal.vue`  
-**Last updated**: 2026-11-13 (MCP screenshots shown in the chat)
+**Last updated**: 2026-11-13 (short download name, start at sign-in)
 
 ## User behaviour
 
-- Install the companion on the PC (Windows first; Linux and macOS = the same Rust project).
+- Install the companion on the PC (Windows first; Linux and macOS = the same Rust project). The download is named `autonomous-companion-<Autonomous version>.exe` on Windows (no Rust triple). Linux is the same name without `.exe`. The version is Autonomous (`autonomous.__version__`), not the Cargo crate version.
+- **Start at sign-in**: in the companion, tick **Start when you sign in** (FR: **Lancer à l'ouverture de session**). It starts with the desktop session, not before login (a tray icon needs the session). Windows writes `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Autonomous Companion.cmd`. Linux writes `~/.config/autostart/autonomous-companion.desktop`. macOS writes `~/Library/LaunchAgents/fr.mister3d.autonomous-companion.plist`. Unticking removes that file. An older binary has no checkbox: rebuild from Settings → Companions and replace the program.
 - Enter the instance URL, **Next**. An `ABCD-EFGH` code is displayed.
 - In the hub: menu → **Settings**, **Companions** tab → Allow. A switch **Allow new pairing** (`companions.enabled`, default **off**) refuses new `pair` / `pair-poll` requests while it stays off (already paired PCs keep working). The intro says what the companion is for and that the user is solely responsible for what bots might run on that machine. The first card also shows the instance URL to type into the companion (the page origin) with a copy button. The tab is three cards. The first lists the PCs, says whether they are online, revokes them, and chooses which ones receive notifications. The second is the download. The third links to starter MCPs to install on the companion (Windows-MCP, Filesystem, Git, Playwright). The name and platform (Windows, Linux, macOS) are on the same line. The companion keeps a device token (`adc_…`), revocable here or via "Forget this device".
 - Closing the window does not quit: icon in the notification area. The same orange A, drawn crisply (not a 32-pixel grid), is the window and taskbar icon. A click on the icon near the clock opens the instance in the browser. Right click: reopen the window or quit.
@@ -51,6 +52,8 @@ Window: `cargo build --release` then launch the binary, pair from Settings. Inte
 ## Build
 
 Settings → Companions is three full-width cards: paired PCs (instance URL, pairing switch, list, test notification), **Download the companion**, and **Starter MCPs**. Download rows for Linux / Windows; build log (+ Docker note) sits **under the Windows row** when there is a single binary, or as a **shared panel after both rows** when Linux and Windows are present (or while building with no artifact yet). Then **Recompiler**, then a **macOS** row with full local build steps (`git clone` → `cd …/companion` → `cargo build --release`). The old one-line macOS note is filtered out of the hint stack.
+
+`GET /api/v1/companion/build` adds `download_name` (`autonomous-companion-<version>[.exe]`). `GET /api/v1/companion/download/<triple>` sends that name in `Content-Disposition`. The file on disk stays `autonomous-companion[.exe]` under `dist/<hash>/<triple>/`.
 
 `companion_build.py` builds in Docker when it works: image `autonomous-companion-builder:<Dockerfile hash>` from `companion/build/Dockerfile`, one `docker run --rm` per target (`x86_64-unknown-linux-gnu`, `x86_64-pc-windows-gnu`), sources mounted read-only, no privileged mode, no Docker socket. Caches: `$AUTONOMOUS_HOME/companion/docker-target` and `docker-cargo`. Without Docker (or with `AUTONOMOUS_COMPANION_DOCKER=0`) the host `cargo` is used. macOS is not built by the server. Output goes to `$AUTONOMOUS_HOME/companion/build.log`; `GET /api/v1/companion/build` returns a `log` tail (last ~250 lines). The setup checklist and Settings → Companions show that tail in a `setup-log` panel (same style as self-update), including background builds started by `serve`. Setup job `companion` still pumps the same file into `/jobs/<id>`.
 

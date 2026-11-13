@@ -1,4 +1,5 @@
 use crate::api::{self, PairStart};
+use crate::autostart;
 use crate::config::{self, Config, McpServer};
 use crate::tunnel::{self, Command, Status};
 use eframe::egui;
@@ -41,6 +42,8 @@ struct Texts {
     notify_off: &'static str,
     notify_persist: &'static str,
     notify_persist_help: &'static str,
+    launch_at_login: &'static str,
+    launch_at_login_help: &'static str,
     toast_open: &'static str,
     toast_dismiss: &'static str,
 }
@@ -83,6 +86,8 @@ fn texts() -> Texts {
             notify_off: "Coche au moins une option de notification.",
             notify_persist: "Garder les notifications à l'écran",
             notify_persist_help: "Elles restent jusqu'à un clic : sur la notification pour l'ouvrir, ou sur X pour la fermer.",
+            launch_at_login: "Lancer à l'ouverture de session",
+            launch_at_login_help: "Démarre avec ta session Windows, Linux ou macOS. Le compagnon a besoin du bureau, donc pas avant la connexion.",
             toast_open: "Ouvrir",
             toast_dismiss: "Fermer",
         }
@@ -122,6 +127,8 @@ fn texts() -> Texts {
             notify_off: "Turn on at least one notification option.",
             notify_persist: "Keep notifications on screen",
             notify_persist_help: "They stay until you click them to open, or click X to dismiss.",
+            launch_at_login: "Start when you sign in",
+            launch_at_login_help: "Starts with your Windows, Linux, or macOS session. The companion needs the desktop, so it does not run before you sign in.",
             toast_open: "Open",
             toast_dismiss: "Dismiss",
         }
@@ -202,10 +209,38 @@ impl CompanionApp {
             click_rx,
         };
         app.install_tray();
+        if app.config.launch_at_login {
+            app.apply_launch(true);
+        }
         if paired {
             app.start_tunnel();
         }
         app
+    }
+
+    fn apply_launch(&mut self, on: bool) {
+        self.config.launch_at_login = on;
+        match autostart::apply(on) {
+            Ok(()) => self.error.clear(),
+            Err(err) => {
+                self.error = err;
+                self.config.launch_at_login = false;
+            }
+        }
+        let _ = config::save(&self.config);
+    }
+
+    fn launch_row(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(12.0);
+        let mut on = self.config.launch_at_login;
+        if ui.checkbox(&mut on, self.texts.launch_at_login).changed() {
+            self.apply_launch(on);
+        }
+        ui.label(
+            egui::RichText::new(self.texts.launch_at_login_help)
+                .color(MUTED)
+                .size(13.0),
+        );
     }
 
     fn install_tray(&mut self) {
@@ -1059,6 +1094,7 @@ impl CompanionApp {
                 self.test_notification();
             }
         });
+        self.launch_row(ui);
         ui.add_space(12.0);
         self.mcp_editor(ui);
         ui.add_space(16.0);
@@ -1121,6 +1157,7 @@ impl CompanionApp {
                 let _ = config::save(&self.config);
             }
         });
+        self.launch_row(ui);
         ui.add_space(12.0);
         self.mcp_editor(ui);
         ui.add_space(8.0);

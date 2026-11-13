@@ -541,6 +541,7 @@
               {{ t("companion.version") }} {{ companionBuild.version || "?" }} ·
               {{ t("companion.buildStatus") }} {{ t("companion.state_" + companionBuild.state) }}
             </p>
+            <p class="hint">{{ t("companion.autostartHint") }}</p>
             <ul class="settings-list">
               <li
                 v-for="(a, idx) in companionBuild.artifacts"
@@ -550,9 +551,9 @@
                 <div class="companion-artifact-row">
                   <span>
                     <strong>{{ platformLabel(a.platform) }}</strong>
-                    <small> · {{ a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
+                    <small> · {{ a.download_name || a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
                   </span>
-                  <a class="btn" :href="a.url" download>{{ t("companion.download") }}</a>
+                  <a class="btn" :href="a.url" :download="a.download_name || ''">{{ t("companion.download") }}</a>
                 </div>
                 <div v-if="logUnderArtifact(idx)" class="companion-build-panel">
                   <p v-for="n in companionNotes" :key="n" class="hint">{{ n }}</p>

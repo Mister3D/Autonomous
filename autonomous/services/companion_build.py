@@ -144,14 +144,17 @@ def docker_run_argv(src: Path, wd: Path, triple: str, image: str) -> list[str]:
     ]
 
 
-def crate_version(src: Path | None = None) -> str:
-    src = src or source_dir()
-    try:
-        text = (src / "Cargo.toml").read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-    return m.group(1) if m else ""
+def app_version() -> str:
+    """Autonomous release the download is named after (not the Cargo crate version)."""
+    from autonomous import __version__
+
+    return str(__version__ or "dev")
+
+
+def download_filename(version: str, *, windows: bool) -> str:
+    """``autonomous-companion-<version>.exe`` — no Rust target triple."""
+    ver = re.sub(r"[^A-Za-z0-9._+-]", "", version or "").replace("..", "") or "dev"
+    return f"{BIN_NAME}-{ver}{'.exe' if windows else ''}"
 
 
 def source_hash(src: Path | None = None) -> str:
@@ -278,7 +281,7 @@ def status(home: Path | None = None) -> dict[str, Any]:
     st = _read_status(home)
     out: dict[str, Any] = {
         "state": st.get("state") or "idle",
-        "version": crate_version(src),
+        "version": app_version(),
         "hash": st.get("hash", ""),
         "host": st.get("host", ""),
         "artifacts": [],

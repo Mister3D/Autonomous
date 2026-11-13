@@ -115,7 +115,7 @@ Environment variables still work and take precedence over the web settings; the 
 
 ## Companion
 
-`autonomous serve` builds the companion in the background — in Docker when available (image `autonomous-companion-builder` from `companion/build/Dockerfile`: Windows `.exe` + Linux binary), otherwise with the host `cargo` (cached by source hash; log in `$AUTONOMOUS_HOME/companion/build.log`). Download it from **Settings → Companions**: <http://127.0.0.1:8787/settings/companions>. Host-cargo fallback without `mingw-w64` builds only the host target. macOS binaries are not built by the server (run `cargo build --release` on a Mac). Companion option **Keep notifications on screen** makes Windows toasts stay until clicked or dismissed.
+`autonomous serve` builds the companion in the background — in Docker when available (image `autonomous-companion-builder` from `companion/build/Dockerfile`: Windows `.exe` + Linux binary), otherwise with the host `cargo` (cached by source hash; log in `$AUTONOMOUS_HOME/companion/build.log`). Download it from **Settings → Companions**: <http://127.0.0.1:8787/settings/companions>. The file is `autonomous-companion-<version>.exe` (Linux without `.exe`), and `<version>` is the Autonomous release. In the companion, **Start when you sign in** launches it at login (it needs the desktop, so not before you sign in). Host-cargo fallback without `mingw-w64` builds only the host target. macOS binaries are not built by the server (run `cargo build --release` on a Mac). Companion option **Keep notifications on screen** makes Windows toasts stay until clicked or dismissed.
 
 ## Grounding (optional)
 

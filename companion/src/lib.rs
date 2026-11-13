@@ -2,6 +2,7 @@
 //! The window and tray live behind the `gui` feature.
 
 mod api;
+mod autostart;
 mod config;
 mod mcp;
 mod proto;
