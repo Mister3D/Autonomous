@@ -28,6 +28,8 @@ cargo build --release
 
 The server download is named `autonomous-companion-<Autonomous version>.exe` (Linux: no `.exe`). The version follows Autonomous, not this crate's `0.1.0`.
 
+A paired companion checks for a new binary each time its tunnel connects (a server restart drops that connection). If a compile is still running, it waits until the build is finished and does not install the previous file. When the sha256 differs, it downloads that file with its device token, replaces itself in place, and restarts. A build launched from `target/debug` or `target/release` does not replace itself.
+
 **Start when you sign in** is a checkbox in the companion (off by default). It runs at login, not before the desktop session exists. Windows: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Autonomous Companion.cmd`. Linux: `~/.config/autostart/autonomous-companion.desktop`. macOS: `~/Library/LaunchAgents/fr.mister3d.autonomous-companion.plist`. Untick to remove it.
 
 The config is in the application folder (`%APPDATA%\Autonomous\config\companion.json` on Windows, `~/.config/autonomous/companion.json` on Linux; an older `%APPDATA%\mister3d\Autonomous\config\companion.json` is still read). Do not commit it: it contains the device token.

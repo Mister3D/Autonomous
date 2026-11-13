@@ -339,6 +339,7 @@
   "companion.confirmRevoke": "Revoke {name}? It will have to pair again.",
   "companion.downloadTitle": "Download the companion",
   "companion.downloadHint": "The companion is compiled on this server when Autonomous starts (if Rust is installed). Download it here and run it on your computer. The file is named autonomous-companion-<version>.exe, using the Autonomous version.",
+  "companion.autoUpdateHint": "Each time it connects, the companion checks for a newer binary. If a compile is in progress, it waits until that finishes before replacing itself. The program you run today has to include this update: download it once if it does not.",
   "companion.autostartHint": "Once it is running, tick “Start when you sign in”. It starts when you sign in (it needs the desktop, so not before login). That checkbox is in this companion build: rebuild it here if you do not see it.",
   "companion.version": "Version",
   "companion.buildStatus": "Build:",

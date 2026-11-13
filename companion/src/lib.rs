@@ -4,6 +4,7 @@
 mod api;
 mod autostart;
 mod config;
+mod update;
 mod mcp;
 mod proto;
 mod tunnel;

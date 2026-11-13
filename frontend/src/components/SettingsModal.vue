@@ -542,6 +542,7 @@
               {{ t("companion.buildStatus") }} {{ t("companion.state_" + companionBuild.state) }}
             </p>
             <p class="hint">{{ t("companion.autostartHint") }}</p>
+            <p class="hint">{{ t("companion.autoUpdateHint") }}</p>
             <ul class="settings-list">
               <li
                 v-for="(a, idx) in companionBuild.artifacts"

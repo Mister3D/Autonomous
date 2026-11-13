@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import g, request
+from flask import g, request, send_file
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from marshmallow import Schema, fields
@@ -252,6 +252,47 @@ class McpCall(MethodView):
             "text": result.get("text") or "",
             "images": result.get("images") or [],
         }
+
+
+@blp.route("/me/update")
+class DeviceUpdate(MethodView):
+    def get(self):
+        """Sha256 of the companion build for this device's platform."""
+        from autonomous.services import companion_build as build_svc
+
+        device = _device()
+        offer = build_svc.update_offer(str(device.get("platform") or ""), g.home)
+        if offer is None:
+            abort(404, message="No companion build for this platform")
+        return offer
+
+
+@blp.route("/me/update/binary")
+class DeviceUpdateBinary(MethodView):
+    def get(self):
+        """The companion binary for this device. Paired device token only."""
+        from autonomous.services import companion_build as build_svc
+
+        device = _device()
+        platform = str(device.get("platform") or "")
+        offer = build_svc.update_offer(platform, g.home)
+        if not offer or offer.get("state") != "ready":
+            if offer and offer.get("state") == "building":
+                abort(409, message="Companion build is still compiling")
+            abort(404, message="No companion build for this platform")
+        path = build_svc.artifact_for_platform(platform, g.home)
+        if path is None:
+            abort(404, message="No companion build for this platform")
+        name = build_svc.download_filename(
+            build_svc.app_version(),
+            windows=platform == "windows",
+        )
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=name,
+            mimetype="application/octet-stream",
+        )
 
 
 @blp.route("/me/focus")

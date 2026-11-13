@@ -339,6 +339,7 @@
   "companion.confirmRevoke": "Révoquer {name} ? Il devra s'appairer à nouveau.",
   "companion.downloadTitle": "Télécharger le compagnon",
   "companion.downloadHint": "Le compagnon est compilé sur ce serveur au démarrage d’Autonomous (si Rust est installé). Téléchargez-le ici et lancez-le sur votre ordinateur. Le fichier s’appelle autonomous-companion-<version>.exe, avec la version d’Autonomous.",
+  "companion.autoUpdateHint": "À chaque connexion, le compagnon vérifie s’il existe un binaire plus récent. S’il y a une compilation en cours, il attend qu’elle se termine avant de se remplacer. Le programme que vous lancez aujourd’hui doit déjà contenir cette mise à jour : téléchargez-le une fois si ce n’est pas le cas.",
   "companion.autostartHint": "Une fois lancé, cochez « Lancer à l'ouverture de session ». Il démarre quand vous ouvrez votre session (il a besoin du bureau, donc pas avant la connexion). L’option est dans cette version du compagnon : recompilez-le ici si la case n’apparaît pas.",
   "companion.version": "Version",
   "companion.buildStatus": "Compilation :",

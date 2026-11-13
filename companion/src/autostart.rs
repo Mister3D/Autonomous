@@ -82,15 +82,6 @@ fn apply_exe(enabled: bool, exe: &Path) -> Result<(), String> {
     }
 }
 
-pub fn is_enabled() -> bool {
-    match std::env::consts::OS {
-        "linux" => linux_autostart_path().ok().is_some_and(|p| p.is_file()),
-        "macos" => macos_plist_path().ok().is_some_and(|p| p.is_file()),
-        "windows" => windows_startup_path().ok().is_some_and(|p| p.is_file()),
-        _ => false,
-    }
-}
-
 fn write_or_remove(enabled: bool, path: &Path, body: &str) -> Result<(), String> {
     if !enabled {
         if path.is_file() {

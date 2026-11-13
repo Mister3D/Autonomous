@@ -87,6 +87,8 @@ PATCH  /devices/me                   # device token — {egress, killswitch} ign
 PUT    /devices/me/mcp               # MCP catalogue
 POST   /devices/notify               # {title, body, bot?} — ticked, online companions
 POST   /devices/me/focus             # device token — {bot} wakes the already open tab
+GET    /devices/me/update            # device token — {state, version, platform, sha256?, size?}; state=building while compiling (no sha, do not install the previous file)
+GET    /devices/me/update/binary     # device token — that companion binary, once state is ready (409 while compiling)
 GET    /devices/mcp/tools?bot=       # tools allowed for this bot
 POST   /devices/mcp/call             # {bot, server, tool, arguments, companion?}
 GET    /bots/:name/mcp               # grants + published servers

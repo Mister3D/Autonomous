@@ -1,6 +1,7 @@
 use crate::api::{self, PairStart};
 use crate::autostart;
 use crate::config::{self, Config, McpServer};
+use crate::update;
 use crate::tunnel::{self, Command, Status};
 use eframe::egui;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -177,6 +178,8 @@ pub struct CompanionApp {
     open_id: Option<tray_icon::menu::MenuId>,
     quit_id: Option<tray_icon::menu::MenuId>,
     quit: bool,
+    update_started: bool,
+    update_tx: Option<Sender<()>>,
     alert: bool,
     alert_url: String,
     click_tx: Sender<String>,
@@ -203,6 +206,8 @@ impl CompanionApp {
             open_id: None,
             quit_id: None,
             quit: false,
+            update_started: false,
+            update_tx: None,
             alert: false,
             alert_url: String::new(),
             click_tx,
@@ -364,6 +369,18 @@ impl CompanionApp {
         thread::spawn(move || tunnel::serve(config, cmd_rx, status_tx));
         self.cmd_tx = Some(cmd_tx);
         self.status_rx = Some(status_rx);
+        self.spawn_update();
+    }
+
+    fn spawn_update(&mut self) {
+        if self.update_started || self.config.device_token.is_empty() {
+            return;
+        }
+        self.update_started = true;
+        let (tx, rx) = mpsc::channel();
+        self.update_tx = Some(tx);
+        let config = self.config.clone();
+        thread::spawn(move || update::watch(config, rx));
     }
 
     fn begin_pair(&mut self) {
@@ -478,6 +495,9 @@ impl CompanionApp {
                 Status::Connected => {
                     self.online = true;
                     self.note = self.texts.connected.into();
+                    if let Some(tx) = &self.update_tx {
+                        let _ = tx.send(());
+                    }
                 }
                 Status::Disconnected(message) => {
                     self.online = false;

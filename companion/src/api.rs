@@ -98,6 +98,54 @@ pub fn focus_open(config: &Config, bot: &str) -> Result<bool, String> {
     Ok(value.get("open").and_then(|v| v.as_bool()).unwrap_or(false))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateOffer {
+    /// ``building`` (wait), ``ready`` (compare sha256), or ``failed``.
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub sha256: String,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub version: String,
+}
+
+pub fn update_offer(config: &Config) -> Result<UpdateOffer, String> {
+    let response = authed(config, reqwest::Method::GET, "/devices/me/update")?
+        .send()
+        .map_err(|e| e.to_string())?;
+    let status = response.status();
+    let text = response.text().map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(text);
+    }
+    serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
+pub fn download_update(config: &Config, dest: &std::path::Path) -> Result<(), String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut response = client
+        .get(api_url(&config.instance_url, "/devices/me/update/binary"))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.device_token),
+        )
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        let text = response.text().unwrap_or_default();
+        return Err(text);
+    }
+    let mut file = std::fs::File::create(dest).map_err(|e| e.to_string())?;
+    std::io::copy(&mut response, &mut file).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn forget(config: &Config) -> Result<(), String> {
     authed(config, reqwest::Method::DELETE, "/devices/me")?
         .send()
