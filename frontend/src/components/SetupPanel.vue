@@ -95,6 +95,15 @@
           >
             {{ updateApplying ? t("update.applying") : t("update.apply") }}
           </button>
+          <button
+            v-if="showForceUpdate && !updateApplying"
+            class="btn setup-update-apply setup-update-force"
+            type="button"
+            :disabled="updateBusy"
+            @click="runForceUpdate"
+          >
+            {{ t("update.force") }}
+          </button>
         </div>
         <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
         <p v-if="updateError" class="vault-error">{{ updateError }}</p>
@@ -112,6 +121,15 @@
           </button>
         </span>
         <p v-if="updateError" class="vault-error">{{ updateError }}</p>
+        <button
+          v-if="showForceUpdate && !updateApplying"
+          class="btn setup-update-force"
+          type="button"
+          :disabled="updateBusy"
+          @click="runForceUpdate"
+        >
+          {{ t("update.force") }}
+        </button>
       </template>
     </div>
   </div>
@@ -174,6 +192,16 @@ const canApplyUpdate = computed(() => {
   const u = updateInfo.value;
   return !!(u?.available && !u?.dirty && !u?.applying && u?.git !== false);
 });
+const showForceUpdate = computed(() => {
+  const u = updateInfo.value;
+  const err = String(updateError.value || "").toLowerCase();
+  if (u?.dirty || u?.code === "dirty" || u?.code === "diverged") return true;
+  return (
+    err.includes("local changes") ||
+    err.includes("fast-forward") ||
+    err.includes("diverged")
+  );
+});
 const showUpdateUi = computed(() => {
   const u = updateInfo.value;
   if (!u) return false;
@@ -184,7 +212,7 @@ const updateNeedsAction = computed(() => {
   const u = updateInfo.value;
   if (!u) return false;
   if (updateApplying.value || updateLog.value.length) return true;
-  if (u.code === "fetch_failed") return true;
+  if (u.code === "fetch_failed" || u.code === "diverged" || u.dirty) return true;
   if (u.available) return true;
   return false;
 });
@@ -206,7 +234,8 @@ const updateTitle = computed(() => {
   const u = updateInfo.value;
   if (!u) return "";
   if (u.code === "fetch_failed") return t("update.fetchFailedTitle");
-  if (u.dirty && u.available) return t("update.dirtyTitle");
+  if (u.code === "diverged") return t("update.divergedTitle");
+  if (u.dirty) return t("update.dirtyTitle");
   if (u.available) return t("update.availableTitle");
   return updateSummary.value;
 });
@@ -215,7 +244,8 @@ const updateMeta = computed(() => {
   const u = updateInfo.value;
   if (!u) return "";
   if (u.code === "fetch_failed") return (u.message || "").trim();
-  if (u.dirty && u.available) {
+  if (u.code === "diverged") return t("update.divergedMeta", { channel: u.channel });
+  if (u.dirty) {
     return t("update.dirtyMeta", { channel: u.channel });
   }
   if (u.available) {
@@ -255,12 +285,21 @@ async function forceCheckUpdate() {
 
 async function runApplyUpdate() {
   if (!canApplyUpdate.value || updateBusy.value) return;
+  await startUpdate(false);
+}
+
+async function runForceUpdate() {
+  if (updateBusy.value) return;
+  await startUpdate(true);
+}
+
+async function startUpdate(force) {
   updateBusy.value = true;
   updateApplying.value = true;
   updateError.value = "";
   updateLog.value = [];
   try {
-    const job = await api.applyUpdate();
+    const job = await api.applyUpdate(force);
     updateJobId = job.id;
     updateLog.value = job.log || [];
     pollUpdateJob();

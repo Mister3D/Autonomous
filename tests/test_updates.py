@@ -144,6 +144,40 @@ def test_check_endpoint_forces(auth_client, monkeypatch):
     assert r.get_json()["available"] is True
 
 
+def test_force_sync_resets_to_remote_tip():
+    steps = dict(updates_svc.sync_steps("origin", "dev_peter", force=True))
+    assert steps["fetch"][-3:] == ["fetch", "origin", "dev_peter"]
+    assert steps["clean"][-2:] == ["clean", "-fd"]
+    assert "clean" in steps["clean"] and "-x" not in steps["clean"]
+    assert steps["reset"][-4:] == ["-f", "-B", "dev_peter", "origin/dev_peter"]
+    plain = dict(updates_svc.sync_steps("origin", "main", force=False))
+    assert "ff-only" in plain
+    assert plain["ff-only"][-2:] == ["--ff-only", "origin/main"]
+
+
+def test_apply_force_accepts_dirty(auth_client, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "_dirty", lambda: True)
+    monkeypatch.setattr(updates_svc, "_fetch_remote_name", lambda home=None: "origin")
+    started = {}
+
+    class _Thread:
+        def __init__(self, target=None, name=None, daemon=None):
+            started["target"] = target
+
+        def start(self):
+            started["started"] = True
+
+    monkeypatch.setattr(updates_svc.threading, "Thread", _Thread)
+    try:
+        r = auth_client.post("/api/v1/setup/update/apply", json={"force": True})
+        assert r.status_code == 202
+        assert started.get("started") is True
+        assert r.get_json()["kind"] == "setup.self_update"
+    finally:
+        updates_svc._apply_running = False
+
+
 def test_apply_refuses_dirty(auth_client, monkeypatch):
     monkeypatch.setattr(updates_svc, "git_available", lambda: True)
     monkeypatch.setattr(updates_svc, "_dirty", lambda: True)

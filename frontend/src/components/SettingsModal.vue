@@ -315,8 +315,21 @@
           </div>
           <small>{{ t("update.channelHelp") }}</small>
         </div>
+        <div class="settings-field">
+          <button
+            class="btn"
+            type="button"
+            :disabled="updateChannelBusy || updateForcing || !updateGit"
+            @click="forceUpdate"
+          >
+            {{ updateForcing ? t("update.applying") : t("update.forceApply") }}
+          </button>
+          <small>{{ t("update.forceHint") }}</small>
+        </div>
+        <pre v-if="updateForceLog.length" class="setup-log">{{ updateForceLog.join("\n") }}</pre>
         <p v-if="!updateGit" class="hint">{{ t("update.noGit") }}</p>
         <p v-if="updateChannelError" class="vault-error">{{ updateChannelError }}</p>
+        <p v-if="updateForceError" class="vault-error">{{ updateForceError }}</p>
       </UiCard>
 
       <UiCard
@@ -699,6 +712,10 @@ const deleteAllArmed = ref(false);
 const deleteAllTip = ref(false);
 const deleteAllBusy = ref(false);
 const updateChannel = ref("main");
+const updateForcing = ref(false);
+const updateForceError = ref("");
+const updateForceLog = ref([]);
+let updateForceJobId = "";
 const updateChannelBusy = ref(false);
 const updateChannelError = ref("");
 const updateGit = ref(true);
@@ -1119,6 +1136,89 @@ async function revokeDevice(row) {
     await loadDevices();
   } catch (err) {
     deviceError.value = err.message;
+  }
+}
+
+function updateNetworkDrop(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return (
+    err?.name === "TypeError" ||
+    msg.includes("networkerror") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("load failed") ||
+    msg.includes("network request failed")
+  );
+}
+
+function reloadAfterForcedUpdate() {
+  forgetUpdateStatus();
+  updateForceError.value = "";
+  updateForcing.value = true;
+  const note = t("update.restarting");
+  if (!updateForceLog.value.includes(note)) {
+    updateForceLog.value = [...updateForceLog.value, note];
+  }
+  const started = Date.now();
+  const tick = async () => {
+    if (Date.now() - started > 90000) {
+      window.location.reload();
+      return;
+    }
+    try {
+      const res = await fetch("/api/v1/health", { credentials: "include", cache: "no-store" });
+      if (res.ok || res.status === 401 || res.status === 403) {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      /* still restarting */
+    }
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 2000);
+}
+
+async function pollForcedUpdate() {
+  if (!updateForceJobId) return;
+  try {
+    const job = await api.getJob(updateForceJobId);
+    updateForceLog.value = job.log || [];
+    if (job.state === "pending" || job.state === "running") {
+      setTimeout(pollForcedUpdate, 1200);
+      return;
+    }
+    if (job.state === "failed") {
+      updateForcing.value = false;
+      updateForceError.value = job.error || t("update.failed");
+      return;
+    }
+    reloadAfterForcedUpdate();
+  } catch (e) {
+    if (updateForcing.value || updateNetworkDrop(e)) {
+      reloadAfterForcedUpdate();
+      return;
+    }
+    setTimeout(pollForcedUpdate, 2000);
+  }
+}
+
+async function forceUpdate() {
+  if (updateForcing.value || updateChannelBusy.value || !updateGit.value) return;
+  updateForceError.value = "";
+  updateForceLog.value = [];
+  updateForcing.value = true;
+  try {
+    const job = await api.applyUpdate(true);
+    updateForceJobId = job.id;
+    updateForceLog.value = job.log || [];
+    pollForcedUpdate();
+  } catch (e) {
+    if (updateNetworkDrop(e)) {
+      reloadAfterForcedUpdate();
+      return;
+    }
+    updateForceError.value = e.message || String(e);
+    updateForcing.value = false;
   }
 }
 

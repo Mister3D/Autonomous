@@ -315,5 +315,6 @@ export const api = {
     request(`/setup/update${force ? "?force=1" : ""}`),
   setUpdateChannel: (body) => request("/setup/update", { method: "PUT", body }),
   checkUpdate: () => request("/setup/update/check", { method: "POST", body: {} }),
-  applyUpdate: () => request("/setup/update/apply", { method: "POST", body: {} }),
+  applyUpdate: (force = false) =>
+    request("/setup/update/apply", { method: "POST", body: force ? { force: true } : {} }),
 };

@@ -154,8 +154,12 @@ class SetupUpdateCheck(MethodView):
 @blp.route("/update/apply")
 class SetupUpdateApply(MethodView):
     def post(self):
-        """Pull channel tip, rebuild UI + package, restart systemd when possible."""
+        """Pull channel tip, rebuild UI + package, restart systemd when possible.
+
+        ``{force: true}`` discards local commits and edits and matches the remote branch.
+        """
         try:
-            return updates_svc.start_apply(home=g.home), 202
+            body = _body()
+            return updates_svc.start_apply(home=g.home, force=bool(body.get("force"))), 202
         except AutonomousError as exc:
             _handle(exc)

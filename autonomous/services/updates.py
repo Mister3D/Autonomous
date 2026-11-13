@@ -537,15 +537,42 @@ def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
     return proc.wait()
 
 
-def start_apply(*, home: Path | None = None) -> dict[str, Any]:
-    """Pull the configured channel, rebuild UI + package, restart when possible."""
+def sync_steps(remote_name: str, branch: str, *, force: bool) -> list[tuple[str, list[str]]]:
+    """Fixed git argv. Force discards local commits and tracked edits, then matches the remote tip."""
+    root = str(_repo_root())
+    tip = f"{remote_name}/{branch}"
+    steps: list[tuple[str, list[str]]] = [
+        ("fetch", ["git", "-C", root, "fetch", remote_name, branch]),
+    ]
+    if force:
+        # Untracked files (not ignored ones: data/, .venv, node_modules stay).
+        steps.append(("clean", ["git", "-C", root, "clean", "-fd"]))
+        steps.append(("reset", ["git", "-C", root, "checkout", "-f", "-B", branch, tip]))
+        return steps
+    if _git("show-ref", "--verify", "--quiet", f"refs/heads/{branch}").returncode != 0:
+        steps.append(("branch", ["git", "-C", root, "branch", "--track", branch, tip]))
+    steps.extend(
+        [
+            ("checkout", ["git", "-C", root, "checkout", "-q", branch]),
+            ("ff-only", ["git", "-C", root, "merge", "-q", "--ff-only", tip]),
+        ]
+    )
+    return steps
+
+
+def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
+    """Pull the configured channel, rebuild UI + package, restart when possible.
+
+    ``force`` replaces the local branch with the remote tip (dirty tree, amended
+    commit, or any other history that cannot fast-forward).
+    """
     global _apply_running
     from autonomous.services import jobs as jobs_svc
     from autonomous.services import setup as setup_svc
 
     if not git_available():
         raise ValidationError("Not a git install", code="no_git")
-    if _dirty():
+    if _dirty() and not force:
         raise ValidationError(
             "Working tree has local changes — commit, stash or discard them before updating.",
             code="dirty",
@@ -568,29 +595,8 @@ def start_apply(*, home: Path | None = None) -> dict[str, Any]:
         root = _repo_root()
         try:
             jobs_svc.update_job(job["id"], state="running", progress=5, home=home)
-            log(f"Updating channel={ch} remote={remote_name}")
-            tip = f"{remote_name}/{ch}"
-            steps: list[tuple[str, list[str]]] = [
-                ("fetch", ["git", "-C", str(root), "fetch", remote_name, ch]),
-            ]
-            # Create a local branch from the remote tip when it does not exist yet.
-            if _git("show-ref", "--verify", "--quiet", f"refs/heads/{ch}").returncode != 0:
-                steps.append(
-                    (
-                        "branch",
-                        ["git", "-C", str(root), "branch", "--track", ch, tip],
-                    )
-                )
-            steps.extend(
-                [
-                    ("checkout", ["git", "-C", str(root), "checkout", "-q", ch]),
-                    (
-                        "ff-only",
-                        ["git", "-C", str(root), "merge", "-q", "--ff-only", tip],
-                    ),
-                ]
-            )
-            for label, argv in steps:
+            log(f"Updating channel={ch} remote={remote_name} force={force}")
+            for label, argv in sync_steps(remote_name, ch, force=force):
                 jobs_svc.update_job(job["id"], progress=15, home=home)
                 rc = _stream_argv(job["id"], argv, home)
                 if rc != 0:

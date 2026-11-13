@@ -6969,6 +6969,9 @@ a.bot-mention:hover,
   font-size: 0.85rem;
   border-radius: 999px;
 }
+.setup-update-force {
+  margin-top: 0.45rem;
+}
 .setup-update .setup-log {
   text-align: left;
   margin-top: 0.65rem;
