@@ -9,7 +9,7 @@
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-13 (LLM settings is four cards)
+**Last updated**: 2026-11-13 (rail and conversation scrollbars sit on the edge)
 
 ## User behaviour
 
@@ -22,6 +22,7 @@
 - Stage tabs / split toolbar (`right: 0.35rem`) share the chat card’s right edge (same as `.stage-body` horizontal padding) — not a deeper inset.
 - Mobile chat (`≤720px`): stage tabs stay a compact pill (`flex: none` + `margin-left: auto`) before the inspector toggle — never stretch full-width between Back and the panel button.
 - Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane. Split resize handle stays on that plane at rest (no grey rule); screen/terminal cards keep a full bottom radius in split (height accounts for chrome `margin-top`).
+- The bot list does not reserve a scrollbar column (rows reach the rail edge). A 6 px thumb overlays that edge on hover or while scrolling, then fades. The conversation uses the same `0.45rem` inset on the right as on the left, so its thumb is not parked in a wide blank margin.
 - Settings: `.settings-main` has no left padding (nav already pads); top/right/bottom stay.
 - Labels: Conversation / Terminal / Écran; inspector Files tab = « Fichiers »; settings nav keys under `settings.tab*`.
 

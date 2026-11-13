@@ -200,13 +200,47 @@ a:focus-visible {
   overflow: hidden;
 }
 
+.bot-list-clip {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Cancel the sidebar's right padding. The native bar is not given a column. */
+  margin: 0.15rem -0.45rem 0 0;
+}
+
 .bot-list {
   list-style: none;
-  margin: 0.15rem 0 0;
+  margin: 0;
   padding: 0;
   overflow: auto;
   flex: 1;
   min-height: 0;
+  scrollbar-width: none;
+}
+
+.bot-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.bot-list-thumb {
+  position: absolute;
+  right: 2px;
+  width: 6px;
+  border-radius: 999px;
+  background: #d6d6dc;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 2;
+}
+
+.bot-list-clip:hover .bot-list-thumb,
+.bot-list.is-scrolling ~ .bot-list-thumb {
+  opacity: 1;
 }
 
 .bot-list:has(> .rail-empty) {
@@ -3371,7 +3405,8 @@ label.muted {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0.45rem 1.35rem 0.5rem;
+  /* Right inset matches the left. A wide gutter put the thumb in empty space. */
+  padding: 0.45rem 0.45rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.8rem;

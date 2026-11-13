@@ -101,7 +101,8 @@
         </button>
       </div>
 
-      <ul class="bot-list">
+      <div class="bot-list-clip" @mouseenter="syncBotThumb">
+      <ul ref="botListEl" class="bot-list" @scroll.passive="onBotListScroll">
         <li v-if="!state.bots.length" class="rail-empty">
           <p>{{ t("nav.emptyBotsGone") }}</p>
           <p>{{ t("nav.emptyBotsNone") }}</p>
@@ -135,6 +136,12 @@
           </button>
         </li>
       </ul>
+      <div
+        v-show="botThumb.show"
+        class="bot-list-thumb"
+        :style="{ top: botThumb.top + 'px', height: botThumb.height + 'px' }"
+      ></div>
+      </div>
 
       <div class="rail-foot">
         <SettingsMenu />
@@ -851,6 +858,37 @@ const railWorkers = computed(() => {
 /** Compat recherche / anciens usages. */
 const visibleBots = computed(() => [...railManagers.value, ...railWorkers.value]);
 
+const botListEl = ref(null);
+const botThumb = ref({ show: false, top: 0, height: 0 });
+let botThumbTimer = 0;
+let botListObserver = null;
+
+function syncBotThumb() {
+  const el = botListEl.value;
+  if (!el) return;
+  const overflow = el.scrollHeight - el.clientHeight;
+  if (overflow <= 1) {
+    botThumb.value = { show: false, top: 0, height: 0 };
+    return;
+  }
+  const track = el.clientHeight;
+  const height = Math.max(28, (el.clientHeight / el.scrollHeight) * track);
+  const maxTop = Math.max(0, track - height);
+  const top = (el.scrollTop / overflow) * maxTop;
+  botThumb.value = { show: true, top, height };
+}
+
+function onBotListScroll() {
+  syncBotThumb();
+  const el = botListEl.value;
+  if (!el) return;
+  el.classList.add("is-scrolling");
+  window.clearTimeout(botThumbTimer);
+  botThumbTimer = window.setTimeout(() => {
+    el.classList.remove("is-scrolling");
+  }, 2000);
+}
+
 function previewOf(b) {
   const msgs = state.messages[b.name] || [];
   const last = [...msgs].reverse().find((m) => !m?.meta?.hidden_prompt);
@@ -1211,8 +1249,15 @@ function onSseCatchup() {
   if (state.currentBot) loadMessages(state.currentBot);
 }
 
+watch(railWorkers, () => nextTick(syncBotThumb));
+
 onMounted(() => {
   applyRoute();
+  if (botListEl.value && typeof ResizeObserver !== "undefined") {
+    botListObserver = new ResizeObserver(() => syncBotThumb());
+    botListObserver.observe(botListEl.value);
+  }
+  nextTick(syncBotThumb);
   if (state.currentBot) loadMessages(state.currentBot);
   loadPreviews();
   loadPiStatus();
@@ -1236,6 +1281,8 @@ function onMobileChange() {
 }
 
 onUnmounted(() => {
+  botListObserver?.disconnect();
+  window.clearTimeout(botThumbTimer);
   window.removeEventListener("autonomous-focus", onCompanionFocus);
   window.removeEventListener("autonomous-sse-catchup", onSseCatchup);
   window.clearTimeout(focusTimer);
