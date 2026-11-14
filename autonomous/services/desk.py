@@ -20,6 +20,34 @@ from autonomous.services.events import BUS
 _LABEL = "autonomous.bot"
 
 
+def mem_total_bytes() -> int:
+    """Host RAM from ``/proc/meminfo``, or 0 when it cannot be read."""
+    try:
+        text = Path("/proc/meminfo").read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    for line in text.splitlines():
+        if not line.startswith("MemTotal:"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            return int(parts[1]) * 1024
+    return 0
+
+
+def shm_size_bytes(mem_total: int | None = None) -> int:
+    """Ceiling for the desk ``/dev/shm``.
+
+    Linux sizes a tmpfs to half of RAM and does not reserve that space.
+    A fixed 256 MiB is what the VM used to hit. The floor stays 256 MiB
+    when the host is smaller than that.
+    """
+    total = mem_total_bytes() if mem_total is None else int(mem_total)
+    if total <= 0:
+        return _SHM_FLOOR
+    return max(_SHM_FLOOR, total // 2)
+
+
 def _refresh_companion_egress(home: Path | None) -> None:
     """Reapply per-bot companion routes now that a desk IP exists or is gone."""
     try:
@@ -28,9 +56,13 @@ def _refresh_companion_egress(home: Path | None) -> None:
         egress_svc.refresh(home)
     except Exception:
         pass
+
+
 _PORT_BASE = 15900
 # Idle desk → docker stop (bind-mounted ~/files stays on host).
 AUTO_SLEEP_SEC = 5 * 60
+# Smallest /dev/shm. Below this Chrome and package installs fail on a tiny host.
+_SHM_FLOOR = 256 * 1024 * 1024
 _REPO_DESKTOP = Path(__file__).resolve().parents[2] / "docker" / "desktop"
 _DESKTOP_SCRIPTS = (
     ("bot-chrome", "/usr/local/bin/bot-chrome", 0o755),
@@ -950,7 +982,7 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
             "network_mode": network_mode,
             "labels": {_LABEL: bot, "autonomous.role": "desk"},
             "environment": env,
-            "shm_size": "256m",
+            "shm_size": shm_size_bytes(),
             "user": "1000:1000",
             # Let Chrome's real sandbox (zygote/userns) work. Without this, Chrome
             # needs --no-sandbox which anti-bots fingerprint hard.

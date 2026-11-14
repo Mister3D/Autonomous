@@ -9,7 +9,7 @@
 - `autonomous/wsproxy.py` (WS → websockify)
 - `docker/desktop/*`
 
-**Last updated**: 2026-11-13 (sleeping screen title says virtual machine, not desktop)
+**Last updated**: 2026-11-14 (`/dev/shm` follows half the host RAM)
 
 ## User behaviour
 
@@ -32,6 +32,7 @@
 ## Implementation
 
 - Docker container named **`autonomous-<uuid>`** (same scheme as Pi sessions). Bot ↔ VM link = `desk.container_name` (+ label `autonomous.bot=<slug>`). Image `autonomous-desktop:fr`.
+- `/dev/shm` is half the host RAM (Linux tmpfs default), and at least 256 MiB. It is a ceiling, not memory reserved up front. CPU, RAM and disk stay unlimited. A desk created before this keeps 256 MiB until it is recreated.
 - Host volume `data/bots/<bot>/home` mounted at **`/home/autonomous/files`**, **`/home/autonomous/workspace`**, and **`/home/autonomous/shared`** (same private source — `shared` is a legacy alias, not a folder other bots can read) — **persists** if the container is stopped or destroyed (except `desk reset` which wipes the volume). Chrome CDP profile: `shared/.autonomous-chrome/` (see [`chrome-desktop-image.md`](./chrome-desktop-image.md)).
 - Old desks without `container_name`: legacy fallback `autonomous-<slug>` until recreate.
 - Auto-sleep: column `bots.auto_sleep` + `desk_last_active_at`; tick via the `serve` scheduler (~30s). A busy or waiting bot refreshes that stamp on each tick. `POST …/desk/activity` does the same and does not wake. `desk.ensure_awake` / `POST …/desk/wake` before the terminal and VM tools. `GET …/desk/novnc` and the `/novnc/` proxy only report a port while the desk is running.
