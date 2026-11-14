@@ -731,7 +731,10 @@ export default function (pi: ExtensionAPI) {
       }
       const timeout = Math.max(1, Math.min(Number(params.timeout) || 30, 600));
       const timedOut = () =>
-        textResult(`[timeout after ${timeout}s]`, { error: true, timed_out: true });
+        textResult(
+          `[timeout after ${timeout}s] The timeout stopped this command.`,
+          { error: true, timed_out: true },
+        );
       // The server kills the command at `timeout`. If that reply never comes,
       // abort this fetch only — not a later desk approval — so the tool ends.
       const execCall = async () => {

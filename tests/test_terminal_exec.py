@@ -94,7 +94,7 @@ def test_cancel_stops_inflight_command(home, monkeypatch):
     assert cancelled
     assert not worker.is_alive()
     assert box["entry"]["exit_code"] == 130
-    assert "[stopped]" in box["entry"]["output"]
+    assert "[user stopped]" in box["entry"]["output"]
     assert term_svc.cancel_running_command("cancelbot") is False
 
 

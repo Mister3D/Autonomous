@@ -24,7 +24,7 @@
 ## Pitfalls / non-regressions
 
 - This is **not** the Terminal tab's WebSocket PTY.
-- A `timeout` of 300s must end the tool around that mark. Killing only the `docker exec` client leaves the command alive in the VM and the chat on "en cours".
+- A `timeout` of 300s must end the tool around that mark. Killing only the `docker exec` client leaves the command alive in the VM and the chat on "en cours". The tool result then says `[timeout after Ns] The timeout stopped this command.` A click on **Arrêter l’outil** says `[user stopped] The user stopped this command.`
 - Don't make `vm_request_desk` return immediately after the card: the agent would carry on for nothing.
 - Restart the Pi session after changing `vm.ts`.
 

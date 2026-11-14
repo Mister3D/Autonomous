@@ -365,11 +365,14 @@ def exec_command(
             stopped = bot in _EXEC_CANCELLED
         if stopped:
             exit_code = 130
-            output = (output or "") + "\n[stopped]"
+            output = (output or "") + "\n[user stopped] The user stopped this command."
         elif forced or exit_code in (124, 137, -9, -15):
             exit_code = 124
             if "[timeout after" not in (output or ""):
-                output = ((output or "").rstrip() + f"\n[timeout after {timeout_s}s]").strip()
+                output = (
+                    (output or "").rstrip()
+                    + f"\n[timeout after {timeout_s}s] The timeout stopped this command."
+                ).strip()
     finally:
         with _EXEC_LOCK:
             if _EXEC_PROCS.get(bot) is proc:
