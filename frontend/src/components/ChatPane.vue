@@ -989,6 +989,22 @@ function onComposerKey(e) {
       }
     }
   }
+  if (
+    e.key === "ArrowUp" &&
+    !e.shiftKey &&
+    !e.altKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.isComposing &&
+    !String(text.value || "").trim()
+  ) {
+    const message = latestEditableQueued();
+    if (message) {
+      e.preventDefault();
+      editQueued(message);
+    }
+    return;
+  }
   if (e.key !== "Enter" || e.isComposing) return;
   if (e.shiftKey) return;
   e.preventDefault();
@@ -1125,7 +1141,10 @@ async function cancelQueued(message) {
   const idx = list.findIndex((m) => m.id === id);
   const snapshot = idx >= 0 ? list[idx] : null;
   state.messages[bot] = list.filter((m) => m.id !== id);
-  if (String(id).startsWith("tmp-")) return true;
+  if (String(id).startsWith("tmp-")) {
+    recalledTemps.add(String(id));
+    return true;
+  }
   try {
     await api.deleteQueuedMessage(bot, id);
     return true;
@@ -1175,6 +1194,15 @@ function canEditQueued(message) {
   if (message?.role !== "user" || !message?.meta?.queued) return false;
   if (isEventTrigger(message) || botmailDirection(message)) return false;
   return true;
+}
+
+/** Newest plain user bubble still waiting to be sent. */
+function latestEditableQueued() {
+  const list = (state.messages[props.bot.name] || [])
+    .filter((m) => canEditQueued(m) && String(m.content || "").trim())
+    .slice()
+    .sort(compareQueued);
+  return list.length ? list[list.length - 1] : null;
 }
 
 function showQueuedActions(message) {
@@ -2493,6 +2521,8 @@ function scrollMessagesToBottom(force = false, _absolute = false) {
 let sendChain = Promise.resolve();
 /** In-flight composer sends (incl. waiting on the chain) — forces « En file » UI. */
 let sendsPending = 0;
+/** Optimistic ids pulled back with ArrowUp before their POST returned. */
+const recalledTemps = new Set();
 /** Monotonic order for queued bubbles (survives optimistic → server created_at swap). */
 let queueOrdSeq = 0;
 
@@ -2565,7 +2595,25 @@ async function send() {
       for (let i = list.length - 1; i >= 0; i--) {
         if (list[i]?.id === tempId) list.splice(i, 1);
       }
-      if (saved?.id) {
+      if (recalledTemps.has(tempId)) {
+        recalledTemps.delete(tempId);
+        if (saved?.id) {
+          for (let i = list.length - 1; i >= 0; i--) {
+            if (list[i]?.id === saved.id) list.splice(i, 1);
+          }
+        }
+        // ArrowUp already put the text back. Drop the server copy only if it
+        // is still waiting; a run that already started keeps its bubble.
+        if (saved?.id && saved.meta?.queued) {
+          try {
+            await api.deleteQueuedMessage(bot, saved.id);
+          } catch {
+            if (!list.some((m) => m.id === saved.id)) list.push(saved);
+          }
+        } else if (saved?.id && !list.some((m) => m.id === saved.id)) {
+          list.push(saved);
+        }
+      } else if (saved?.id) {
         // Keep send-order stamp so the file does not jump when created_at swaps.
         const stamped = {
           ...saved,
@@ -2607,6 +2655,7 @@ async function send() {
         if (p.preview) URL.revokeObjectURL(p.preview);
       }
     } catch (e) {
+      recalledTemps.delete(tempId);
       const list = state.messages[bot] || [];
       const tempIdx = list.findIndex((m) => m.id === tempId);
       if (tempIdx >= 0) list.splice(tempIdx, 1);
