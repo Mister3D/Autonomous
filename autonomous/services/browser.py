@@ -46,6 +46,25 @@ def _copy_workers(bot: str, *, home: Path | None) -> None:
         _chown_bot(dst)
 
 
+def _cdp_failure_text(err: str) -> str:
+    """The exception, not the start of the traceback.
+
+    The first lines are ``Traceback`` and ``File ...``. A 300-character cut
+    there hides the real error, and the bot invents a cause.
+    """
+    text = (err or "").strip()
+    if not text:
+        return "empty output"
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if line.startswith("Traceback") or line.startswith("File ") or line.startswith("return "):
+            continue
+        if line[:1].isspace():
+            continue
+        return line[:500]
+    return text[-500:]
+
+
 def _run(bot: str, args: list[str], *, home: Path | None = None) -> dict[str, Any]:
     from autonomous.services import desk as desk_svc
 
@@ -77,7 +96,7 @@ def _run(bot: str, args: list[str], *, home: Path | None = None) -> dict[str, An
     err = (completed.stderr or b"").decode("utf-8", errors="replace").strip()
     if not raw:
         raise AutonomousError(
-            f"Browser CDP failed: {err[:300] or 'empty output'}",
+            f"Browser CDP failed: {_cdp_failure_text(err)}",
             code="browser_cdp_failed",
         )
     # Worker prints one JSON object on stdout

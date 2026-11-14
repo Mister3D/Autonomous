@@ -1007,6 +1007,12 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
         print(json.dumps({"ok": False, "error": str(exc)}))
         return 1
+    except Exception as exc:
+        # A raw traceback is cut off before the exception, so the bot invents
+        # a cause. Return the error and let the next call reconnect.
+        msg = f"{type(exc).__name__}: {exc}"
+        print(json.dumps({"ok": False, "error": msg}))
+        return 1
 
 
 if __name__ == "__main__":

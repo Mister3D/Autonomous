@@ -2,7 +2,7 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-11-12 (a click returns the next page, so the model does not re-read it)
+**Last updated**: 2026-11-14 (a crashed CDP worker returns the exception, not the start of the traceback)
 
 ## Action loop (enforced order)
 
@@ -108,6 +108,7 @@ Chrome CDP `:9222`; profile `$HOME/.autonomous-chrome` (see `chrome-desktop-imag
 ## Pitfalls / non-regressions
 
 - `vm_look` is not refused for lack of a DOM snapshot. `observe_gate.refuse_vm_look_message` always returns `None`. Do not put the DOM-first gate back: it made the agent debug focus and filled-char counts instead of looking at the screen.
+- A CDP worker crash must return the exception (`TimeoutError: …`), not the first lines of the traceback. Cutting those lines made the bot invent a cause and hand the debugging back to the user.
 
 ## Quick check
 
@@ -115,7 +116,7 @@ Chrome CDP `:9222`; profile `$HOME/.autonomous-chrome` (see `chrome-desktop-imag
 TOKEN=$(cat data/token)
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"max_elements":20}' http://127.0.0.1:8787/api/v1/bots/playmo/browser/snapshot | head -c 600
-python3 -m pytest tests/test_observe_gate.py tests/test_url_policy.py -q
+python3 -m pytest tests/test_observe_gate.py tests/test_url_policy.py tests/test_browser_cdp_error.py -q
 ```
 
 Restart the Pi session after changing `browser.ts` / `vm.ts` (`DELETE …/messages` or stop_all) so the new system hint / tool text loads.
