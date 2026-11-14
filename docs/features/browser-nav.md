@@ -2,7 +2,7 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-11-14 (a crashed CDP worker returns the exception, not the start of the traceback)
+**Last updated**: 2026-11-14 (a CDP frame is read whole, so a short timeout no longer kills the worker)
 
 ## Action loop (enforced order)
 
@@ -109,6 +109,7 @@ Chrome CDP `:9222`; profile `$HOME/.autonomous-chrome` (see `chrome-desktop-imag
 
 - `vm_look` is not refused for lack of a DOM snapshot. `observe_gate.refuse_vm_look_message` always returns `None`. Do not put the DOM-first gate back: it made the agent debug focus and filled-char counts instead of looking at the screen.
 - A CDP worker crash must return the exception (`TimeoutError: …`), not the first lines of the traceback. Cutting those lines made the bot invent a cause and hand the debugging back to the user.
+- A short read timeout must not drop the middle of a Chrome message. The next read was then garbage and the worker process died. A frame is read whole; one larger than 16 MB closes the socket instead of being loaded.
 
 ## Quick check
 

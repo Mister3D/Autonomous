@@ -148,7 +148,10 @@ def cmd_navigate(ns: argparse.Namespace) -> int:
         deadline = time.time() + 20.0
         loaded = False
         while time.time() < deadline:
-            ev = sess.poll(timeout=0.5)
+            try:
+                ev = sess.poll(timeout=0.5)
+            except CdpError:
+                break
             if not ev:
                 continue
             method = ev.get("method") or ""
