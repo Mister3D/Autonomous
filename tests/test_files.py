@@ -1,5 +1,6 @@
 """Path traversal + agent text read/write + share/attach under ~/files."""
 
+import io
 from pathlib import Path
 
 import pytest
@@ -201,3 +202,30 @@ def test_files_and_legacy_shared_prefixes(home):
     assert "~/files" in _FILES_SYSTEM_HINT
     assert "private to THIS bot" in _FILES_SYSTEM_HINT
     assert "Never use the path ~/shared" in _FILES_SYSTEM_HINT
+
+
+def test_upload_cap_is_ten_gigabytes_and_rejects_the_overflow(home, monkeypatch):
+    assert files_svc.MAX_CHAT_FILE_BYTES == 10 * 1024 ** 3
+    assert files_svc.MAX_MAIL_ATTACHMENT_BYTES == 50 * 1024 * 1024
+    bots_svc.create_bot("big", slug="big", home=home)
+    monkeypatch.setattr(files_svc, "MAX_CHAT_FILE_BYTES", 4)
+    with pytest.raises(AutonomousError) as exc:
+        files_svc.save_chat_upload(
+            "big", filename="a.bin", stream=io.BytesIO(b"12345"), home=home
+        )
+    assert exc.value.code == "file_too_large"
+    upload_root = home / "bots" / "big" / "home" / "upload"
+    assert not list(upload_root.rglob("a.bin"))
+
+
+def test_share_and_attach_have_no_size_cap(home):
+    bots_svc.create_bot("fbig", slug="fbig", home=home)
+    root = home / "bots" / "fbig" / "home"
+    (root / "big.png").write_bytes(b"\x89PNG" + b"\x00" * (26 * 1024 * 1024))
+    out = files_svc.share_image("fbig", "big.png", home=home)
+    assert out["ok"] is True
+    assert out["bytes"] > 25 * 1024 * 1024
+    (root / "big.pdf").write_bytes(b"%PDF" + b"\x00" * (26 * 1024 * 1024))
+    attached = files_svc.attach_file("fbig", "big.pdf", home=home)
+    assert attached["ok"] is True
+    assert attached["bytes"] > 25 * 1024 * 1024

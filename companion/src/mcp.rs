@@ -7,12 +7,12 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 
-const MAX_TEXT: usize = 16_000;
-const MAX_IMAGES: usize = 4;
-/// Base64 chars. About 3.7 MB decoded, under the tunnel frame limit.
-const MAX_IMAGE_B64: usize = 5_000_000;
-/// JSON of text + images. Leaves room under `proto::MAX_PAYLOAD`.
-const MAX_RESULT: usize = 6 * 1024 * 1024;
+const MAX_TEXT: usize = 64_000;
+const MAX_IMAGES: usize = 16;
+/// Base64 chars. About 100 MB decoded, under the tunnel frame.
+const MAX_IMAGE_B64: usize = 140_000_000;
+/// JSON of text + images. The frame payload is this JSON.
+const MAX_RESULT: usize = crate::proto::MAX_PAYLOAD;
 
 pub struct McpImage {
     pub mime: String,

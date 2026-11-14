@@ -2,13 +2,13 @@
 
 **Status**: in place  
 **Key files**: `pi_extensions/files.ts`, `services/files.py`, `GET|PUT /files/content`, `POST /files/share`, `POST /files/attach`, `POST /files/claim-mail`  
-**Last updated**: 2026-11-12 (`~/files` is private to the bot; `~/shared` is a legacy alias)
+**Last updated**: 2026-11-14 (no size cap on files the bot shows in the chat)
 
 ## User behaviour
 
 - The agent can **list / read / write / mkdir / delete** in `~/files` (= `~/workspace`, private to this bot) **without** a host shell and **without** a desktop. Other bots cannot see this folder. The prompt forbids using `~/shared`.
-- **Images** (png/jpg/webp/gif/svg/bmp): `files_share_image` → markdown `![](/api/v1/bots/…/files/raw?path=…)` **in the text** (thumbnail + lightbox). The host re-injects this markdown if the model forgets it. Inventing external URLs is **forbidden**.
-- **PDF, zip, and other non-previewable formats**: `files_attach` → download card on the reply bubble (like user attachments).
+- **Images** (png/jpg/webp/gif/svg/bmp): `files_share_image` → markdown `![](/api/v1/bots/…/files/raw?path=…)` **in the text** (thumbnail + lightbox). No size cap (an empty file is still refused). The host re-injects this markdown if the model forgets it. Inventing external URLs is **forbidden**.
+- **PDF, zip, and other non-previewable formats**: `files_attach` → download card on the reply bubble (like user attachments). No size cap.
 - **Inter-bot mail files**: peer attachments land under `.autonomous/mail-inbox/<inbox_id>/`. Use **`files_claim_mail(path, dest)`** to move them to a chosen path under `~/files` (recipient decides). See [botmail.md](./botmail.md). There is no directory shared between bots.
 - Same volume as the **Files** tab / VM bind-mount.
 

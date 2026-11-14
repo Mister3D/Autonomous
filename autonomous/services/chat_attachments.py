@@ -31,9 +31,9 @@ _MIME_BY_EXT = {
     ".gif": "image/gif",
 }
 
-# Soft UI/API cap for pasted data-URL images (still truncated to LLM max at send).
-MAX_IMAGE_ATTACHMENTS = 8
-MAX_BYTES = 8 * 1024 * 1024
+# Pasted images kept in the chat. The model receives a smaller copy (vision_fit).
+MAX_IMAGE_ATTACHMENTS = 16
+MAX_BYTES = 100 * 1024 * 1024
 _IMAGE_FILE_EXTS = frozenset(_MIME_BY_EXT.keys())
 
 
@@ -336,11 +336,18 @@ def resolve_file(bot: str, filename: str, *, home: Path | None = None) -> Path:
     return path
 
 
-def _pi_image(path: Path, mime: str) -> dict[str, Any]:
+def _pi_image(path: Path, mime: str) -> dict[str, Any] | None:
+    """Image block for the model. The chat file stays at full size."""
+    from autonomous.services.vision_fit import fit_image_path
+
+    fitted = fit_image_path(path, mime)
+    if fitted is None:
+        return None
+    data, out_mime = fitted
     return {
         "type": "image",
-        "data": base64.b64encode(path.read_bytes()).decode("ascii"),
-        "mimeType": mime,
+        "data": base64.b64encode(data).decode("ascii"),
+        "mimeType": out_mime,
     }
 
 
@@ -362,7 +369,10 @@ def collect_vision_candidates(
         path = attachments_dir(bot, home) / f"{stem}{ext}"
         if not path.is_file():
             continue
-        out.append((path.name, _pi_image(path, _MIME_BY_EXT[ext])))
+        image = _pi_image(path, _MIME_BY_EXT[ext])
+        if image is None:
+            continue
+        out.append((path.name, image))
     for f in file_attachments(attachments):
         rel = str(f.get("path") or "").strip().replace("\\", "/")
         name = str(f.get("name") or Path(rel).name)
@@ -375,7 +385,10 @@ def collect_vision_candidates(
             continue
         if not path.is_file():
             continue
-        out.append((name, _pi_image(path, _MIME_BY_EXT[ext])))
+        image = _pi_image(path, _MIME_BY_EXT[ext])
+        if image is None:
+            continue
+        out.append((name, image))
     return out
 
 

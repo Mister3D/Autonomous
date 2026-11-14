@@ -14,8 +14,8 @@ pub const PING: u8 = 11;
 pub const PONG: u8 = 12;
 pub const NOTIFY: u8 = 13;
 
-/// One frame. Large enough for a desktop screenshot (base64) plus its text.
-pub const MAX_PAYLOAD: usize = 8 * 1024 * 1024;
+/// One frame. Room for a large companion image (base64) plus its text.
+pub const MAX_PAYLOAD: usize = 160 * 1024 * 1024;
 
 pub fn encode(op: u8, stream_id: u32, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(9 + payload.len());

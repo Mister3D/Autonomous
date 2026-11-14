@@ -35,7 +35,7 @@ _PEER_LOCK = threading.Lock()
 # (home_key, device_id) → (monotonic_ts, ips)
 _PEER_CACHE: dict[tuple[str, str], tuple[float, set[str]]] = {}
 _PEER_TTL = 5.0
-_MAX_MCP_IMAGES = 4
+_MAX_MCP_IMAGES = 16
 
 
 def _mcp_images(raw: Any) -> list[dict[str, str]]:
@@ -63,6 +63,8 @@ def _store_mcp_images(
     from autonomous.services import files as files_svc
     from autonomous.services.errors import AutonomousError
 
+    from autonomous.services.vision_fit import fit_image_b64
+
     stored: list[dict[str, str]] = []
     for image in images:
         try:
@@ -71,10 +73,12 @@ def _store_mcp_images(
             )
         except AutonomousError:
             continue
+        fitted = fit_image_b64(image["data"], str(saved.get("mime") or image["mime"]))
+        model_data, model_mime = fitted if fitted else (image["data"], image["mime"])
         stored.append(
             {
-                "mime": str(saved.get("mime") or image["mime"]),
-                "data": image["data"],
+                "mime": model_mime,
+                "data": model_data,
                 "markdown": str(saved.get("markdown") or ""),
                 "url": str(saved.get("url") or ""),
             }

@@ -25,9 +25,10 @@ FILES_LABEL = "files"
 _FILES_ALIASES = ("files", "shared")
 CHAT_UPLOAD_DIR = "upload"
 MAIL_INBOX_DIR = ".autonomous/mail-inbox"
-MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024
+# Drag-and-drop / picker, in the Files tab and in the chat. Mail stays smaller.
+MAX_CHAT_FILE_BYTES = 10 * 1024 * 1024 * 1024
 MAX_MAIL_ATTACHMENTS = 10
-MAX_MAIL_ATTACHMENT_BYTES = MAX_CHAT_FILE_BYTES
+MAX_MAIL_ATTACHMENT_BYTES = 50 * 1024 * 1024
 MAX_MAIL_ATTACHMENTS_TOTAL_BYTES = 100 * 1024 * 1024
 
 _SAFE_NAME = re.compile(r"^[^/\x00]{1,255}$")
@@ -136,7 +137,6 @@ def list_dir(bot: str, path: str = ".", home: Path | None = None) -> list[dict[s
 
 # Text read/write for the agent (Pi files_* tools). Binary stays on download/upload.
 MAX_TEXT_BYTES = 1_000_000
-MAX_SHARE_IMAGE_BYTES = 25 * 1024 * 1024
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -177,11 +177,6 @@ def share_image(
     size = target.stat().st_size
     if size <= 0:
         raise AutonomousError("Empty file", code="empty_file")
-    if size > MAX_SHARE_IMAGE_BYTES:
-        raise AutonomousError(
-            f"Image too large (max {MAX_SHARE_IMAGE_BYTES // (1024 * 1024)} Mo).",
-            code="file_too_large",
-        )
     root = _root(bot, home)
     rel = str(target.relative_to(root)).replace(os.sep, "/")
     from urllib.parse import quote
@@ -218,7 +213,7 @@ _MCP_IMAGE_MAGIC = {
     "image/webp": b"RIFF",
     "image/bmp": b"BM",
 }
-MAX_MCP_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_MCP_IMAGE_BYTES = 100 * 1024 * 1024
 
 
 def save_mcp_image(
@@ -278,11 +273,6 @@ def attach_file(
     size = target.stat().st_size
     if size <= 0:
         raise AutonomousError("Empty file", code="empty_file")
-    if size > MAX_SHARE_IMAGE_BYTES:
-        raise AutonomousError(
-            f"File too large (max {MAX_SHARE_IMAGE_BYTES // (1024 * 1024)} Mo).",
-            code="file_too_large",
-        )
     root = _root(bot, home)
     rel = str(target.relative_to(root)).replace(os.sep, "/")
     url = f"/api/v1/bots/{bot}/files/download?path={quote(rel, safe='/')}"
@@ -531,6 +521,37 @@ def mkdir(
     return entry
 
 
+def _size_label(n: int) -> str:
+    if n >= 1024 ** 3 and n % (1024 ** 3) == 0:
+        return f"{n // (1024 ** 3)} Go"
+    return f"{n // (1024 * 1024)} Mo"
+
+
+def _stream_to_file(stream: BinaryIO, target: Path, limit: int) -> int:
+    """Copy ``stream`` onto ``target``. Over the limit, delete the partial file."""
+    total = 0
+    try:
+        with open(target, "wb") as out:
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise AutonomousError(
+                        f"File too large (max {_size_label(limit)})",
+                        code="file_too_large",
+                    )
+                out.write(chunk)
+    except AutonomousError:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    return total
+
+
 def save_upload(
     bot: str,
     dest_dir: str,
@@ -552,12 +573,7 @@ def save_upload(
         target.relative_to(root)
     except ValueError as exc:
         raise Forbidden(t("files.forbidden")) from exc
-    with open(target, "wb") as out:
-        while True:
-            chunk = stream.read(1024 * 1024)
-            if not chunk:
-                break
-            out.write(chunk)
+    _stream_to_file(stream, target, MAX_CHAT_FILE_BYTES)
     try:
         os.chown(target, 1000, 1000)
     except OSError:
@@ -596,25 +612,14 @@ def save_chat_upload(
         target.relative_to(root)
     except ValueError as exc:
         raise Forbidden(t("files.forbidden")) from exc
-    total = 0
-    with open(target, "wb") as out:
-        while True:
-            chunk = stream.read(1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > MAX_CHAT_FILE_BYTES:
-                out.close()
-                try:
-                    target.unlink(missing_ok=True)
-                    directory.rmdir()
-                except OSError:
-                    pass
-                raise AutonomousError(
-                    f"File too large (max {MAX_CHAT_FILE_BYTES // (1024 * 1024)} Mo)",
-                    code="file_too_large",
-                )
-            out.write(chunk)
+    try:
+        total = _stream_to_file(stream, target, MAX_CHAT_FILE_BYTES)
+    except AutonomousError:
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+        raise
     if total == 0:
         try:
             target.unlink(missing_ok=True)

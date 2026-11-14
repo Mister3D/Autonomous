@@ -753,8 +753,9 @@ import {
   clearComposerPending,
 } from "../composerDrafts.js";
 
-/** Pasted vision images (LLM often caps at 2/prompt; extras deferred server-side). */
-const MAX_PENDING_IMAGES = 2;
+/** Pasted images kept in the chat. The model receives a smaller copy. */
+const MAX_PENDING_IMAGES = 16;
+const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();
@@ -1217,6 +1218,10 @@ async function addPendingImages(files) {
     if (pendingImageCount() >= MAX_PENDING_IMAGES) {
       alert(t("chat.tooManyImages", { count: MAX_PENDING_IMAGES }));
       break;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      alert(t("chat.imageTooLarge"));
+      continue;
     }
     try {
       const dataUrl = await fileToDataUrl(file);

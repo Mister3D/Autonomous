@@ -119,6 +119,7 @@
   "chat.dropFiles": "Déposer pour joindre au message",
   "chat.file": "Fichier",
   "chat.tooManyImages": "Maximum {count} images collées par message.",
+  "chat.imageTooLarge": "Image trop lourde (100 Mo maximum).",
   "chat.tooManyAttachments": "Maximum {count} pièces jointes par message.",
   "chat.from": "Message de",
   "chat.today": "Aujourd'hui {time}",

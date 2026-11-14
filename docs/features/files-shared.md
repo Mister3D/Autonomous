@@ -8,7 +8,7 @@
 - `autonomous/api/bots.py` (`/files`, `/files/upload`, `/files/mkdir`, `/files/move`, `/files/download`)
 - `autonomous/services/desk.py` (mounts files + workspace; legacy `shared` alias)
 
-**Last updated**: 2026-11-12 (private `~/files`; `~/shared` is only a legacy alias)
+**Last updated**: 2026-11-14 (upload cap 10 GB per file)
 
 ## User behaviour
 
@@ -32,7 +32,7 @@
 - Host root: `data/bots/<bot>/home/` (= former desk "home").
 - API paths relative to this root; `files/` or `~/files/` prefixes accepted then normalised. Legacy `shared/` and `~/shared/` still resolve to the same root.
 - `files._notify_changed` → `BUS.publish("files.changed", {bot, op, path})`; UI `state.filesFeed` + `LibraryPane` debounce reload.
-- Upload: `POST /api/v1/bots/:name/files/upload?path=.` multipart field `file`. The client **must not** set `Content-Type: application/json` on `FormData` (breaks the boundary → opaque `Failed to fetch` / empty body). Snapshot `dataTransfer.files` synchronously on drop; OS drops on a file row upload into the **current** folder (folder rows / crumbs still target that directory).
+- Upload: `POST /api/v1/bots/:name/files/upload?path=.` multipart field `file`, at most **10 GB** per file. The client **must not** set `Content-Type: application/json` on `FormData` (breaks the boundary → opaque `Failed to fetch` / empty body). Snapshot `dataTransfer.files` synchronously on drop; OS drops on a file row upload into the **current** folder (folder rows / crumbs still target that directory).
 - Text content (agent): `GET|PUT /api/v1/bots/:name/files/content` — see [`agent-files.md`](./agent-files.md).
 - Mkdir: `POST /api/v1/bots/:name/files/mkdir` JSON `{ "path": ".", "name": "dossier" }`.
 - Move: `POST /api/v1/bots/:name/files/move` JSON `{ "src": "a.pdf", "dest": "CV" }` — moves into directory `dest`, keeps basename; refuses self/descendant and name clashes.

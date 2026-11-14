@@ -8,7 +8,7 @@
 - `autonomous/services/chat_attachments.py` (normalize + agent prompt)
 - `autonomous/api/bots.py` (`POST /bots/:name/chat/files`)
 
-**Last updated**: 2026-10-28 (thumbnail grid + side-by-side cards)
+**Last updated**: 2026-11-14 (10 GB per dropped file)
 
 ## User behaviour
 
@@ -23,7 +23,7 @@
 
 - `POST /api/v1/bots/:name/chat/files` multipart `file` → `{ type, name, path, url, size }`.
 - `POST /messages`: `attachments` = mix of image URLs (str) and file objects.
-- No cap on the number of attached files; max 4 **pasted** images (vision); files ≤ 50 MB each.
+- No cap on the number of attached files; each file ≤ 10 GB (chat drop and the Files tab). Pasted images: ≤ 100 MB each, at most 16 per message. The model does not receive those originals: see [`pi-agent.md`](./pi-agent.md).
 
 ## Pitfalls
 

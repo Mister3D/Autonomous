@@ -119,6 +119,7 @@
   "chat.dropFiles": "Drop to attach to the message",
   "chat.file": "File",
   "chat.tooManyImages": "At most {count} pasted images per message.",
+  "chat.imageTooLarge": "Image is too large (100 MB maximum).",
   "chat.tooManyAttachments": "At most {count} attachments per message.",
   "chat.from": "Message from",
   "chat.today": "Today {time}",
