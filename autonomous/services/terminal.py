@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+import select
 import signal
 import subprocess
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +27,10 @@ _MAX_TIMEOUT = 600
 # In-flight ``docker exec`` per bot, so the chat can stop that command
 # without stopping the Pi agent.
 _EXEC_LOCK = threading.Lock()
-_EXEC_PROCS: dict[str, subprocess.Popen[str]] = {}
+_EXEC_PROCS: dict[str, subprocess.Popen[bytes]] = {}
+# Extra seconds after the user's timeout so `timeout -k` can SIGKILL, then we
+# close the pipes ourselves. A blocked read must not add minutes.
+_TIMEOUT_GRACE_S = 8
 _EXEC_CANCELLED: set[str] = set()
 
 
@@ -159,7 +164,7 @@ def _llm_test_clock(bot: str, command: str, *, home: Path | None) -> dict[str, A
     )
 
 
-def _kill_proc(proc: subprocess.Popen[str]) -> None:
+def _kill_proc(proc: subprocess.Popen[bytes]) -> None:
     if proc.poll() is not None:
         return
     try:
@@ -169,6 +174,95 @@ def _kill_proc(proc: subprocess.Popen[str]) -> None:
             proc.kill()
         except OSError:
             pass
+
+
+def _collect_output(proc: subprocess.Popen[bytes], timeout_s: int) -> tuple[int, str, bool]:
+    """Read stdout/stderr until the process exits or the deadline passes.
+
+    ``communicate(timeout=)`` checks the clock between blocking reads. One read
+    that never returns (the docker CLI stuck on a live pipe) used to keep the
+    tool "running" long after the timeout. Reads here are non-blocking, and a
+    second thread closes the pipes so the wait cannot outlive the deadline.
+    """
+    deadline = time.monotonic() + timeout_s + _TIMEOUT_GRACE_S
+    stop = threading.Event()
+
+    def _enforce() -> None:
+        if stop.wait(timeout_s + _TIMEOUT_GRACE_S):
+            return
+        _kill_proc(proc)
+        for stream in (proc.stdout, proc.stderr):
+            if stream is None:
+                continue
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+    threading.Thread(target=_enforce, name="term-timeout", daemon=True).start()
+    chunks: list[bytes] = []
+    total = 0
+    fds: list[int] = []
+    for stream in (proc.stdout, proc.stderr):
+        if stream is None:
+            continue
+        fd = stream.fileno()
+        os.set_blocking(fd, False)
+        fds.append(fd)
+    forced = False
+
+    def _read(fd: int) -> bool:
+        nonlocal total
+        if fd not in fds:
+            return False
+        try:
+            data = os.read(fd, 65536)
+        except BlockingIOError:
+            return False
+        except OSError:
+            fds.remove(fd)
+            return False
+        if not data:
+            fds.remove(fd)
+            return False
+        if total < _MAX_OUTPUT_CHARS:
+            take = data[: _MAX_OUTPUT_CHARS - total]
+            chunks.append(take)
+            total += len(take)
+        return True
+
+    try:
+        while fds and time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            try:
+                ready, _, _ = select.select(fds, [], [], min(0.5, max(0.0, remaining)))
+            except (ValueError, OSError):
+                break
+            if not ready:
+                if proc.poll() is not None and not any(_read(fd) for fd in list(fds)):
+                    break
+                continue
+            for fd in list(ready):
+                _read(fd)
+        # Pipes can EOF a moment before the exit status is waitable.
+        # Wait briefly; only a process still alive here is past the deadline.
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            _kill_proc(proc)
+            forced = True
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        stop.set()
+    output = b"".join(chunks).decode("utf-8", errors="replace")
+    code = proc.returncode
+    if code is None:
+        forced = True
+        code = 124
+    return int(code), output, forced
 
 
 def cancel_running_command(bot: str) -> bool:
@@ -228,7 +322,8 @@ def exec_command(
     timeout_s = max(1, min(timeout_s, _MAX_TIMEOUT))
 
     name = desk_svc.container_name(bot, home=home)
-    # subprocess + `docker exec` so timeout is reliably enforced (SDK exec_run has none).
+    # `timeout -k` kills the process inside the VM. Killing only the docker
+    # client leaves that process running and the tool waiting on its pipe.
     cmd = [
         "docker",
         "exec",
@@ -243,17 +338,20 @@ def exec_command(
         "-e",
         "HOME=/home/autonomous",
         name,
+        "/usr/bin/timeout",
+        "-k",
+        "5",
+        str(timeout_s),
         "bash",
         "-lc",
         command,
     ]
-    proc: subprocess.Popen[str] | None = None
+    proc: subprocess.Popen[bytes] | None = None
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
             start_new_session=True,
         )
     except FileNotFoundError as exc:
@@ -262,19 +360,16 @@ def exec_command(
         _EXEC_CANCELLED.discard(bot)
         _EXEC_PROCS[bot] = proc
     try:
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout_s)
-            exit_code = int(proc.returncode or 0)
-            output = (stdout or "") + (stderr or "")
-        except subprocess.TimeoutExpired:
-            _kill_proc(proc)
-            exit_code = 124
-            output = f"[timeout after {timeout_s}s]"
+        exit_code, output, forced = _collect_output(proc, timeout_s)
         with _EXEC_LOCK:
             stopped = bot in _EXEC_CANCELLED
         if stopped:
             exit_code = 130
             output = (output or "") + "\n[stopped]"
+        elif forced or exit_code in (124, 137, -9, -15):
+            exit_code = 124
+            if "[timeout after" not in (output or ""):
+                output = ((output or "").rstrip() + f"\n[timeout after {timeout_s}s]").strip()
     finally:
         with _EXEC_LOCK:
             if _EXEC_PROCS.get(bot) is proc:

@@ -98,6 +98,42 @@ def test_cancel_stops_inflight_command(home, monkeypatch):
     assert term_svc.cancel_running_command("cancelbot") is False
 
 
+def test_timeout_stops_a_command_that_keeps_running(home, monkeypatch):
+    from autonomous.services import desk as desk_svc
+
+    bots_svc.create_bot("Timebot", slug="timebot", home=home)
+    bots_svc.patch_bot(
+        "timebot",
+        {"capability": "terminal", "desk": {"state": "running"}},
+        home=home,
+    )
+    monkeypatch.setattr(desk_svc, "ensure_awake", lambda *a, **k: None)
+    monkeypatch.setattr(desk_svc, "container_name", lambda *a, **k: "unused")
+
+    real_popen = subprocess.Popen
+
+    def fake_popen(cmd, **kwargs):
+        # Ignores SIGTERM, keeps the pipe open. The timeout must still return.
+        return real_popen(
+            [
+                "python3",
+                "-c",
+                "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+
+    monkeypatch.setattr(term_svc.subprocess, "Popen", fake_popen)
+    started = time.monotonic()
+    entry = term_svc.exec_command("timebot", "echo stuck", timeout=1, home=home)
+    elapsed = time.monotonic() - started
+    assert elapsed < 12
+    assert entry["exit_code"] == 124
+    assert "[timeout after 1s]" in entry["output"]
+
+
 def test_terminal_exec_api_auth(home, auth_client):
     bots_svc.create_bot("ApiTerm", slug="api-term", home=home)
     r = auth_client.post(

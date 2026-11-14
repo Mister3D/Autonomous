@@ -2,7 +2,7 @@
 
 **Status**: in place (one-shot exec; interactive PTY = UI tab only)  
 **Key files**: `autonomous/services/terminal.py`, `autonomous/pi_extensions/vm.ts`, `autonomous/services/pi_rpc.py`, `POST /bots/:name/terminal/exec`  
-**Last updated**: 2026-11-05 (host shell removed — VM only)
+**Last updated**: 2026-11-14 (a vm_terminal_exec timeout kills the VM process and the wait)
 
 ## User behaviour
 
@@ -18,12 +18,13 @@
 
 ## Implementation
 
-- `term_svc.exec_command`: `docker exec … bash -lc` inside the desk container.
+- `term_svc.exec_command`: `docker exec … timeout -k 5 <seconds> bash -lc` inside the desk container. The host closes the pipes at the deadline, so a stuck read cannot keep the tool running. The Pi tool aborts its own HTTP call 15s after that deadline if the reply never arrives.
 - `GET /bots/:name/desk` exposes `pending_request_id` / `pending_state` for agent polling.
 
 ## Pitfalls / non-regressions
 
 - This is **not** the Terminal tab's WebSocket PTY.
+- A `timeout` of 300s must end the tool around that mark. Killing only the `docker exec` client leaves the command alive in the VM and the chat on "en cours".
 - Don't make `vm_request_desk` return immediately after the card: the agent would carry on for nothing.
 - Restart the Pi session after changing `vm.ts`.
 

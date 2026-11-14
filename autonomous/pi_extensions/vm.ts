@@ -26,6 +26,7 @@ async function api(
   method: string,
   path: string,
   body?: Json,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; status: number; data: any }> {
   const cfg = apiConfig();
   if (!cfg) {
@@ -46,6 +47,7 @@ async function api(
       Accept: "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   let data: any = null;
   const ct = res.headers.get("content-type") || "";
@@ -728,10 +730,34 @@ export default function (pi: ExtensionAPI) {
         return textResult("command is required");
       }
       const timeout = Math.max(1, Math.min(Number(params.timeout) || 30, 600));
-      const res = await api("POST", `/bots/${encodeURIComponent(cfg.bot)}/terminal/exec`, {
-        command,
-        timeout,
-      });
+      const timedOut = () =>
+        textResult(`[timeout after ${timeout}s]`, { error: true, timed_out: true });
+      // The server kills the command at `timeout`. If that reply never comes,
+      // abort this fetch only — not a later desk approval — so the tool ends.
+      const execCall = async () => {
+        const ctrl = new AbortController();
+        const onAbort = () => ctrl.abort();
+        signal?.addEventListener("abort", onAbort);
+        const killer = setTimeout(() => ctrl.abort(), (timeout + 15) * 1000);
+        try {
+          return await api(
+            "POST",
+            `/bots/${encodeURIComponent(cfg.bot)}/terminal/exec`,
+            { command, timeout },
+            ctrl.signal,
+          );
+        } catch (err) {
+          if (ctrl.signal.aborted || (err as { name?: string })?.name === "AbortError") {
+            return null;
+          }
+          throw err;
+        } finally {
+          clearTimeout(killer);
+          signal?.removeEventListener("abort", onAbort);
+        }
+      };
+      const res = await execCall();
+      if (!res) return timedOut();
       if (!res.ok) {
         const code = String(res.data?.error_code || res.data?.code || "");
         let hint = errMessage(res.data, res.status);
@@ -741,11 +767,8 @@ export default function (pi: ExtensionAPI) {
             signal,
           });
           if (wait.details && (wait.details as Json).state === "running") {
-            const retry = await api(
-              "POST",
-              `/bots/${encodeURIComponent(cfg.bot)}/terminal/exec`,
-              { command, timeout },
-            );
+            const retry = await execCall();
+            if (!retry) return timedOut();
             if (retry.ok) {
               const entry = retry.data || {};
               const output = String(entry.output ?? "");
