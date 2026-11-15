@@ -4514,6 +4514,29 @@ label.muted {
   background: #f3f3f6;
 }
 
+.vault-row-ops {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex: none;
+}
+
+.vault-row-ops .action-confirm {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--danger);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.vault-row-ops .action-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
 .vault-trash {
   width: 32px;
   height: 32px;
@@ -5569,6 +5592,19 @@ button.msg-queued-action:disabled {
 
 .bubble p {
   margin: 0.35em 0;
+}
+
+.bubble.assistant {
+  text-align: justify;
+  text-align-last: start;
+  hyphens: auto;
+  overflow-wrap: break-word;
+}
+
+.bubble.assistant :is(pre, code, table, .md-table-wrap, .code-block) {
+  text-align: start;
+  text-align-last: start;
+  hyphens: manual;
 }
 
 .bubble :first-child {

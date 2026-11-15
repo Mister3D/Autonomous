@@ -237,6 +237,9 @@ class MessageCreateSchema(Schema):
     attachments = fields.List(fields.Raw(), load_default=list)
     # Optional agent prompt override (stored bubble stays ``content``).
     prompt = fields.Str(load_default=None, allow_none=True)
+    # When the bot is busy, store the message for the next turn but hide the
+    # queue chrome until that turn actually starts.
+    hold = fields.Bool(load_default=False)
 
     @validates_schema
     def require_content_or_attachments(self, data, **kwargs):

@@ -1185,7 +1185,7 @@ function compareQueued(a, b) {
 
 const firstQueuedId = computed(() => {
   const list = (state.messages[props.bot.name] || [])
-    .filter((m) => m?.meta?.queued && !m?.meta?.hidden_prompt)
+    .filter((m) => m?.meta?.queued && !m?.meta?.hidden_prompt && !m?.meta?.hold)
     .slice()
     .sort(compareQueued);
   return list[0]?.id ?? null;
@@ -1197,6 +1197,7 @@ function isFirstQueued(message) {
 }
 
 function canEditQueued(message) {
+  if (message?.meta?.hold) return false;
   if (message?.role !== "user" || !message?.meta?.queued) return false;
   if (isEventTrigger(message) || botmailDirection(message)) return false;
   return true;
@@ -2134,7 +2135,7 @@ function sourceOf(m) {
 
 const thread = computed(() => {
   const all = (state.messages[props.bot.name] || []).filter(
-    (m) => !m?.meta?.hidden_prompt
+    (m) => !m?.meta?.hidden_prompt && !m?.meta?.hold
   );
   const queued = all
     .filter((m) => m?.meta?.queued)
@@ -2295,7 +2296,7 @@ const thread = computed(() => {
 
 const hasQueued = computed(() =>
   (state.messages[props.bot.name] || []).some(
-    (m) => m?.meta?.queued && !m?.meta?.hidden_prompt
+    (m) => m?.meta?.queued && !m?.meta?.hidden_prompt && !m?.meta?.hold
   )
 );
 

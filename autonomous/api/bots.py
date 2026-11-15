@@ -258,6 +258,7 @@ class BotMessages(MethodView):
                 data.get("content") or "",
                 attachments=data.get("attachments") or [],
                 prompt=data.get("prompt"),
+                hold_until_idle=bool(data.get("hold")),
                 home=g.home,
             )
         except AutonomousError as exc:

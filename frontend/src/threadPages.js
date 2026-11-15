@@ -72,7 +72,7 @@ export async function loadLatestMessages(name) {
       page.hasMore = remote.length >= THREAD_PAGE;
       page.before = remote[0]?.created_at || null;
     }
-    const last = [...remote].reverse().find((m) => !m?.meta?.hidden_prompt);
+    const last = [...remote].reverse().find((m) => !m?.meta?.hidden_prompt && !m?.meta?.hold);
     if (last) {
       state.previews[name] = String(last.content || "")
         .replace(/\s+/g, " ")

@@ -2,13 +2,13 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/{vault,crypto_box,vault_inject,vnc_type_worker}.py`, `autonomous/api/{vault_routes,bots}.py`, `autonomous/migrations/001_schema.sql`, `autonomous/pi_extensions/vault.ts`, `frontend/src/components/{VaultRequestCard,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-11 (OTP / temporary codes from mail are shown, vault secrets stay hidden)
+**Last updated**: 2026-11-15 (vault delete is arm → check, not a browser confirm)
 
 ## User behaviour
 
 - A vault **global** to the application (not per bot). Secrets encrypted at rest (`data/vault.key` + SQLite blob).
 - By default, **no bot has access** to any entry.
-- In **Settings**: list the entries. No add form — the bot asks for a secret in the chat. Deletion is a **bin icon** (accessible label "Delete"). Values are never returned by the list API.
+- In **Settings**: list the entries. No add form — the bot asks for a secret in the chat. Deletion is a **bin icon** (accessible label "Delete"), then a check (tooltip « Confirm? »). The first click does not delete. Values are never returned by the list API.
 - When the bot needs credentials:
   - the agent **defines the form fields itself** (`request_credentials`) — e.g. only an API key, or login+password, or token+endpoint;
   - a **form card** appears in the chat;
@@ -74,6 +74,7 @@
 
 - Never put the secret in chat `content`, tool `result_json`, or Pi replies. A temporary code from a mail is not a vault needle: scrub only removes values stored in the vault.
 - No add form in Settings. The entry comes through the chat card (`request_credentials` / login / secret). The list and the bin remain.
+- Don't delete a vault entry on the first click of the bin, and don't use `window.confirm`. Arm → check, same as Files.
 - `report_user_secret`: the agent must **not** write "I'm calling the tool…" — hint + `hidden_prompt` masking of the turn's assistant bubbles.
 - Abort after report = `mark_silent_abort`: no `⚠️ This operation was aborted`; `restore_text` only via SSE to the composer.
 - Pi scrub: `MANAGER.stop` then `scrub_pi_session_files` (user message + known `mot de passe:` / vault fragments). The provider has already seen the secret; we just no longer **keep** it in the session.

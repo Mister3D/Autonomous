@@ -378,19 +378,49 @@
               <strong>{{ e.label }}</strong>
               <small>{{ e.kind }}<template v-if="e.origin"> · {{ e.origin }}</template></small>
             </div>
-            <button
-              class="vault-trash"
-              type="button"
-              :title="t('vault.delete')"
-              :aria-label="t('vault.delete')"
-              @click="removeEntry(e)"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path d="M5 7.5h14" />
-                <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-                <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-              </svg>
-            </button>
+            <span class="vault-row-ops">
+              <span
+                v-if="armedVault === e.id"
+                class="action-confirm-wrap"
+                @pointerenter="vaultTip = e.id"
+                @pointerleave="vaultTip = ''"
+                @focusin="vaultTip = e.id"
+                @focusout="vaultTip = ''"
+              >
+                <button
+                  class="action-confirm"
+                  type="button"
+                  :aria-label="t('confirm.confirmAction')"
+                  @click="removeEntry(e)"
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                    <path
+                      d="M3.2 8.2 6.4 11.4 12.8 4.6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+                <span v-if="vaultTip === e.id" class="action-confirm-tip" role="tooltip">{{
+                  t("confirm.confirmAction")
+                }}</span>
+              </span>
+              <button
+                class="vault-trash"
+                type="button"
+                :aria-label="t('vault.delete')"
+                @click="armVault(e)"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path d="M5 7.5h14" />
+                  <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+                  <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+                </svg>
+              </button>
+            </span>
           </li>
         </ul>
         <p v-else class="hint">{{ t("vault.empty") }}</p>
@@ -716,6 +746,8 @@ watch(
 );
 const entries = ref([]);
 const vaultError = ref("");
+const armedVault = ref("");
+const vaultTip = ref("");
 const devicePending = ref([]);
 const deviceRows = ref([]);
 const deviceError = ref("");
@@ -1007,10 +1039,17 @@ async function loadVault() {
   entries.value = await api.vaultEntries();
 }
 
+function armVault(e) {
+  armedVault.value = armedVault.value === e.id ? "" : e.id;
+  vaultTip.value = "";
+}
+
 async function removeEntry(e) {
-  if (!confirm(t("vault.confirmDelete", { label: e.label }))) return;
+  if (armedVault.value !== e.id) return;
   try {
     await api.deleteVaultEntry(e.id);
+    armedVault.value = "";
+    vaultTip.value = "";
     await loadVault();
   } catch (err) {
     vaultError.value = err.message;

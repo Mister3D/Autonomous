@@ -891,7 +891,7 @@ function onBotListScroll() {
 
 function previewOf(b) {
   const msgs = state.messages[b.name] || [];
-  const last = [...msgs].reverse().find((m) => !m?.meta?.hidden_prompt);
+  const last = [...msgs].reverse().find((m) => !m?.meta?.hidden_prompt && !m?.meta?.hold);
   const raw = last ? last.content : state.previews[b.name] || "";
   return String(raw || "").replace(/\s+/g, " ").trim();
 }
@@ -1155,6 +1155,9 @@ watch(
       loadMessages(name);
       return;
     }
+    // The narrow inspector is a drawer. It unmounts on the home page, so a
+    // leftover open flag would pop it back over the next conversation.
+    state.inspectorOpen = false;
     if (route.name === "bot") router.replace("/");
   }
 );

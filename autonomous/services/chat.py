@@ -127,6 +127,7 @@ def send_message(
     home: Path | None = None,
     trigger_agent: bool = True,
     prompt: str | None = None,
+    hold_until_idle: bool = False,
 ) -> dict[str, Any]:
     from autonomous.services import chat_attachments as attach_svc
     from autonomous.services.errors import ValidationError
@@ -194,6 +195,10 @@ def send_message(
     )
     if pre_queue:
         meta["queued"] = True
+        # Onboarding follow-up: keep the row for the drain, but do not show
+        # the queue chrome (Send now stops the turn still running).
+        if hold_until_idle:
+            meta["hold"] = True
 
     with get_db(home) as conn:
         conn.execute(
@@ -324,15 +329,21 @@ def send_message(
                         cancelled = []
                 if cancelled:
                     return _finish(message)
+                if hold_until_idle:
+                    meta["hold"] = True
                 return _finish(
                     _mark_queued(bot, msg_id, content, meta, home=home)
                 )
+            if hold_until_idle:
+                meta["hold"] = True
             return _finish(
                 _park_queued(bot, msg_id, content, meta, message, home=home)
             )
 
         # Status can still say idle for a moment after a run has claimed the slot.
         if slot_held:
+            if hold_until_idle:
+                meta["hold"] = True
             return _finish(
                 _park_queued(bot, msg_id, content, meta, message, home=home)
             )
@@ -341,6 +352,8 @@ def send_message(
             bot, agent_prompt, stored, home=home, message_id=msg_id
         )
         if started == "busy":
+            if hold_until_idle:
+                meta["hold"] = True
             return _finish(
                 _mark_queued(bot, msg_id, content, meta, home=home)
             )
@@ -478,6 +491,7 @@ def drain_queued_user_messages(bot: str, *, home: Path | None = None) -> bool:
     target = queued[0]
     meta = dict(target.get("meta") or {})
     meta.pop("queued", None)
+    meta.pop("hold", None)
     agent_text = (meta.get("agent_prompt") or target.get("content") or "").strip()
     # Stamp as "sent now" so the bubble lands after the previous turn in the UI.
     update_message(
@@ -1154,9 +1168,12 @@ def retry_unprocessed(bot: str, *, home: Path | None = None) -> dict[str, Any]:
         )
 
     # A live Pi is stopped only from the UI (Working orb). Relancer must not
-    # abort it, however long the turn has already run.
+    # abort it, however long the turn has already run. A slot with status
+    # idle is a leftover from a deleted bot or a dead worker — not a live turn.
     if agent_svc.run_in_progress(bot):
-        return {"ok": True, "action": "live"}
+        if status != "idle":
+            return {"ok": True, "action": "live"}
+        agent_svc.clear_active_run(bot)
 
     # Soft clear — keep pi_session_id so the conversation context stays intact.
     agent_svc.clear_active_run(bot)

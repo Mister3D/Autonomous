@@ -105,6 +105,32 @@ def test_message_queued_while_busy(auth_client, home):
     assert "queued" not in (sent[-1].get("meta") or {})
 
 
+def test_hold_until_idle_hides_queue_until_drain(auth_client, home):
+    """Onboarding follow-up must not sit in the visible queue while a turn runs."""
+    from autonomous.services import bots as bots_svc
+    from autonomous.services import chat as chat_svc
+
+    auth_client.post("/api/v1/bots", json={"name": "qhold"})
+    bots_svc.patch_bot("qhold", {"status": "busy"}, home=home)
+    r = auth_client.post(
+        "/api/v1/bots/qhold/messages",
+        json={"content": "Continuons", "hold": True, "prompt": "script"},
+    )
+    assert r.status_code == 201, r.data
+    assert r.json["meta"].get("queued") is True
+    assert r.json["meta"].get("hold") is True
+    assert r.json["meta"].get("agent_prompt") == "script"
+
+    bots_svc.patch_bot("qhold", {"status": "idle"}, home=home)
+    assert chat_svc.drain_queued_user_messages("qhold", home=home) is True
+    msgs = auth_client.get("/api/v1/bots/qhold/messages").json
+    sent = [m for m in msgs if m["role"] == "user" and m.get("content") == "Continuons"]
+    assert len(sent) == 1
+    assert "queued" not in (sent[0].get("meta") or {})
+    assert "hold" not in (sent[0].get("meta") or {})
+    assert sent[0]["meta"].get("agent_prompt") == "script"
+
+
 def test_queued_stamped_on_create_event(auth_client, home):
     """Busy send must publish message.created already with meta.queued (no blue flash)."""
     from autonomous.services import bots as bots_svc
@@ -232,6 +258,30 @@ def test_message_queued_while_run_slot_held(auth_client, home):
         assert [m["content"] for m in queued] == ["premier", "deuxième"]
     finally:
         agent_svc._release_run("qslot", settled)
+
+
+def test_delete_bot_drops_run_slot_so_recreate_is_not_queued(auth_client, home):
+    """Deleting a bot must not leave a ghost run that queues the next first message."""
+    import threading
+
+    from autonomous.services import agent as agent_svc
+
+    created = auth_client.post("/api/v1/bots", json={"name": "ghost"})
+    assert created.status_code == 201, created.data
+    settled = threading.Event()
+    assert agent_svc._register_run("ghost", settled)
+    deleted = auth_client.delete("/api/v1/bots/ghost")
+    assert deleted.status_code == 200, deleted.data
+    assert agent_svc.run_in_progress("ghost") is False
+
+    again = auth_client.post("/api/v1/bots", json={"name": "ghost"})
+    assert again.status_code == 201, again.data
+    sent = auth_client.post(
+        "/api/v1/bots/ghost/messages", json={"content": "bonjour"}
+    )
+    assert sent.status_code == 201, sent.data
+    assert sent.json["meta"].get("queued") is not True
+    agent_svc.clear_active_run("ghost")
 
 
 def test_openapi_generated(auth_client):

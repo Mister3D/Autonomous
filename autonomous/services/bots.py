@@ -727,9 +727,18 @@ def delete_bot(name: str, home: Path | None = None, destroy_desk: bool = True) -
     bot_row = get_bot(name, home=home)
     bid = bot_row.get("id") or ""
     cancel_waiting_nudge(name, home=home)
+    # Drop the in-memory run slot before the row disappears. Otherwise the
+    # next bot with this slug looks busy, and its first message stays queued.
+    try:
+        from autonomous.services.agent import clear_active_run
+
+        clear_active_run(name)
+    except Exception:
+        pass
     try:
         from autonomous.services.pi_rpc import MANAGER
 
+        MANAGER.abort(name)
         MANAGER.stop(name)
     except Exception:
         pass

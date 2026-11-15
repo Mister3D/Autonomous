@@ -2,7 +2,7 @@
 
 import { api } from "./api";
 import { i18n, setLocale } from "./i18n";
-import { dropOptimisticDupes, isOptimisticMessageId, state } from "./store";
+import { dropOptimisticDupes, state } from "./store";
 
 function normalizeLang(answer) {
   return String(answer || "")
@@ -82,6 +82,58 @@ function rememberMessage(botName, saved) {
   }
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function turnIsLive(name) {
+  const row = (state.bots || []).find((b) => b.name === name);
+  const status = String(row?.status || "");
+  if (status === "busy" || status === "waiting") return true;
+  const msgs = state.messages[name] || [];
+  return msgs.some(
+    (m) =>
+      m?.meta?.streaming ||
+      (m?.meta?.kind === "tool" && m?.meta?.status === "running") ||
+      (m?.role === "assistant" && m?.meta?.status === "running")
+  );
+}
+
+/**
+ * The language answer resumes the same run. Posting the next user message
+ * while that run is live parks it in the queue, where Send now and Stop both
+ * abort the turn. Wait until the bot is idle.
+ */
+async function waitUntilAgentIdle(name) {
+  const deadline = Date.now() + 180000;
+  const notBefore = Date.now() + 1200;
+  while (Date.now() < deadline) {
+    if (!turnIsLive(name) && Date.now() >= notBefore) {
+      await delay(400);
+      if (!turnIsLive(name)) return true;
+    }
+    await delay(250);
+  }
+  return false;
+}
+
+/**
+ * Send once the agent looks free. If the run slot is still held, the server
+ * stores the message with ``meta.hold`` and the thread hides it until the
+ * current turn ends — no « En file » / Send now.
+ */
+async function deliverPrefs(bot, visible, script) {
+  const saved = await api.sendMessage(bot, visible, [], {
+    prompt: script,
+    hold: true,
+  });
+  if (!saved?.id) return null;
+  if (!saved.meta?.hold) rememberMessage(bot, saved);
+  return saved;
+}
+
+let prefsInFlight = false;
+
 function prefsPayload(resolved) {
   if (resolved.script === "fr" || resolved.script === "en") {
     const loc = resolved.script;
@@ -106,55 +158,46 @@ function prefsPayload(resolved) {
  */
 export async function maybeContinueFirstChatPrefs(bot, answer) {
   const pending = state.firstChatPrefsPending || "";
-  if (!bot || pending !== bot) return false;
+  if (!bot || pending !== bot || prefsInFlight) return false;
   const resolved = resolveOnboardingLang(answer);
   if (!resolved) return false;
 
-  state.firstChatPrefsPending = null;
+  prefsInFlight = true;
   try {
-    await api.putSettings({
-      first_chat_prefs_pending: null,
-      first_chat_done: true,
-      first_chat_onboarding: true,
-      locale: resolved.ui,
-    });
-  } catch {
-    /* continue — message still useful */
-  }
-  setLocale(resolved.ui, { persist: false }); // already written in putSettings above
-
-  const { visible, script } = prefsPayload(resolved);
-  if (!script || script.length < 200) {
-    throw new Error("Onboarding prefs script missing or truncated");
-  }
-  const tempId = `tmp-prefs-${Date.now()}`;
-  rememberMessage(bot, {
-    id: tempId,
-    bot,
-    conversation_id: "main",
-    role: "user",
-    content: visible,
-    attachments: [],
-    meta: {},
-    created_at: new Date().toISOString(),
-  });
-  try {
-    const saved = await api.sendMessage(bot, visible, [], { prompt: script });
-    const list = state.messages[bot] || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i]?.id === tempId || (isOptimisticMessageId(list[i]?.id) && list[i].content === visible)) {
-        list.splice(i, 1);
-      }
+    try {
+      await api.putSettings({
+        first_chat_onboarding: true,
+        locale: resolved.ui,
+      });
+    } catch {
+      /* continue — message still useful */
     }
-    if (saved?.id) rememberMessage(bot, saved);
+    setLocale(resolved.ui, { persist: false });
+
+    const { visible, script } = prefsPayload(resolved);
+    if (!script || script.length < 200) {
+      throw new Error("Onboarding prefs script missing or truncated");
+    }
+    // Keep the pending flag until the message is actually accepted, so a
+    // reload during the wait can resume. Do not paint a queued bubble.
+    const idle = await waitUntilAgentIdle(bot);
+    if (!idle) return false;
+    const saved = await deliverPrefs(bot, visible, script);
+    if (!saved) return false;
+    state.firstChatPrefsPending = null;
+    try {
+      await api.putSettings({
+        first_chat_prefs_pending: null,
+        first_chat_done: true,
+      });
+    } catch {
+      /* the message is already in the thread */
+    }
     return true;
   } catch (e) {
-    const list = state.messages[bot] || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i]?.id === tempId) list.splice(i, 1);
-    }
-    state.firstChatPrefsPending = bot;
     throw e;
+  } finally {
+    prefsInFlight = false;
   }
 }
 

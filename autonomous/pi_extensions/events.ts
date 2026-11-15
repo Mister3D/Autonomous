@@ -116,7 +116,7 @@ export default function (pi: ExtensionAPI) {
       + "cron = 5 fields (minute hour day-of-month month day-of-week), "
       + "e.g. 09:00 in that zone = '0 9 * * 1-5'. The server stores the UTC equivalent. "
       + "Before a relative time (« in N minutes »), read the clock with vm_terminal_exec "
-      + "as `TZ=<user timezone> date` — it asks for a terminal VM if needed. "
+      + "as `TZ=<user timezone> date` — it asks for the VM if needed. "
       + "Never pass -u / --utc: `date -u` is UTC and ignores TZ=. "
       + "Never invent the hour, do not add the UTC offset to the cron hour, "
       + "and do not use the VM clock's own zone. "

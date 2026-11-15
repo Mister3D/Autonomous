@@ -116,7 +116,7 @@ Prefer these for new chrome. Re-exported from `components/ui/index.js`.
 | `UiIconBadge.vue` | Icon in soft badge (inspector rows, settings nav). |
 | `UiToggleRow.vue` | Title + hint + switch; **custom tooltip** on the switch (`tip` / `disabledReason`) — never browser `title` for that tip. |
 
-Shared patterns (not separate files): **arm → check** confirm (`.action-confirm` + `.action-confirm-tip`) in `ManageMenu`, Settings delete-all, Files delete; **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`).
+Shared patterns (not separate files): **arm → check** confirm (`.action-confirm` + `.action-confirm-tip`) in `ManageMenu`, Settings delete-all, Settings vault delete, Files delete; **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`).
 
 ## Pitfalls / non-regressions
 

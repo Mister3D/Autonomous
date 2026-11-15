@@ -331,6 +331,12 @@ def _release_run(bot: str, settled: threading.Event) -> bool:
         return False
 
 
+def _owns_run(bot: str, settled: threading.Event) -> bool:
+    """True when this worker still holds the slot (delete / reclaim may have taken it)."""
+    with _ACTIVE_LOCK:
+        return _ACTIVE_RUNS.get(bot) is settled
+
+
 def _is_already_processing_error(err: str | None) -> bool:
     if not err:
         return False
@@ -1103,6 +1109,10 @@ class PiAgent:
                 state["error"] = str(exc)
                 state["settled"].set()
             finally:
+                # Delete / reclaim already dropped this slot. Do not write into
+                # the slug or drain a queue that now belongs to a new bot.
+                if not _owns_run(bot, settled):
+                    return
                 # Snapshot before close_assistant() clears state["content"].
                 final_assistant = str(state.get("content") or "")
                 soft_busy = _is_already_processing_error(state.get("error"))

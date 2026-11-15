@@ -7,7 +7,7 @@
 - `autonomous/models/schemas.py` (`BotCreateSchema`)
 - `frontend/src/api.js` (`formatApiError` for flask-smorest 422)
 
-**Last updated**: 2026-11-13 (bot-list scrollbar on the rail edge)
+**Last updated**: 2026-11-15 (narrow inspector drawer closes on the home page)
 
 ## User behaviour
 
@@ -15,7 +15,7 @@
 - The rail's **Create** button is a round white bordered button, same size as the settings menu (40px). When the rail has no bots at all, that top button is hidden. A centred empty state asks where they went, then shows the same **+** under “Create one now”. As soon as a bot exists, the **+** returns to the top and the empty state goes away. A search that hides every bot does not show that hint.
 - The **Create a bot** modal fits on screen: fields on the left, character and colour on the right (about 820 px). Below 760 px, everything goes back to a single column, and the modal scrolls if needed (`max-height`).
 - No **Role** persona: no UI field, no `bots.role` column, no injection into the Pi prompt, no `--role` CLI. `POST` / `PATCH /bots` reject an unknown `role`.
-- **Right panel** (Details / Events / Files): open by default on large screens. Chevron at the top right of the panel, **aligned** with the tab bar / the two lists (same height, disc on hover). It collapses the panel; the main area takes the width. To reopen it: round button in that same bar, with a space to its left. `localStorage` preference `autonomous.inspectorCollapsed` (absent = open). Below 1080 px the panel stays a drawer, the chevron closes it without remembering the desktop collapse.
+- **Right panel** (Details / Events / Files): open by default on large screens. Chevron at the top right of the panel, **aligned** with the tab bar / the two lists (same height, disc on hover). It collapses the panel; the main area takes the width. To reopen it: round button in that same bar, with a space to its left. `localStorage` preference `autonomous.inspectorCollapsed` (absent = open). Below 1080 px the panel stays a drawer, the chevron closes it without remembering the desktop collapse. Leaving the conversation for the home page (logo, or deleting the last bot) closes that drawer. Starting a conversation afterwards does not open it again.
 - **Details → Delete bot**: the row stays one line. A second click is a check icon at the end of the row (custom tooltip with the question). Not the old Yes/Cancel card, not `window.prompt`. Then `DELETE /bots/:name` (+ wipe Pi/dir + purge linked inbox/asks/schedules/webhooks). **Settings → Delete all bots** still uses the inline card. Delete all goes back to `/`. A slug that no longer exists doesn't stay in the address bar.
 - **Rename**: click on the inspector's `h2` title (next to the avatar) → inline edit → Enter / blur saves (`PATCH /bots/:name` `{label}`); Esc cancels. The technical slug (`bots.name`) **does not change**.
 - The entered **name** may contain **capitals and spaces** (e.g. `Debug Bot`), max 64 characters.

@@ -116,6 +116,7 @@ export const api = {
         content,
         attachments,
         ...(opts.prompt ? { prompt: opts.prompt } : {}),
+        ...(opts.hold ? { hold: true } : {}),
       },
     }),
   /** Chat drop/picker → ~/files/upload/<uuid>/<filename> */
