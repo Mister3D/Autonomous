@@ -211,7 +211,37 @@ def sync_desktop_scripts(bot: str, home: Path | None = None) -> list[str]:
             updated.append(src_name)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             continue
+    _stamp_chrome_eula(name)
     return updated
+
+
+def _stamp_chrome_eula(name: str) -> None:
+    """Drop the Chrome 151 sentinel so the terms dialog is not shown next launch.
+
+    The file lives in the user-data dir (host bind-mount). Writing it here covers
+    a desk that is still running the previous ``bot-chrome``.
+    """
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-u",
+                "autonomous",
+                "-e",
+                "HOME=/home/autonomous",
+                name,
+                "bash",
+                "-lc",
+                'd="${BOT_CHROME_USER_DATA_DIR:-$HOME/shared/.autonomous-chrome}"; '
+                'mkdir -p "$d" && : > "$d/EULA Accepted"',
+            ],
+            check=False,
+            capture_output=True,
+            timeout=15,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
 
 
 def restart_bot_chrome(bot: str, home: Path | None = None) -> bool:
@@ -601,6 +631,29 @@ def _finish_wake_background(bot: str, home: Path | None) -> None:
         sync_desktop_scripts(bot, home=home)
         _ensure_files_alias(bot, home=home)
     except Exception:
+        pass
+    # A terms dialog already on screen is a separate window. Accept it without
+    # killing Chrome (a relaunch would drop the page the user is on).
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-u",
+                "autonomous",
+                "-e",
+                "DISPLAY=:1",
+                "-e",
+                "HOME=/home/autonomous",
+                container_name(bot, home=home),
+                "python3",
+                "/usr/local/bin/dismiss-chrome-tos.py",
+            ],
+            check=False,
+            capture_output=True,
+            timeout=20,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     # xstartup starts Chrome on its own. Only relaunch if CDP is still down
     # after that, so a normal wake does not kill the window the user just opened.

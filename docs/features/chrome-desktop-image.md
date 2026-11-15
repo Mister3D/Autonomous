@@ -9,7 +9,7 @@
 - `docker/desktop/chrome-policy.json`
 - `docker/desktop/webgl-spoof-cdp.py` / `webgl-spoof.js`
 
-**Last updated**: 2026-11-06 (auto-build on serve when missing / sources changed)
+**Last updated**: 2026-11-15 (Chrome 151 terms dialog skipped via the EULA Accepted sentinel)
 
 ## Expected behaviour in the VM
 
@@ -19,7 +19,7 @@
 - **Persistent CDP profile**: `BOT_CHROME_USER_DATA_DIR` = **`$HOME/shared/.autonomous-chrome`** (host bind-mount `data/bots/<bot>/home`). Cookies / localStorage / anti-bot "clearance" cookies survive a container **recreate**. The old path `$HOME/.autonomous-chrome` (container layer) is migrated on first launch. Not `~/.config/google-chrome` (Chrome ≥136 ignores remote-debugging on it).
 - **Locale / TZ**: desk `TZ=Europe/Paris`, `LANG=fr_FR.UTF-8` (otherwise `UTC` + `en-US` vs FR IP = anti-bot signal).
 - **Translate disabled**: policy `TranslateEnabled: false`, prefs `translate.enabled=false` + blocked languages, flag `--disable-features=Translate,TranslateUI`.
-- **No welcome / EULA screens**: `First Run` sentinel file in the profile, prefs `distribution.require_eula=false`, `--no-first-run` / `--no-default-browser-check`, and a `dismiss-chrome-tos.py` safety net (xdotool → Accept) if the native modal still appears. The EU search-engine choice dialog is skipped with `--disable-features=SearchEngineChoice` and `default_search_provider.choice_screen.completion_timestamp`.
+- **No welcome / EULA screens**: `First Run` and `EULA Accepted` sentinel files in the profile (Chrome 151 shows the « Additional Terms of Service » dialog by default unless `EULA Accepted` is present; `--no-first-run` alone does not skip it). `bot-chrome` writes that file before every launch. Waking a desk writes it into the running container as well, and tries once to accept a dialog that is already open, without restarting Chrome. Prefs `distribution.require_eula=false`, `--no-first-run` / `--no-default-browser-check`, and `dismiss-chrome-tos.py` (xdotool → Accept) remain as a safety net. The EU search-engine choice dialog is skipped with `--disable-features=SearchEngineChoice` and `default_search_provider.choice_screen.completion_timestamp`.
 - Spoofed WebGL fingerprint (Intel UHD 620 via CDP) — see env `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL`. Without an active spoof, Chrome exposes **`llvmpipe`** (software GPU) → very bot-like (detected by anti-bots).
 - Spoof OK ≠ site OK: an anti-bot may still show an interstitial (CDP remote-debugging, etc.). The GPU is only one signal.
 

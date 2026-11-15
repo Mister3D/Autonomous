@@ -57,9 +57,12 @@ elif [ -d "$legacy_udd" ] && [ ! -L "$legacy_udd" ] && [ "$udd" != "$legacy_udd"
   # Stale non-persistent copy — prefer shared; leave it (do not delete mid-run).
   :
 fi
-# Sentinel that skips first-run / Additional Terms of Service modal on Linux.
-# --no-first-run alone is not enough on recent Google Chrome builds.
+# Sentinels that skip first-run and the Linux « Additional Terms » dialog.
+# Since Chrome 151 the EULA is required by default. --no-first-run and the
+# « First Run » file are not enough: Chrome still shows the dialog unless
+# « EULA Accepted » exists in the user-data dir (same check as upstream tests).
 : >"$udd/First Run"
+: >"$udd/EULA Accepted"
 python3 - "$udd/Default/Preferences" <<'PY' 2>/dev/null || true
 import json, os, sys, time
 p = sys.argv[1]
