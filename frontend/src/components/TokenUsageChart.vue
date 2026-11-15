@@ -2,11 +2,58 @@
   <div class="token-usage">
     <header class="token-usage-head">
       <h2>{{ t("settings.tokensTitle") }}</h2>
-      <p class="hint">{{ t("settings.tokensHint") }}</p>
+      <p class="hint">{{ narrow ? t("settings.tokensHintMobile") : t("settings.tokensHint") }}</p>
     </header>
 
     <div v-if="loading" class="token-usage-empty">…</div>
     <div v-else-if="error" class="token-usage-empty vault-error">{{ error }}</div>
+    <template v-else-if="narrow">
+      <div v-if="selectedDay" class="token-usage-daynav">
+        <button
+          type="button"
+          :disabled="!canPrevDay"
+          :aria-label="t('settings.tokensPrevDay')"
+          @click="shiftDay(-1)"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 6.5 9 12l5.5 5.5" />
+          </svg>
+        </button>
+        <span class="token-usage-daynav-date">{{ formatNavDate(selectedDay) }}</span>
+        <button
+          type="button"
+          :disabled="!canNextDay"
+          :aria-label="t('settings.tokensNextDay')"
+          @click="shiftDay(1)"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.5 6.5 15 12l-5.5 5.5" />
+          </svg>
+        </button>
+      </div>
+      <div class="token-usage-table-wrap">
+        <p v-if="!dayBots.length" class="token-usage-empty">{{ t("settings.tokensDayEmpty") }}</p>
+        <table v-else class="token-usage-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t("settings.tokensColBot") }}</th>
+              <th scope="col">{{ t("settings.tokensColTotal") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in dayBots" :key="s.bot">
+              <th scope="row">
+                <span class="token-usage-bot">
+                  <BotAvatar class="token-usage-legend-av" :bot="legendBot(s)" size="sm" />
+                  <span class="token-usage-bot-name">{{ s.label }}</span>
+                </span>
+              </th>
+              <td>{{ formatExact(s.amount) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
     <template v-else>
       <ul
         v-if="series.length"
@@ -114,7 +161,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { SWATCHES, swatchCssAt } from "@companion-avatar";
 import { api } from "../api";
@@ -125,7 +172,10 @@ const WINDOW_DAYS = 30;
 const PX_PER_DAY = 28;
 const pad = { t: 16, r: 12, b: 28, l: 8 };
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const NARROW_MQ = "(max-width: 760px)";
+const narrow = ref(typeof window !== "undefined" && window.matchMedia(NARROW_MQ).matches);
+const dayIndex = ref(-1);
 const loading = ref(true);
 const error = ref("");
 const days = ref([]);
@@ -135,6 +185,37 @@ const scrollEl = ref(null);
 const chartH = ref(420);
 const hover = ref(null);
 let ro = null;
+let narrowMq = null;
+
+function syncNarrow() {
+  narrow.value = !!(narrowMq && narrowMq.matches);
+}
+
+watch(days, (list) => {
+  if (!list.length) {
+    dayIndex.value = -1;
+    return;
+  }
+  if (dayIndex.value < 0 || dayIndex.value >= list.length) dayIndex.value = list.length - 1;
+});
+
+const selectedDay = computed(() => days.value[dayIndex.value] || "");
+const canPrevDay = computed(() => dayIndex.value > 0);
+const canNextDay = computed(() => dayIndex.value >= 0 && dayIndex.value < days.value.length - 1);
+const dayBots = computed(() => {
+  const i = dayIndex.value;
+  if (i < 0) return [];
+  return series.value
+    .map((s) => ({ ...s, amount: Number((s.daily || [])[i]) || 0 }))
+    .filter((s) => s.amount > 0)
+    .sort((a, b) => b.amount - a.amount || String(a.label).localeCompare(String(b.label)));
+});
+
+function shiftDay(delta) {
+  const next = dayIndex.value + delta;
+  if (next < 0 || next >= days.value.length) return;
+  dayIndex.value = next;
+}
 
 const yMax = computed(() => Math.max(1, Number(maxCumulative.value) || 0));
 const nDays = computed(() => days.value.length || 1);
@@ -203,6 +284,25 @@ function pathFor(s) {
     .join(" ");
 }
 
+function formatNavDate(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getUTCFullYear());
+  if (String(locale.value || "").toLowerCase().startsWith("en")) return `${mm}/${dd}/${yyyy}`;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function formatExact(n) {
+  const v = Math.round(Number(n) || 0);
+  try {
+    return v.toLocaleString(locale.value || undefined);
+  } catch {
+    return String(v);
+  }
+}
+
 function formatTokens(n) {
   const v = Math.round(Number(n) || 0);
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -259,6 +359,11 @@ async function load() {
 }
 
 onMounted(async () => {
+  if (typeof window !== "undefined" && window.matchMedia) {
+    narrowMq = window.matchMedia(NARROW_MQ);
+    syncNarrow();
+    narrowMq.addEventListener("change", syncNarrow);
+  }
   await load();
   await nextTick();
   measureHeight();
@@ -271,8 +376,21 @@ onMounted(async () => {
   }
 });
 
+watch(narrow, async (isNarrow) => {
+  if (isNarrow) return;
+  await nextTick();
+  measureHeight();
+  scrollToEnd();
+  if (ro) ro.disconnect();
+  if (typeof ResizeObserver !== "undefined" && scrollEl.value) {
+    ro = new ResizeObserver(() => measureHeight());
+    ro.observe(scrollEl.value);
+  }
+});
+
 onUnmounted(() => {
   if (ro) ro.disconnect();
+  if (narrowMq) narrowMq.removeEventListener("change", syncNarrow);
 });
 </script>
 
@@ -287,6 +405,18 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
+@media (max-width: 760px) {
+  .token-usage {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .token-usage-head {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
 .token-usage-head h2 {
   margin: 0;
   font-size: 1.05rem;
@@ -298,6 +428,122 @@ onUnmounted(() => {
 .token-usage-range {
   margin: 0.2rem 0 0;
 }
+
+.token-usage-daynav {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  margin: 0 0.75rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.token-usage-daynav button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.token-usage-daynav button:hover:not(:disabled) {
+  background: var(--accent-softer);
+  color: var(--accent);
+}
+
+.token-usage-daynav button:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.token-usage-daynav-date {
+  text-align: center;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.token-usage-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.token-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92rem;
+}
+
+.token-usage-table th:nth-child(2),
+.token-usage-table td:nth-child(2),
+.token-usage-table th:nth-child(3),
+.token-usage-table td:nth-child(3) {
+  width: 5.4rem;
+}
+
+.token-usage-table th,
+.token-usage-table td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  font-weight: 550;
+}
+
+.token-usage-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-sidebar);
+  color: #6b6b70;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.token-usage-table tbody th,
+.token-usage-table tbody td {
+  border-top: 1px solid var(--line);
+  font-weight: 500;
+}
+
+.token-usage-table th:nth-child(n + 2),
+.token-usage-table td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.token-usage-bot {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  text-align: left;
+  font-weight: 600;
+}
+
+.token-usage-bot-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 
 .token-usage-empty {
   flex: 1;

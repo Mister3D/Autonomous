@@ -79,7 +79,7 @@ The guard-rail line and the Pi compaction line are not separate components. `Cha
 | `CreateBotModal.vue` | Create bot (label → slug, model). | [`bots-create.md`](./bots-create.md) |
 | `CreateDeskModal.vue` | Manual desk create / replace job progress. | [`desk-screen.md`](./desk-screen.md) |
 | `AvatarEditModal.vue` | Pick companion animal + colour. | [`avatars.md`](./avatars.md) |
-| `SettingsModal.vue` | Full settings page (Générale, LLM, Grounding, Tokens, vault, memory, companions…). | [`llm-settings.md`](./llm-settings.md), [`auth-secrets.md`](./auth-secrets.md) |
+| `SettingsModal.vue` | Full settings page (Générale, LLM, Grounding, Consumption, vault, memory, companions…). | [`llm-settings.md`](./llm-settings.md), [`auth-secrets.md`](./auth-secrets.md) |
 | `SettingsMenu.vue` | Rail orb: open settings / logout. | [`ui-design-system.md`](./ui-design-system.md) |
 
 ## Settings / setup pieces
@@ -88,7 +88,7 @@ The guard-rail line and the Pi compaction line are not separate components. `Cha
 |-----------|------|----------------|
 | `LlmSettings.vue` | Settings → LLM: four cards (default model, providers, models, other models). | [`llm-settings.md`](./llm-settings.md) |
 | `GroundingSettings.vue` | Settings → grounding / UI-TARS keys. | [`grounding.md`](./grounding.md) |
-| `TokenUsageChart.vue` | Settings → Tokens history chart. | [`token-usage.md`](./token-usage.md) |
+| `TokenUsageChart.vue` | Settings → Consumption. Chart on a wide screen; under 760px a day bar and a table of that day’s totals. | [`token-usage.md`](./token-usage.md) |
 | `SetupPanel.vue` | First-run checklist + updates + first chat CTA (home). | [`setup.md`](./setup.md), [`updates.md`](./updates.md) |
 | `SetupItem.vue` / `SetupField.vue` | Checklist row / grounding field helpers. | [`setup.md`](./setup.md) |
 | `SecretInput.vue` | Password-style field with show/hide. | — |
