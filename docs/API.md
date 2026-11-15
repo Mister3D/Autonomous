@@ -167,6 +167,11 @@ GET    /memory/proposals/count         # {count} of proposals still pending
 GET    /memory/proposals/:id
 POST   /memory/proposals/:id/resolve  # approve|deny
 
+GET    /bots/:name/notebook            # orders, open lines, notes (this bot only)
+POST   /bots/:name/notebook            # {kind, body, title?, id?} save immediately
+GET    /bots/:name/notebook/:id
+DELETE /bots/:name/notebook/:id
+
 POST   /approvals/requests            # {bot, prompt, title?} → Accept/Decline card
 GET    /approvals/requests/:id        # poll
 POST   /approvals/requests/:id/resolve  # approve|deny

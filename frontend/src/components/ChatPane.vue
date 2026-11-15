@@ -131,6 +131,12 @@
             >{{ item.time }}</time>
           </div>
         </article>
+        <article v-else-if="item.kind === 'notebook'" class="msg notebook" :data-msg-id="item.id">
+          <p class="notebook-line">
+            <span>{{ item.text }}</span>
+            <time v-if="item.time" :datetime="item.iso">{{ item.time }}</time>
+          </p>
+        </article>
         <article v-else-if="item.kind === 'compaction'" class="msg guard" :data-msg-id="item.id">
           <div class="guard-card compaction-card" :class="item.status">
             <span class="guard-ico" aria-hidden="true">{{ item.icon }}</span>
@@ -1613,6 +1619,10 @@ const HIDDEN_TOOL_CARDS = new Set([
   "memory_list",
   "memory_get",
   "memory_search",
+  "notebook_list",
+  "notebook_get",
+  "notebook_remember",
+  "notebook_close",
   "ask_approval",
   "ask_clarify",
   "report_user_secret",
@@ -1881,6 +1891,30 @@ function isGuardSystem(m) {
 
 function isCompaction(m) {
   return m?.role === "system" && m?.meta?.kind === "compaction";
+}
+
+function isNotebook(m) {
+  return m?.role === "system" && m?.meta?.kind === "notebook";
+}
+
+function notebookItem(m) {
+  const d = parseDate(m.created_at);
+  const time = d ? formatMsgTime(m.created_at, locale.value) : "";
+  const meta = m.meta || {};
+  const tier = String(meta.tier || "note");
+  const action = String(meta.action || "set");
+  const text = String(meta.text || meta.title || m.content || "");
+  let key = "chat.notebookNote";
+  if (action === "close") key = "chat.notebookRemoved";
+  else if (tier === "order") key = "chat.notebookOrder";
+  else if (tier === "open") key = "chat.notebookOpen";
+  return {
+    kind: "notebook",
+    id: m.id,
+    text: t(key, { text }),
+    time,
+    iso: m.created_at || "",
+  };
 }
 
 function formatTok(n) {
@@ -2215,6 +2249,10 @@ const thread = computed(() => {
       items.push(compactionItem(m));
       continue;
     }
+    if (isNotebook(m)) {
+      items.push(notebookItem(m));
+      continue;
+    }
     const reply = guardReply(m);
     if (reply) {
       items.push(guardItem(m));
@@ -2238,7 +2276,7 @@ const thread = computed(() => {
   let laterContent = false;
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    if (it.kind === "day" || it.kind === "new" || it.kind === "guard") continue;
+    if (it.kind === "day" || it.kind === "new" || it.kind === "guard" || it.kind === "notebook") continue;
     if (it.kind === "tools") {
       it.sealed = laterContent;
       laterContent = true;

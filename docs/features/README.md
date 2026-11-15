@@ -15,6 +15,7 @@ Short notes for an agent picking things up cold. Parent index: [`../README.md`](
 | [token-usage.md](./token-usage.md) | ↑↓ conversation token counter |
 | [vault.md](./vault.md) | Global vault, grants, chat forms (kept out of the LLM) |
 | [memory.md](./memory.md) | Shared memory: core 1×/conversation, browse, opt-out |
+| [notebook.md](./notebook.md) | Per-bot notebook: orders, open lines, notes |
 | [approval.md](./approval.md) | User approval Accept / Decline (`ask_approval`) |
 | [clarify.md](./clarify.md) | Structured question (`ask_clarify`, choices or short text) |
 | [agent-vm-terminal.md](./agent-vm-terminal.md) | Pi agent → server VM terminal |

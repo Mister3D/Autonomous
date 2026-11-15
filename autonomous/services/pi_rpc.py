@@ -36,6 +36,7 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "chat_search.ts",
     _EXTENSIONS_DIR / "react.ts",
     _EXTENSIONS_DIR / "memory.ts",
+    _EXTENSIONS_DIR / "notebook.ts",
     _EXTENSIONS_DIR / "approval.ts",
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
@@ -100,7 +101,27 @@ _MEMORY_SYSTEM_HINT = (
     "(e.g. « always ask approval before running a command »), safety/ops rules. "
     "browse = situational / nice-to-know details looked up when relevant — "
     "likes, food, address, hobbies, trivia (e.g. favourite_food=raclette). "
-    "If unsure: browse. Newly approved core facts apply on the next conversation."
+    "If unsure: browse. Newly approved core facts apply on the next conversation. "
+    "Per-bot lasting rules, unfinished work, and setup notes go to the bot "
+    "notebook (notebook_remember), not here."
+)
+
+_NOTEBOOK_SYSTEM_HINT = (
+    "Bot notebook — private to THIS bot. It survives compaction. "
+    "On each new message the host appends the current standing orders, "
+    "open lines, and note titles. Do not paste that block yourself. "
+    "notebook_remember(kind, title, body) saves immediately, no confirm card. "
+    "kind=order: a lasting rule the user stated (\"always check the proxy is on\"). "
+    "One short sentence. Pass a stable title and reuse it to update the same rule. "
+    "kind=open: one short line of work still unfinished "
+    "(\"Server: the nginx update is still to do\"). "
+    "Write it before you leave that subject. notebook_close(id) when it is done. "
+    "kind=note: a decision or a setup to keep months later (title + body). "
+    "Titles are listed every turn; notebook_get(id) returns the body. "
+    "notebook_list shows every id. "
+    "When the user asks what was left to do, answer from the open lines. "
+    "Do not store secrets. Household facts (name, tastes, rules for every bot) "
+    "stay on memory_propose."
 )
 
 _CHAT_SEARCH_SYSTEM_HINT = (
@@ -460,6 +481,7 @@ class PiRpcSession:
                     _MANAGER_SYSTEM_HINT if is_manager else "",
                     _events_system_hint(self.home),
                     _MEMORY_SYSTEM_HINT,
+                    _NOTEBOOK_SYSTEM_HINT,
                     _APPROVAL_SYSTEM_HINT,
                     _CLARIFY_SYSTEM_HINT,
                     _CHAT_SEARCH_SYSTEM_HINT,

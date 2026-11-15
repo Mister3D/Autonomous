@@ -38,6 +38,7 @@ The user has (probably) told you to read this file and then get to work: **do ex
 | [features/token-usage.md](./features/token-usage.md) | ↑↓ token counter at the top of the chat |
 | [features/vault.md](./features/vault.md) | Global encrypted vault, bot grants, chat forms (secrets kept out of the LLM) |
 | [features/memory.md](./features/memory.md) | Memory shared by bots: core (1×/conversation) vs browse, opt-out, non-blocking proposals |
+| [features/notebook.md](./features/notebook.md) | Per-bot notebook: standing orders, unfinished lines, notes |
 | [features/approval.md](./features/approval.md) | Accept / Decline card (`ask_approval`, blocking) |
 | [features/clarify.md](./features/clarify.md) | Structured question card (`ask_clarify`, blocking) |
 | [features/agent-vm-terminal.md](./features/agent-vm-terminal.md) | Pi agent → VM `docker exec` (no UI) |

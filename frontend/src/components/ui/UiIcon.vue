@@ -33,6 +33,10 @@
       <path d="M5.5 4.5h10.2L18.5 7.3V19a.8.8 0 0 1-.8.8H6.3a.8.8 0 0 1-.8-.8V5.3a.8.8 0 0 1 .8-.8Z" />
       <path d="M8 4.5v4.2h7.2V4.5M8 19v-5.2h8" />
     </template>
+    <template v-else-if="name === 'eye'">
+      <path d="M2.5 12S6 6.8 12 6.8 21.5 12 21.5 12 18 17.2 12 17.2 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.6" />
+    </template>
     <template v-else-if="name === 'play'">
       <path d="M9 7.5v9l8-4.5-8-4.5Z" fill="currentColor" stroke="none" />
     </template>

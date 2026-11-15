@@ -141,6 +141,11 @@ Memory **shared by bots** (facts, not secrets). `tier` = `core` (always in the p
 `bots.is_manager` (default 0): orchestrator — **at most one** bot set to 1 (otherwise 409 `manager_exists`) — see [features/manager.md](./features/manager.md).  
 See `docs/features/memory.md`.
 
+### bot_notebook
+Private to one bot (`bot` = UUID). `kind` = `order` (standing rule) | `open` (unfinished line) | `note` (title listed every turn, body on demand).  
+Survives chat clear and Pi compaction. Deleted with the bot.  
+See [features/notebook.md](./features/notebook.md).
+
 ### approval_requests
 Generic approval requests (Accept / Decline). `bot` = UUID. State `pending` → `approved` \| `denied` \| `cancelled`.  
 See `docs/features/approval.md`.

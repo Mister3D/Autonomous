@@ -29,6 +29,60 @@
         <UiIcon name="memory" :size="16" />
       </template>
     </UiToggleRow>
+    <section class="bot-notebook" aria-live="polite">
+      <div class="toggle-row info-row has-icon">
+        <span class="ui-toggle-main">
+          <UiIconBadge size="sm">
+            <UiIcon name="save" :size="16" />
+          </UiIconBadge>
+          <span class="ui-toggle-copy">
+            <strong>{{ t("details.notebook") }}</strong>
+            <small v-if="notebookLoading">{{ t("details.packageLoading") }}</small>
+            <small v-else-if="!notebook.length">{{ t("details.notebookEmpty") }}</small>
+          </span>
+        </span>
+        <UiOrb
+          :label="t('details.notebookShow')"
+          :expanded="notebookOpen ? 'true' : 'false'"
+          @click="notebookOpen = true"
+        >
+          <UiIcon name="eye" :size="16" />
+        </UiOrb>
+      </div>
+      <Teleport to="body">
+        <div v-if="notebookOpen" class="modal-backdrop" @click.self="notebookOpen = false">
+          <div
+            class="modal notebook-modal"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="t('details.notebook')"
+          >
+            <h2>{{ t("details.notebook") }}</h2>
+            <p v-if="notebookLoading" class="hint">{{ t("details.packageLoading") }}</p>
+            <p v-else-if="!notebook.length" class="hint">{{ t("details.notebookEmpty") }}</p>
+            <div v-else class="notebook-modal-body">
+              <div v-for="group in notebookGroups" :key="group.kind" class="bot-notebook-group">
+                <h4>{{ group.label }}</h4>
+                <ul>
+                  <li v-for="row in group.rows" :key="row.id">
+                    <template v-if="row.kind === 'note'">
+                      <strong>{{ row.title }}</strong>
+                      <p>{{ row.body }}</p>
+                    </template>
+                    <span v-else>{{ row.body }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="mcp-dialog-actions">
+              <button class="btn ghost" type="button" @click="notebookOpen = false">
+                {{ t("details.notebookClose") }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+    </section>
     <UiToggleRow
       :title="t('details.isManager')"
       :tip="t('details.isManagerHint')"
@@ -119,6 +173,7 @@ import ManageMenu from "./ManageMenu.vue";
 import ModelPicker from "./ModelPicker.vue";
 import UiIcon from "./ui/UiIcon.vue";
 import UiIconBadge from "./ui/UiIconBadge.vue";
+import UiOrb from "./ui/UiOrb.vue";
 import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
@@ -127,6 +182,9 @@ const { t } = useI18n();
 const pkg = ref(null);
 const pkgLoading = ref(false);
 const pkgError = ref(false);
+const notebook = ref([]);
+const notebookLoading = ref(false);
+const notebookOpen = ref(false);
 let pollTimer = 0;
 let loadSeq = 0;
 
@@ -144,6 +202,28 @@ const totalLabel = computed(() => {
   if (pkgError.value) return "—";
   if (!pkg.value) return "—";
   return formatBytes(pkg.value.total_bytes);
+});
+
+const notebookGroups = computed(() => {
+  const rows = notebook.value || [];
+  const groups = [
+    { kind: "order", label: t("details.notebookOrders") },
+    { kind: "open", label: t("details.notebookOpen") },
+    { kind: "note", label: t("details.notebookNotes") },
+  ];
+  return groups
+    .map((g) => ({ ...g, rows: rows.filter((r) => r.kind === g.kind) }))
+    .filter((g) => g.rows.length);
+});
+
+const notebookTick = computed(() => {
+  const name = props.bot?.name;
+  const rows = (name && state.messages[name]) || [];
+  let n = 0;
+  for (const m of rows) {
+    if (m?.meta?.kind === "notebook") n += 1;
+  }
+  return `${name || ""}:${n}`;
 });
 
 const vmLabel = computed(() => {
@@ -182,14 +262,43 @@ async function loadPackage() {
   }
 }
 
+async function loadNotebook() {
+  const name = props.bot?.name;
+  if (!name) return;
+  notebookLoading.value = !notebook.value.length;
+  try {
+    notebook.value = await api.notebook(name);
+  } catch {
+    notebook.value = [];
+  } finally {
+    notebookLoading.value = false;
+  }
+}
+
+function onNotebookKey(ev) {
+  if (ev.key === "Escape") notebookOpen.value = false;
+}
+
+watch(notebookOpen, (open) => {
+  if (open) document.addEventListener("keydown", onNotebookKey);
+  else document.removeEventListener("keydown", onNotebookKey);
+});
+
 watch(
   () => props.bot?.name,
   () => {
     pkg.value = null;
+    notebook.value = [];
+    notebookOpen.value = false;
     loadPackage();
+    loadNotebook();
   },
   { immediate: true },
 );
+
+watch(notebookTick, () => {
+  loadNotebook();
+});
 
 watch(
   () => [
@@ -212,6 +321,7 @@ onBeforeUnmount(() => {
   if (pollTimer) window.clearInterval(pollTimer);
   pollTimer = 0;
   loadSeq += 1;
+  document.removeEventListener("keydown", onNotebookKey);
 });
 
 async function onModel(next) {

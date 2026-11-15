@@ -10,15 +10,9 @@
           <small>{{ t("details.mcpHint") }}</small>
         </span>
       </span>
-      <button
-        class="settings-orb mcp-add"
-        type="button"
-        :aria-label="t('details.mcpAdd')"
-        :title="t('details.mcpAdd')"
-        @click="startPick"
-      >
+      <UiOrb :label="t('details.mcpAdd')" @click="startPick">
         <UiIcon name="plus" :size="14" />
-      </button>
+      </UiOrb>
     </div>
     <p v-if="error && !open" class="mcp-grants-error">{{ error }}</p>
     <ul v-if="grants.length" class="mcp-grant-list">
@@ -93,6 +87,7 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import UiIcon from "./ui/UiIcon.vue";
 import UiIconBadge from "./ui/UiIconBadge.vue";
+import UiOrb from "./ui/UiOrb.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();

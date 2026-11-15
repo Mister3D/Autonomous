@@ -787,6 +787,7 @@ def delete_bot(name: str, home: Path | None = None, destroy_desk: bool = True) -
             conn.execute("DELETE FROM approval_requests WHERE bot = ?", (bid,))
             conn.execute("DELETE FROM clarify_requests WHERE bot = ?", (bid,))
             conn.execute("DELETE FROM bot_delete_requests WHERE bot = ?", (bid,))
+            conn.execute("DELETE FROM bot_notebook WHERE bot = ?", (bid,))
         conn.execute("DELETE FROM bots WHERE name = ?", (name,))
     # Drop Pi session jsonl + VM home — otherwise recreate leaves orphans on disk.
     try:

@@ -7,6 +7,7 @@ from io import BytesIO
 from flask import g, request, send_file
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
+from marshmallow import Schema, fields
 
 from autonomous.models.schemas import (
     BotCreateSchema,
@@ -1533,5 +1534,80 @@ class BotMcpGrantDelete(MethodView):
 
         try:
             return devices_svc.revoke_bot_mcp(name, grant_id, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+class NotebookEntrySchema(Schema):
+    id = fields.Str()
+    kind = fields.Str()
+    title = fields.Str()
+    body = fields.Str()
+    created_at = fields.Str()
+    updated_at = fields.Str()
+
+
+class NotebookWriteSchema(Schema):
+    kind = fields.Str(required=True)
+    body = fields.Str(required=True)
+    title = fields.Str(load_default="")
+    id = fields.Str(load_default="")
+
+
+class NotebookOkSchema(Schema):
+    ok = fields.Bool()
+
+
+@blp.route("/<string:name>/notebook")
+class BotNotebook(MethodView):
+    @blp.response(200, NotebookEntrySchema(many=True))
+    @blp.doc(summary="This bot's notebook: orders, open lines, notes")
+    def get(self, name):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            return notebook_svc.list_entries(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+    @blp.arguments(NotebookWriteSchema)
+    @blp.response(200, NotebookEntrySchema)
+    @blp.doc(summary="Save or update one notebook entry (agent, immediate)")
+    def post(self, data, name):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            return notebook_svc.remember(
+                name,
+                kind=str(data.get("kind") or ""),
+                body=str(data.get("body") or ""),
+                title=str(data.get("title") or ""),
+                entry_id=str(data.get("id") or ""),
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/notebook/<string:entry_id>")
+class BotNotebookEntry(MethodView):
+    @blp.response(200, NotebookEntrySchema)
+    @blp.doc(summary="Read one notebook entry")
+    def get(self, name, entry_id):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            return notebook_svc.get_entry(name, entry_id, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+    @blp.response(200, NotebookOkSchema)
+    @blp.doc(summary="Remove one notebook entry")
+    def delete(self, name, entry_id):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            notebook_svc.close_entry(name, entry_id, home=g.home)
+            return {"ok": True}
         except AutonomousError as exc:
             _handle(exc)

@@ -40,7 +40,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `ChatPane.vue` | Conversation thread (newest page first, older pages on scroll up), composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back, ArrowUp in an empty field recalls the newest queued text), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md) |
+| `ChatPane.vue` | Conversation thread (newest page first, older pages on scroll up), composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back, ArrowUp in an empty field recalls the newest queued text), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. A notebook save is a centred line, not a tool card. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md), [`notebook.md`](./notebook.md) |
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. Switching bots drops the previous desktop and connects to the selected one. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). | [`pi-agent.md`](./pi-agent.md) |
@@ -50,7 +50,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `DetailsPane.vue` | Bot details: model, capability, memory, manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md) |
+| `DetailsPane.vue` | Bot details: model, capability, memory, notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md) |
 | `LibraryPane.vue` | Files / `~/files` (private per bot): list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
 | `EventsPane.vue` | Schedules + webhooks list (pause / copy curl / delete confirm). | [`events.md`](./events.md) |
 | `EventInstructionModal.vue` | Large modal: standing instruction, plus the webhook POST body when opened from a chat bubble. | [`events.md`](./events.md) |
@@ -110,8 +110,9 @@ Prefer these for new chrome. Re-exported from `components/ui/index.js`.
 | Component | Role |
 |-----------|------|
 | `UiButton.vue` | Soft button variants. |
+| `UiOrb.vue` | 28px round inspector button (MCP add, notebook eye). |
 | `UiCard.vue` | Settings / section card with optional icon slot. |
-| `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, …). |
+| `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, …). |
 | `UiIconBadge.vue` | Icon in soft badge (inspector rows, settings nav). |
 | `UiToggleRow.vue` | Title + hint + switch; **custom tooltip** on the switch (`tip` / `disabledReason`) — never browser `title` for that tip. |
 

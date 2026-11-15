@@ -366,6 +366,10 @@ _HIDDEN_TOOL_CARDS = frozenset(
         "memory_list",
         "memory_get",
         "memory_search",
+        "notebook_list",
+        "notebook_get",
+        "notebook_remember",
+        "notebook_close",
         # Approval: ApprovalCard only.
         "ask_approval",
         # Clarify: ClarifyCard only.
@@ -1005,6 +1009,14 @@ class PiAgent:
                 from autonomous.services import chat_attachments as attach_svc
 
                 prompt_text = message
+                try:
+                    from autonomous.services import notebook as notebook_svc
+
+                    prompt_text = notebook_svc.attach_prompt(
+                        prompt_text, bot, home=home
+                    )
+                except Exception:
+                    log.exception("notebook trailer failed for %s", bot)
                 prompt_images = list(images or [])
                 # Adapt to provider vision limits (Pi models.json, then guard fallback).
                 cap = attach_svc.max_images_per_prompt(

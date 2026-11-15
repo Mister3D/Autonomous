@@ -227,6 +227,11 @@ export const api = {
     request(`/vault/grants/${encodeURIComponent(bot)}/${entry_id}`, { method: "DELETE" }),
   resolveVaultRequest: (id, body) =>
     request(`/vault/requests/${id}/resolve`, { method: "POST", body }),
+  notebook: (name) => request(`/bots/${encodeURIComponent(name)}/notebook`),
+  deleteNotebookEntry: (name, id) =>
+    request(`/bots/${encodeURIComponent(name)}/notebook/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   memoryEntries: () => request("/memory/entries"),
   memoryPendingCount: () => request("/memory/proposals/count"),
   createMemoryEntry: (body) => request("/memory/entries", { method: "POST", body }),
