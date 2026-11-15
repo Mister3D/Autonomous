@@ -7340,9 +7340,11 @@ a.bot-mention:hover,
   width: min(640px, 100%);
   background: #fff;
   border-radius: 18px;
-  padding: 0.95rem 1.1rem 0.85rem;
+  padding: 0.85rem 1.05rem 0.45rem;
   text-align: left;
   box-shadow: 0 14px 36px rgba(92, 48, 140, 0.1);
+  container-type: inline-size;
+  container-name: home-card;
 }
 .home-card-head {
   display: flex;
@@ -7388,17 +7390,19 @@ a.bot-mention:hover,
 }
 .home-dot.is-warn { background: var(--accent); }
 .home-dot.is-warn::after { display: none; }
-.home-status {
-  display: flex;
-  flex-wrap: wrap;
+.home-card .home-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.35rem 0.75rem;
-  padding: 0.38rem 0.05rem;
+  column-gap: 0.85rem;
+  row-gap: 0.15rem;
+  padding: 0.62rem 0.05rem;
+  border-top: 1px solid #f1e8f4;
   font-family: var(--font);
   font-size: 1rem;
   font-weight: 400;
   letter-spacing: normal;
-  line-height: 1.45;
+  line-height: 1.35;
   color: #2c2c2e;
 }
 .home-status-list {
@@ -7406,9 +7410,19 @@ a.bot-mention:hover,
   margin: 0;
   padding: 0;
 }
-.home-status-name {
+.home-status-title {
   font-weight: 600;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-status-meta {
+  color: #6e6480;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 .home-status-jump {
   margin-left: 0.35rem;
@@ -7419,14 +7433,23 @@ a.bot-mention:hover,
 .home-status-side {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.4rem;
-  margin-left: auto;
+  margin-left: 0;
 }
 .home-status-note,
 .home-status .setup-log,
 .home-status .vault-error {
-  flex: 1 0 100%;
+  grid-column: 1 / -1;
   margin: 0;
+}
+@container home-card (max-width: 460px) {
+  .home-card .home-status {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .home-status-meta {
+    display: none;
+  }
 }
 .home-refresh {
   appearance: none;

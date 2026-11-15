@@ -75,8 +75,9 @@
           <router-link to="/setup">{{ t("setup.open") }}</router-link>
         </div>
         <div v-if="showUpdateUi" class="home-status" role="status">
-          <span class="home-status-name">
-            {{ t("home.updateLine", { channel: updateInfo.channel, version: updateInfo.version || "—" }) }}
+          <span class="home-status-title" title="Autonomous">Autonomous</span>
+          <span class="home-status-meta">
+            <template v-if="updateInfo.channel">{{ updateInfo.channel }} · </template>{{ updateInfo.version || "—" }}
             <span v-if="updateJump" class="home-status-jump">→ {{ updateJump }}</span>
           </span>
           <span class="home-status-side">
@@ -124,8 +125,9 @@
         <p v-if="piChecking && !piItems.length" class="home-quiet">{{ t("piPackages.checking") }}</p>
         <ul v-else-if="piItems.length" class="home-status-list" :aria-label="t('piPackages.title')">
           <li v-for="item in piItems" :key="item.id" class="home-status">
-            <span class="home-status-name">
-              {{ t("home.moduleLine", { name: item.label, version: item.current || "—" }) }}
+            <span class="home-status-title" :title="item.label">{{ item.label }}</span>
+            <span class="home-status-meta">
+              {{ item.current || "—" }}
               <span v-if="item.update && item.latest" class="home-status-jump">→ {{ item.latest }}</span>
             </span>
             <span class="home-status-side">
