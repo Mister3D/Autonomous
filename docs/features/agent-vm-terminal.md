@@ -2,7 +2,7 @@
 
 **Status**: in place (one-shot exec; interactive PTY = UI tab only)  
 **Key files**: `autonomous/services/terminal.py`, `autonomous/pi_extensions/vm.ts`, `autonomous/services/pi_rpc.py`, `POST /bots/:name/terminal/exec`  
-**Last updated**: 2026-11-14 (a vm_terminal_exec timeout kills the VM process and the wait)
+**Last updated**: 2026-11-15 (a sleeping VM wakes on the tool that needs it, shown as `vm_wake`)
 
 ## User behaviour
 
@@ -13,8 +13,8 @@
   - `vm_desk_status` — capability + desk state (if not ready → says to call `vm_request_desk`, **without** posting the card);
   - `vm_request_desk` — card + **blocking wait** until desk `running` / refusal (like the vault);
   - `vm_terminal_exec` / `vm_screenshot` — if the desk is absent, they request the desktop and **wait** too (then retry).
-- VM prerequisite: desk **running** (or **sleeping** → automatic wake). One creation gives the shell and the screen (`capability=screen`). `terminal` is still read as "VM present" for old rows.
-- Desk `sleeping`: the VM tools / `POST /desk/wake` wake it; **don't** re-post a `vm_request_desk` card just for that.
+- VM prerequisite: desk **running** (or **sleeping** → the tool waits). One creation gives the shell and the screen (`capability=screen`). `terminal` is still read as "VM present" for old rows. A chat message does not start the VM.
+- Desk `sleeping`: the VM tools wake it. The server inserts one `vm_wake` tool card and blocks that tool until the container is up; the model does not check or call it. **Don't** re-post a `vm_request_desk` card just for that. `POST /desk/wake` (Screen **Wake**) and the Terminal tab wake with no card.
 
 ## Implementation
 

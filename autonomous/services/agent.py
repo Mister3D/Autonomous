@@ -514,15 +514,8 @@ class PiAgent:
 
         touch_run_progress(bot)
         bots_svc.patch_bot(bot, {"status": "busy"}, home=home)
-        # Keep desk awake while the agent runs (auto-sleep skips busy).
-        try:
-            from autonomous.services import desk as desk_svc
-
-            desk = row.get("desk") or {}
-            if desk.get("state") in ("sleeping", "running"):
-                desk_svc.ensure_awake(bot, home=home)
-        except Exception:
-            pass
+        # A chat turn does not wake the VM. A tool that needs it waits
+        # (and shows a vm_wake card) only when that tool actually runs.
 
         action_limit = _resolve_action_limit(row, home=home)
         review_every = _resolve_review_every(row, home=home)
@@ -801,6 +794,9 @@ class PiAgent:
                         state["guard_gate_violation"] = False
                 call_id = str(record.get("toolCallId") or "")
                 tool_name = str(record.get("toolName") or "tool")
+                from autonomous.services import desk as desk_svc
+
+                desk_svc.prepare_vm_tool(bot, tool_name, home=home)
                 args = record.get("args") if isinstance(record.get("args"), dict) else {}
                 if call_id and args:
                     state["tool_args"][call_id] = args

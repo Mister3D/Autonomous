@@ -52,7 +52,7 @@ def capture(
     """Grab the VM root window to PNG under the bot shared home."""
     from autonomous.services import desk as desk_svc
 
-    desk_svc.ensure_awake(bot, home=home)
+    desk_svc.ensure_awake_for_tool(bot, home=home)
     if not _WORKER.is_file():
         raise AutonomousError("Screenshot worker missing on host", code="internal")
 

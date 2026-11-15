@@ -91,7 +91,8 @@ def count_tools_since_last_user(bot: str, *, home: Path | None = None) -> int:
     """Tool cards since the last user / webhook / cron message (turn anchor).
 
     Desk/vault resume must NOT reset this — only a new ``role=user`` bubble does
-    (composer, webhook, cron).
+    (composer, webhook, cron). A synthetic ``vm_wake`` card
+    (``counts_as_action`` false) does not count.
     """
     bots_svc.get_bot(bot, home=home)
     with get_db(home) as conn:
@@ -110,6 +111,7 @@ def count_tools_since_last_user(bot: str, *, home: Path | None = None) -> int:
             WHERE bot = ? AND conversation_id = 'main' AND role = 'event'
               AND created_at > ?
               AND json_extract(meta_json, '$.kind') = 'tool'
+              AND COALESCE(json_extract(meta_json, '$.counts_as_action'), 1) != 0
             """,
             (bot, since),
         ).fetchone()

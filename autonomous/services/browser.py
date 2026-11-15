@@ -31,7 +31,7 @@ def _chown_bot(path: Path) -> None:
 def _ensure_desk(bot: str, *, home: Path | None) -> None:
     from autonomous.services import desk as desk_svc
 
-    desk_svc.ensure_awake(bot, home=home)
+    desk_svc.ensure_awake_for_tool(bot, home=home)
 
 
 def _copy_workers(bot: str, *, home: Path | None) -> None:

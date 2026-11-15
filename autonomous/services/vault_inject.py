@@ -121,12 +121,9 @@ def inject(
             "Bot has no desktop capability — create a desk first.",
             code="no_capability",
         )
-    desk = b.get("desk") or {}
-    if desk.get("state") != "running":
-        raise AutonomousError(
-            "Desktop is not running — start the bot desk before injecting.",
-            code="desk_not_running",
-        )
+    from autonomous.services import desk as desk_svc
+
+    desk_svc.ensure_awake_for_tool(bot, home=home)
     if not _WORKER.is_file():
         raise AutonomousError("VNC type worker missing on host", code="internal")
 

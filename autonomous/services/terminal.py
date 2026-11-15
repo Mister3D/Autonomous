@@ -313,7 +313,7 @@ def exec_command(
 
     from autonomous.services import desk as desk_svc
 
-    desk_svc.ensure_awake(bot, home=home)
+    desk_svc.ensure_awake_for_tool(bot, home=home)
 
     try:
         timeout_s = int(timeout)

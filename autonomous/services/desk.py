@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import threading
@@ -18,6 +19,39 @@ from autonomous.services.errors import AutonomousError, ValidationError
 from autonomous.services.events import BUS
 
 _LABEL = "autonomous.bot"
+log = logging.getLogger(__name__)
+
+# Tools that need the container. Status and the desk-request card do not:
+# a chat message must not wake anything, and those two already have their own UI.
+VM_TOOL_NAMES = frozenset(
+    {
+        "vm_screenshot",
+        "vm_look",
+        "vm_ground",
+        "vm_click",
+        "vm_type",
+        "vm_scroll",
+        "vm_key",
+        "vm_drag",
+        "vm_terminal_exec",
+        "vault_type",
+        "browser_tabs",
+        "browser_switch_tab",
+        "browser_close_tab",
+        "browser_navigate",
+        "browser_wait_load",
+        "browser_reset_session",
+        "browser_text",
+        "browser_links",
+        "browser_html",
+        "browser_scroll",
+        "browser_snapshot",
+        "browser_frames_snapshot",
+        "browser_click_selector",
+    }
+)
+_WAKE_LOCKS: dict[str, threading.Lock] = {}
+_WAKE_LOCKS_GUARD = threading.Lock()
 
 
 def mem_total_bytes() -> int:
@@ -616,6 +650,95 @@ def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:
             code="desk_not_running",
         )
     sync_host_api_env(bot, home=home)
+    return desk
+
+
+def _wake_lock(bot: str) -> threading.Lock:
+    with _WAKE_LOCKS_GUARD:
+        lock = _WAKE_LOCKS.get(bot)
+        if lock is None:
+            lock = threading.Lock()
+            _WAKE_LOCKS[bot] = lock
+        return lock
+
+
+def ensure_awake_for_tool(bot: str, *, home: Path | None = None) -> dict[str, Any]:
+    """Wake a sleeping desk before a VM tool, and show that wait as a tool card.
+
+    A second caller while the wake is in progress waits on the same lock and
+    does not post another card. A desk that is already running is only touched.
+    The Screen button, the terminal tab and a chat message do not use this.
+    """
+    b = bots_svc.get_bot(bot, home=home)
+    if (b.get("desk") or {}).get("state") != "sleeping":
+        return ensure_awake(bot, home=home)
+    with _wake_lock(bot):
+        b = bots_svc.get_bot(bot, home=home)
+        if (b.get("desk") or {}).get("state") != "sleeping":
+            return ensure_awake(bot, home=home)
+        return _wake_with_tool_card(bot, home=home)
+
+
+def prepare_vm_tool(bot: str, tool_name: str, *, home: Path | None = None) -> None:
+    """Before the real tool card: if this tool needs the VM and it is asleep, wait.
+
+    The model does not call this. A failure still leaves the wake card in error
+    and does not stop the tool event — the tool itself reports the same failure.
+    """
+    if tool_name not in VM_TOOL_NAMES:
+        return
+    try:
+        b = bots_svc.get_bot(bot, home=home)
+    except Exception:
+        return
+    if (b.get("desk") or {}).get("state") != "sleeping":
+        return
+    try:
+        ensure_awake_for_tool(bot, home=home)
+    except Exception:
+        log.exception("VM wake before %s failed for %s", tool_name, bot)
+
+
+def _wake_with_tool_card(bot: str, *, home: Path | None) -> dict[str, Any]:
+    from autonomous.services import chat as chat_svc
+
+    started = time.monotonic()
+    meta: dict[str, Any] = {
+        "kind": "tool",
+        "status": "running",
+        "tool_name": "vm_wake",
+        "args": {},
+        "counts_as_action": False,
+    }
+    content = "🔧 vm_wake\nstatus: running"
+    msg = chat_svc.create_message(bot, content, role="event", meta=meta, home=home)
+    try:
+        desk = ensure_awake(bot, home=home)
+    except Exception as exc:
+        elapsed = int((time.monotonic() - started) * 1000)
+        failed = {
+            **meta,
+            "status": "error",
+            "is_error": True,
+            "duration_ms": elapsed,
+        }
+        chat_svc.update_message(
+            bot,
+            msg["id"],
+            f"🔧 vm_wake\nstatus: error\n---\n{exc}",
+            meta=failed,
+            home=home,
+        )
+        raise
+    elapsed = int((time.monotonic() - started) * 1000)
+    done = {**meta, "status": "done", "duration_ms": elapsed}
+    chat_svc.update_message(
+        bot,
+        msg["id"],
+        "🔧 vm_wake\nstatus: done\n---\nLa VM était en veille. Elle est démarrée.",
+        meta=done,
+        home=home,
+    )
     return desk
 
 
