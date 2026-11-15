@@ -274,10 +274,15 @@ def test_squashed_migration_numbers_do_not_block_switch(home, monkeypatch):
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))",
                 (version,),
             )
+    # A fresh database already has every file under autonomous/migrations
+    # (including ones added after this test). The target branch must list
+    # those; 2 and 22 stay covered only because 001 squashes through 22.
+    present = updates_svc._migration_versions_in_tree(None)
+    assert 1 in present
     monkeypatch.setattr(
         updates_svc,
         "_migration_versions_in_tree",
-        lambda ref=None: {1, 23, 24, 25},
+        lambda ref=None, present=present: set(present),
     )
     gate = updates_svc.can_switch_to("dev_peter", home=home)
     assert gate["ok"] is True

@@ -78,7 +78,7 @@ def test_client_ip_trusts_xff_when_enabled(app, monkeypatch):
         assert client_ip(request) == "9.9.9.9"
 
 
-def test_pair_poll_rate_limited(client):
+def test_pair_poll_rate_limited(client, pairing_on):
     from autonomous.services.ratelimit import PAIRING
 
     PAIRING.clear()
