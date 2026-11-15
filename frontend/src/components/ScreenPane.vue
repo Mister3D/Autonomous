@@ -180,23 +180,30 @@ function armConnectWatchdog() {
   }, 20000);
 }
 
+function urlIsFor(name) {
+  return !!name && novncUrl.value.includes(`/novnc/${name}/`);
+}
+
 async function refreshNovnc({ bust = false } = {}) {
+  const botName = props.bot.name;
   clearTimers();
   if (!running.value) {
     novncUrl.value = "";
     linkState.value = "idle";
     return;
   }
-  // Already showing this desktop: opening the tab again must not cover it.
-  if (!bust && linkState.value === "connected" && novncUrl.value) return;
+  // Same bot, already on screen: opening the tab again must not cover it.
+  // Another bot's connected iframe must not satisfy this — that was the stale desktop.
+  if (!bust && linkState.value === "connected" && urlIsFor(botName)) return;
   linkState.value = "loading";
   try {
-    const info = await api.novnc(props.bot.name);
+    const info = await api.novnc(botName);
+    if (botName !== props.bot.name) return;
     if (info.vnc_port) {
       const base =
         info.url ||
         info.direct_url ||
-        `/novnc/${props.bot.name}/vnc_lite.html?autoconnect=1&scale=true&path=novnc/${props.bot.name}/&v=8`;
+        `/novnc/${botName}/vnc_lite.html?autoconnect=1&scale=true&path=novnc/${botName}/&v=8`;
       novncUrl.value = bust ? `${base}${base.includes("?") ? "&" : "?"}r=${Date.now()}` : base;
       armConnectWatchdog();
     } else {
@@ -205,6 +212,7 @@ async function refreshNovnc({ bust = false } = {}) {
       retryTimer = window.setTimeout(() => refreshNovnc({ bust: true }), 2500);
     }
   } catch {
+    if (botName !== props.bot.name) return;
     novncUrl.value = "";
     linkState.value = "error";
     retryTimer = window.setTimeout(() => refreshNovnc({ bust: true }), 2500);
@@ -325,10 +333,15 @@ watch(
 
 watch(
   () => props.bot.name,
-  () => {
+  (name, prev) => {
     state.humanControl = false;
     wakeError.value = "";
-    ensureVisible();
+    if (prev && prev !== name) {
+      clearTimers();
+      novncUrl.value = "";
+      linkState.value = "idle";
+    }
+    if (props.active && running.value) refreshNovnc({ bust: true });
   },
 );
 
