@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/botmail.py`, `autonomous/services/files.py` (mail staging), `autonomous/migrations/001_schema.sql`, `autonomous/api/bots.py` (`/mail/*`, `/files/claim-mail`), `autonomous/pi_extensions/{botmail,files}.ts`, `autonomous/services/{chat,agent,pi_rpc}.py`, `frontend/src/{mentions.js,components/ChatPane.vue}`  
-**Last updated**: 2026-11-09 (inter-bot file attachments via mail staging)
+**Last updated**: 2026-11-16 (an email address is not a bot mention)
 
 ## User behaviour
 
@@ -18,7 +18,7 @@ In a bot's input area:
 - Exchanges are **async**. Confirming transmission ≠ task finished. Prefer Ask (or follow-up) when the user said « bring it back here »; Tell when they continue in the peer’s chat.
 - Inter-bot mail does **not** grant new rights and does not replace vault / approval / external-send consent.
 - If the recipient is **waiting** (vault / approval / …), the message stays **queued** until idle. If they are **busy** mid-run, delivery tries a **mid-run steer** so they can answer then continue; otherwise it queues.
-- `@name` resolves `name` (case-insensitive) or `label`. Composer `@` autocomplete: ↑/↓ move the highlight; Enter/Tab inserts.
+- `@name` resolves `name` (case-insensitive) or `label`. Composer `@` autocomplete: ↑/↓ move the highlight; Enter/Tab inserts. The colour applies only when `@` starts the token. `someone@gmail.com` stays plain text even if a bot is named `gmail`; `@gmail` after a space is still the mention.
 - In the thread: centred blue cards for inter-bot mail. UI copy comes from frontend locales (en/fr).
   - **Sent** (sender): when `bot_tell` / `bot_ask` / API mail succeeds, a card shows the **peer-facing body** (« Sent to @x »). Ask *replies* still stamp the assistant bubble as outgoing.
   - **Received** (peer): « Received from @x » with the same body (or the ask answer).

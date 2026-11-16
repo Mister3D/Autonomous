@@ -9,7 +9,7 @@
 - `frontend/src/components/{BotDeleteCard,LlmSettings}.vue`
 - settings key `bots.default_model`
 
-**Last updated**: 2026-11-13
+**Last updated**: 2026-11-16 (delete cards wait indefinitely; composer queues)
 
 ## User behaviour
 
@@ -18,8 +18,9 @@
   - The bot always receives `bots.default_model`. If that setting is empty, creation fails with `model_required`.
   - `bot_models` lists refs and states the default. It does not let the Manager pick.
 - To delete bots: `bot_delete({ bots:[…], prompt? })` shows a **checkbox card** (all checked by default). The user may uncheck some, then **Delete** or **Cancel**. The tool blocks until then.
-- The Manager cannot delete itself via this card.
-- Clearing chat history does not affect this flow. Typing in chat while the card is pending cancels it (same idea as `ask_approval`).
+- The Manager may include itself. The card is resolved before its bot, active run, messages, files, and desktop are removed; confirmation therefore ends that conversation immediately.
+- The card has no elapsed-time expiry. While it is pending, the agent stays blocked; composer messages and attachments go to the FIFO queue without cancelling the card.
+- Clearing chat history does not affect this flow.
 
 ## Implementation
 
@@ -33,6 +34,7 @@
 - Do not open `POST /bots` to bot tokens; keep household routes under the Manager slug.
 - Created bots are never Managers (`is_manager=false`).
 - Resolve body: `{ action: "confirm"|"deny", bots?: string[] }` — UI sends the checked slugs.
+- Never allow a chat message to cancel a pending delete card.
 
 ## Quick check
 

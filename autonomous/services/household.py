@@ -136,7 +136,7 @@ def create_delete_request(
     title: str = "",
     home: Path | None = None,
 ) -> dict[str, Any]:
-    me = require_manager(manager, home=home)
+    require_manager(manager, home=home)
     names = []
     for raw in bots or []:
         n = str(raw or "").strip().lstrip("@")
@@ -144,11 +144,6 @@ def create_delete_request(
             names.append(n)
     if not names:
         raise ValidationError("bots required", code="bots_required")
-    if me["name"] in names:
-        raise ValidationError(
-            "A Manager cannot delete itself via this card.",
-            code="cannot_delete_self",
-        )
 
     targets: list[dict[str, Any]] = []
     for n in names:
@@ -241,6 +236,7 @@ def _finalize_delete(
     result: dict[str, Any],
     bots: list[dict[str, Any]] | None = None,
     home: Path | None = None,
+    resume: bool = True,
 ) -> dict[str, Any]:
     now = _now()
     targets = bots if bots is not None else req.get("bots") or []
@@ -282,10 +278,11 @@ def _finalize_delete(
         )
     out = get_delete_request(req["id"], home=home)
     BUS.publish("bot_delete.request", {"request": out}, bot=req["bot"])
-    try:
-        _resume_or_unstick(req["bot"], home=home)
-    except Exception:
-        log.exception("household delete resume for %s", req["bot"])
+    if resume:
+        try:
+            _resume_or_unstick(req["bot"], home=home)
+        except Exception:
+            log.exception("household delete resume for %s", req["bot"])
     return out
 
 
@@ -312,8 +309,6 @@ def resolve_delete_request(
         )
 
     allowed = {str(b.get("name") or "") for b in (req.get("bots") or [])}
-    if req.get("bot"):
-        allowed.discard(req["bot"])
     picks = []
     for raw in selected or []:
         n = str(raw or "").strip().lstrip("@")
@@ -328,14 +323,20 @@ def resolve_delete_request(
 
     deleted: list[str] = []
     errors: list[str] = []
-    for name in picks:
+    self_name = str(req.get("bot") or "")
+    for name in (n for n in picks if n != self_name):
         try:
             bots_svc.delete_bot(name, home=home, destroy_desk=True)
             deleted.append(name)
         except Exception as exc:
             errors.append(f"{name}: {exc}")
 
-    return _finalize_delete(
+    delete_self = bool(self_name and self_name in picks)
+    if delete_self:
+        # Persist and publish the resolved card before deleting its owner: bot
+        # deletion purges this request, its message, and the active Pi process.
+        deleted.append(self_name)
+    out = _finalize_delete(
         req,
         state="confirmed",
         result={
@@ -349,33 +350,10 @@ def resolve_delete_request(
         },
         bots=updated_bots,
         home=home,
+        resume=not delete_self,
     )
-
-
-def cancel_pending_for_human_message(
-    bot: str,
-    content: str,
-    *,
-    home: Path | None = None,
-) -> list[dict[str, Any]]:
-    pending = list_pending_delete_for_bot(bot, home=home)
-    if not pending:
-        return []
-    note = (content or "").strip()
-    result = {
-        "ok": False,
-        "cancelled": True,
-        "human_redirect": True,
-        "deleted": [],
-        "message": note,
-        "guidance": (
-            "User skipped the delete card and wrote in chat. "
-            f"Follow their message: {note}"
-        ),
-    }
-    out: list[dict[str, Any]] = []
-    for req in pending:
-        out.append(_finalize_delete(req, state="cancelled", result=result, home=home))
+    if delete_self:
+        bots_svc.delete_bot(self_name, home=home, destroy_desk=True)
     return out
 
 

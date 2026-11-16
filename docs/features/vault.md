@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/{vault,crypto_box,vault_inject,vnc_type_worker}.py`, `autonomous/api/{vault_routes,bots}.py`, `autonomous/migrations/001_schema.sql`, `autonomous/pi_extensions/vault.ts`, `frontend/src/components/{VaultRequestCard,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-15 (vault delete is arm → check, not a browser confirm)
+**Last updated**: 2026-11-16 (credential cards wait indefinitely; composer queues)
 
 ## User behaviour
 
@@ -14,7 +14,7 @@
   - a **form card** appears in the chat;
   - the bot goes into **`waiting`** status (UI: "Waiting for your answer…", not the "In progress…" orb) while the tool polls the approval;
   - the user enters / approves / declines → if the Pi session is still alive: `busy` and the run continues; otherwise (session died during the wait): `idle` + `running` tools closed as errors + **auto-resume** (`mark_interrupted_after_wait` → `retry_unprocessed`). A Resume card is only a fallback if auto-retry cannot start;
-  - **Chat message during `waiting`** (e.g. "validated on my phone, no code"): cancels `pending` vault requests (`state=cancelled`, `human_redirect`) and sends the text to the polling tool — **this is not a refusal**. The message is **not** queued.
+  - While a request is `pending`, the agent stays blocked with no elapsed-time expiry. Composer messages and attachments still go to the FIFO queue; they do not cancel the form. The user must submit or decline the form, or stop the bot.
   - **"Decline"** while a message is already queued: same `cancelled` + guidance handling (avoids the false "User denied").
   - secret values **never go through the LLM** (redacted result: ok / denied / cancelled+human_redirect / `entry_id` / public keys / names of secret fields).
 - The agent **must never** quote a vault secret. Hint + guard-rail:
@@ -81,7 +81,7 @@
 - If the model invents a password (e.g. from a "raclette" memory) that is **not** in the vault, neither scrub nor steer applies — the system hint remains mandatory.
 - The relaunch must **never** send the secret value back to the model; it must **finish the useful task** without being patronising.
 - `POST /bots/:name/messages` + vault secret → 400 `secret_disclosure` **before** insert.
-- Don't put back into `queued` a user message that cancels a vault form (otherwise "Decline" afterwards ignores the intent).
+- Don't allow a chat message to cancel a vault form. Queue it instead and keep the agent waiting for the form.
 - Push / approval on another device ≠ OTP: the agent must not open a code form; if it did, the user's message + `human_redirect` corrects course.
 - `fields[].id`: `^[a-z][a-z0-9_]{0,31}$`; at least one `secret: true` field.
 - `GET /vault/entries` without `?bot=` = admin; with `?bot=` = grants only.

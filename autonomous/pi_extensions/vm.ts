@@ -118,9 +118,7 @@ async function requestAndWaitDesk(
     return textResult(errMessage(posted.data, posted.status), { error: true });
   }
 
-  const started = Date.now();
-  const maxMs = 60 * 60 * 1000;
-  while (!opts.signal?.aborted && Date.now() - started < maxMs) {
+  while (!opts.signal?.aborted) {
     await new Promise((r) => setTimeout(r, 2000));
     if (opts.signal?.aborted) break;
     const st = await api("GET", `/bots/${encodeURIComponent(cfg.bot)}/desk`);
@@ -145,15 +143,9 @@ async function requestAndWaitDesk(
     }
     // pending | creating | starting | sleeping → keep waiting
   }
-  if (opts.signal?.aborted) {
-    return textResult("Aborted while waiting for desk authorization.", {
-      error: true,
-      state: "aborted",
-    });
-  }
-  return textResult("Timed out waiting for desk authorization.", {
+  return textResult("Aborted while waiting for desk authorization.", {
     error: true,
-    state: "timeout",
+    state: "aborted",
   });
 }
 

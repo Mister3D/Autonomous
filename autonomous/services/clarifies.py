@@ -211,6 +211,31 @@ def list_pending_for_bot(bot: str, *, home: Path | None = None) -> list[dict[str
     return [_decode(r, home=home) for r in rows]
 
 
+def cancel_pending_for_bot(
+    bot: str,
+    *,
+    home: Path | None = None,
+    reason: str = "Agent stopped.",
+) -> int:
+    """Close every pending clarify card for ``bot`` (e.g. after Stop)."""
+    pending = list_pending_for_bot(bot, home=home)
+    closed = 0
+    for req in pending:
+        _finalize(
+            req,
+            state="cancelled",
+            result={
+                "ok": False,
+                "cancelled": True,
+                "answer": "",
+                "message": reason,
+            },
+            home=home,
+        )
+        closed += 1
+    return closed
+
+
 def _card_meta(req: dict[str, Any], *, state: str, answer: str = "") -> dict[str, Any]:
     return {
         "kind": "clarify_request",
@@ -317,33 +342,6 @@ def resolve_request(
             home=home,
         )
     raise ValidationError("choice or text required", code="clarify_answer")
-
-
-def cancel_pending_for_human_message(
-    bot: str,
-    content: str,
-    *,
-    home: Path | None = None,
-) -> list[dict[str, Any]]:
-    """Cancel pending clarify cards when the user writes in chat."""
-    pending = list_pending_for_bot(bot, home=home)
-    if not pending:
-        return []
-    note = (content or "").strip()
-    result = {
-        "ok": False,
-        "cancelled": True,
-        "human_redirect": True,
-        "message": note,
-        "guidance": (
-            "User skipped the clarify card and wrote in chat. "
-            f"Follow their message: {note}"
-        ),
-    }
-    out: list[dict[str, Any]] = []
-    for req in pending:
-        out.append(_finalize(req, state="cancelled", result=result, home=home))
-    return out
 
 
 def _resume_or_unstick(bot: str, *, home: Path | None = None) -> None:

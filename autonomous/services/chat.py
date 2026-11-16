@@ -183,14 +183,14 @@ def send_message(
     blocked = role == "user" and trigger_agent and bot_run_blocked(bot, home=home)
     slot_held = role == "user" and trigger_agent and run_in_progress(bot)
     already_queued = False
-    if role == "user" and trigger_agent and status != "waiting":
+    if role == "user" and trigger_agent:
         already_queued = bool(list_queued_user_messages(bot, home=home))
     # Stamp queued on INSERT when we already know the bubble will wait.
-    # ``waiting`` is special: a chat reply may cancel a vault/approval card instead.
+    # While a human-response card is pending (status=waiting), keep the agent
+    # blocked on that card and park composer messages in the FIFO queue.
     pre_queue = bool(
         role == "user"
         and trigger_agent
-        and status != "waiting"
         and (blocked or slot_held or already_queued)
     )
     if pre_queue:
@@ -286,54 +286,8 @@ def send_message(
         # Mid-run steer is reserved for botmail/peers — a rapid 7/8/9/10 must
         # never let a later bubble jump into the live turn.
         if blocked:
-            # Waiting on a vault form: a chat reply cancels the form and guides
-            # the agent (e.g. « validate on another device », not an OTP code).
-            # Do not park the message in the queue — that loses the intent if the
-            # the user later hits « Refuser » on the card.
-            if status == "waiting":
-                cancelled: list = []
-                try:
-                    from autonomous.services import vault as vault_svc
-
-                    cancelled = vault_svc.cancel_pending_for_human_message(
-                        bot, agent_prompt, home=home
-                    )
-                except Exception:
-                    cancelled = []
-                if not cancelled:
-                    try:
-                        from autonomous.services import approvals as approval_svc
-
-                        cancelled = approval_svc.cancel_pending_for_human_message(
-                            bot, agent_prompt, home=home
-                        )
-                    except Exception:
-                        cancelled = []
-                if not cancelled:
-                    try:
-                        from autonomous.services import clarifies as clarify_svc
-
-                        cancelled = clarify_svc.cancel_pending_for_human_message(
-                            bot, agent_prompt, home=home
-                        )
-                    except Exception:
-                        cancelled = []
-                if not cancelled:
-                    try:
-                        from autonomous.services import household as household_svc
-
-                        cancelled = household_svc.cancel_pending_for_human_message(
-                            bot, agent_prompt, home=home
-                        )
-                    except Exception:
-                        cancelled = []
-                if cancelled:
-                    return _finish(message)
-                if hold_until_idle:
-                    meta["hold"] = True
-                return _finish(
-                    _mark_queued(bot, msg_id, content, meta, home=home)
-                )
+            # Busy, waiting for a card, or desk creating: never cancel the card
+            # and never start a second agent turn from the composer.
             if hold_until_idle:
                 meta["hold"] = True
             return _finish(

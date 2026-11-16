@@ -15,7 +15,12 @@
   place-items: center;
   flex: none;
   border-radius: var(--radius-sm);
-  background: var(--accent-soft);
+  background: var(--accent-badge);
+  color: var(--accent-ink);
+}
+
+.ui-icon-badge.is-accent {
+  background: var(--accent-badge);
   color: var(--accent-ink);
 }
 

@@ -28,7 +28,7 @@ def test_create_and_approve(home, auth_client):
     assert out["result"]["approved"] is True
 
 
-def test_deny_and_chat_cancel(home, auth_client):
+def test_deny_and_chat_queues(home, auth_client):
     bots_svc.create_bot("bob", label="Bob", home=home)
     req = approval_svc.create_request(
         "bob", prompt="Installer un paquet ?", home=home
@@ -39,13 +39,10 @@ def test_deny_and_chat_cancel(home, auth_client):
     req2 = approval_svc.create_request(
         "bob", prompt="Encore ?", home=home
     )
-    cancelled = approval_svc.cancel_pending_for_human_message(
-        "bob", "fais-le sans sudo", home=home
-    )
-    assert len(cancelled) == 1
-    assert cancelled[0]["state"] == "cancelled"
-    assert cancelled[0]["result"]["human_redirect"] is True
-    assert approval_svc.get_request(req2["id"], home=home)["state"] == "cancelled"
+    msg = chat_svc.send_message("bob", "fais-le sans sudo", home=home)
+    assert (msg.get("meta") or {}).get("queued") is True
+    assert approval_svc.get_request(req2["id"], home=home)["state"] == "pending"
+    assert bots_svc.get_bot("bob", home=home)["status"] == "waiting"
 
 
 def test_api_flow(home, auth_client):

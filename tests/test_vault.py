@@ -433,8 +433,7 @@ def test_vault_http_api(home, auth_client):
     assert "never-to-llm" not in str(body)
 
 
-def test_chat_message_cancels_pending_vault_with_redirect(home):
-    """While waiting on a vault form, a chat reply cancels it (not a hard deny)."""
+def test_chat_message_queues_while_vault_is_pending(home):
     bots_svc.create_bot("lea", label="Lea", home=home)
     req = vault_svc.create_request(
         "lea",
@@ -452,17 +451,15 @@ def test_chat_message_cancels_pending_vault_with_redirect(home):
         "Ce n'est pas un code : valide l'action sur mon téléphone.",
         home=home,
     )
-    assert not (msg.get("meta") or {}).get("queued")
+    assert (msg.get("meta") or {}).get("queued") is True
 
     fresh = vault_svc.get_request(req["id"], home=home)
-    assert fresh["state"] == "cancelled"
-    assert fresh["result"].get("human_redirect") is True
-    assert "téléphone" in fresh["result"].get("message", "")
-    assert fresh["result"].get("denied") is False
+    assert fresh["state"] == "pending"
+    assert bots_svc.get_bot("lea", home=home)["status"] == "waiting"
 
 
 def test_deny_with_queued_message_becomes_redirect(home):
-    """« Refuser » after a queued correction must not look like a hard denial."""
+    """A message queued while the card waits still guides a later decline."""
     bots_svc.create_bot("marc", label="Marc", home=home)
     req = vault_svc.create_request(
         "marc",
@@ -470,15 +467,13 @@ def test_deny_with_queued_message_becomes_redirect(home):
         label="2FA",
         home=home,
     )
-    bots_svc.patch_bot("marc", {"status": "busy"}, home=home)
-    # Simulate a message that was queued before waiting (or during busy).
+    bots_svc.patch_bot("marc", {"status": "waiting"}, home=home)
     queued = chat_svc.send_message(
         "marc",
         "Valide sur l'autre appareil, pas de code.",
         home=home,
     )
     assert (queued.get("meta") or {}).get("queued") is True
-    bots_svc.patch_bot("marc", {"status": "waiting"}, home=home)
 
     resolved = vault_svc.resolve_request(req["id"], action="deny", home=home)
     assert resolved["state"] == "cancelled"

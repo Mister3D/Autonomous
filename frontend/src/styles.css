@@ -4688,19 +4688,19 @@ label.muted {
 }
 
 .bubble.user .md-table-wrap {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.28);
+  background: color-mix(in srgb, var(--user-bubble-ink) 4%, #fff);
+  border-color: color-mix(in srgb, var(--user-bubble-ink) 14%, transparent);
 }
 
 .bubble.user th {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  border-bottom-color: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--user-bubble-ink) 7%, #fff);
+  color: var(--user-bubble-ink);
+  border-bottom-color: color-mix(in srgb, var(--user-bubble-ink) 16%, transparent);
 }
 
 .bubble.user td {
-  border-bottom-color: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  border-bottom-color: color-mix(in srgb, var(--user-bubble-ink) 12%, transparent);
+  color: var(--user-bubble-ink);
 }
 
 .bubble.user tbody tr:nth-child(even) td,
@@ -4710,12 +4710,12 @@ label.muted {
 .bubble.user tbody tr:nth-child(even) td:first-child,
 .bubble.user tbody tr:hover td,
 .bubble.user tbody tr:hover td:first-child {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--user-bubble-ink) 5%, #fff);
 }
 
 .bubble.user {
-  background: #2f6fed;
-  color: #fff;
+  background: var(--user-bubble);
+  color: var(--user-bubble-ink);
   border-bottom-right-radius: 6px;
 }
 
@@ -5616,7 +5616,22 @@ button.msg-queued-action:disabled {
 }
 
 .bubble a:not(.bot-mention) {
-  color: #b86e00;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: from-font;
+}
+
+.bubble a:not(.bot-mention):hover {
+  color: var(--accent-2);
+}
+
+.bubble.user a:not(.bot-mention) {
+  color: var(--user-bubble-link);
+}
+
+.bubble.user a:not(.bot-mention):hover {
+  color: var(--accent-2);
 }
 
 .bubble .code-block {
@@ -7199,7 +7214,7 @@ a.bot-mention:hover,
   align-items: center;
   justify-content: center;
   color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  background: var(--accent-badge);
   flex: none;
 }
 .setup-update-copy {

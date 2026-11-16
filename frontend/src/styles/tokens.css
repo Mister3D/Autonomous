@@ -29,11 +29,15 @@
   /* Brand / status */
   --accent: #f08c12;
   --accent-2: #c4841d;
-  --accent-soft: rgba(240, 140, 18, 0.14);
+  /* Solid orange wash for every accent icon badge (no rgba — looks the same on any surface). */
+  --accent-badge: #f9ebdb;
+  --accent-soft: var(--accent-badge);
   --accent-softer: rgba(240, 140, 18, 0.08);
   --accent-ink: #9a5a08;
-  --user-bubble: #2f6fed;
-  --user-bubble-ink: #ffffff;
+  --user-bubble: var(--accent-badge);
+  --user-bubble-ink: #1c1c1e;
+  /* Same brown as accent icon glyphs (--accent-ink). */
+  --user-bubble-link: var(--accent-ink);
   --danger: #c53434;
   --danger-soft: #fff6f6;
   --ok: #2f9e62;

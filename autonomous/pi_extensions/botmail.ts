@@ -288,7 +288,7 @@ export default function (pi: ExtensionAPI) {
       "MANAGER ONLY: propose deleting bots via a chat card with a checklist "
       + "(all checked by default). BLOCKS until the user confirms or cancels. "
       + "Pass the bot names to offer; the user may uncheck some before confirming. "
-      + "You cannot delete yourself.",
+      + "You may include yourself; if confirmed, this run and your workspace end immediately.",
     parameters: Type.Object({
       bots: Type.Array(Type.String({ description: "Bot slug or @name" }), {
         minItems: 1,
@@ -341,9 +341,7 @@ export default function (pi: ExtensionAPI) {
         );
       }
 
-      const started = Date.now();
-      const timeoutMs = 60 * 60 * 1000;
-      while (Date.now() - started < timeoutMs) {
+      while (true) {
         if (signal?.aborted) {
           return textResult("bot_delete aborted before the user responded.", {
             request_id: req.id,
@@ -392,10 +390,6 @@ export default function (pi: ExtensionAPI) {
           );
         }
       }
-      return textResult(
-        `Delete request ${req.id} still pending after timeout.`,
-        { request_id: req.id, state: "pending", error: true },
-      );
     },
   });
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autonomous.services import bots as bots_svc
+from autonomous.services import chat as chat_svc
 from autonomous.services import household as household_svc
 from autonomous.services import settings as settings_svc
 from autonomous.services.errors import Forbidden, ValidationError
@@ -45,14 +46,9 @@ def test_create_requires_model(home):
     assert exc.value.code == "model_required"
 
 
-def test_delete_card_confirm_and_skip_self(manager, home):
+def test_delete_card_confirm(manager, home):
     bots_svc.create_bot("Temp A", home=home)
     bots_svc.create_bot("Temp B", home=home)
-    with pytest.raises(ValidationError) as exc:
-        household_svc.create_delete_request(
-            "assistant", bots=["assistant", "temp-a"], home=home
-        )
-    assert exc.value.code == "cannot_delete_self"
 
     req = household_svc.create_delete_request(
         "assistant",
@@ -62,6 +58,10 @@ def test_delete_card_confirm_and_skip_self(manager, home):
     )
     assert req["state"] == "pending"
     assert all(b["selected"] for b in req["bots"])
+    assert bots_svc.get_bot("assistant", home=home)["status"] == "waiting"
+    queued = chat_svc.send_message("assistant", "supprime seulement A", home=home)
+    assert (queued.get("meta") or {}).get("queued") is True
+    assert household_svc.get_delete_request(req["id"], home=home)["state"] == "pending"
     assert bots_svc.get_bot("assistant", home=home)["status"] == "waiting"
 
     out = household_svc.resolve_delete_request(
@@ -75,6 +75,27 @@ def test_delete_card_confirm_and_skip_self(manager, home):
     with pytest.raises(Exception):
         bots_svc.get_bot("temp-a", home=home)
     assert bots_svc.get_bot("temp-b", home=home)["name"] == "temp-b"
+
+
+def test_delete_card_can_delete_manager_itself(manager, home):
+    req = household_svc.create_delete_request(
+        "assistant",
+        bots=["assistant"],
+        prompt="Setup is complete; remove this temporary assistant.",
+        home=home,
+    )
+
+    out = household_svc.resolve_delete_request(
+        req["id"],
+        action="confirm",
+        selected=["assistant"],
+        home=home,
+    )
+
+    assert out["state"] == "confirmed"
+    assert out["result"]["deleted"] == ["assistant"]
+    with pytest.raises(Exception):
+        bots_svc.get_bot("assistant", home=home)
 
 
 def test_household_api(auth_client, home):
@@ -106,3 +127,30 @@ def test_household_api(auth_client, home):
     )
     assert conf.status_code == 200, conf.data
     assert set(conf.json["result"]["deleted"]) == {"worker-one", "worker-two"}
+
+
+def test_household_api_can_delete_manager_itself(auth_client, home):
+    settings_svc.set_value("bots.default_model", "test/provider:fixture", home=home)
+    created = auth_client.post(
+        "/api/v1/bots",
+        json={"name": "Setup Assistant", "is_manager": True},
+    )
+    assert created.status_code == 201
+    name = created.json["name"]
+
+    request = auth_client.post(
+        f"/api/v1/bots/{name}/household/delete-requests",
+        json={
+            "bots": [name],
+            "prompt": "Setup is complete; remove this temporary assistant.",
+        },
+    )
+    assert request.status_code == 200
+
+    confirmed = auth_client.post(
+        f"/api/v1/bots/{name}/household/delete-requests/{request.json['id']}",
+        json={"action": "confirm", "bots": [name]},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json["result"]["deleted"] == [name]
+    assert auth_client.get(f"/api/v1/bots/{name}").status_code == 404

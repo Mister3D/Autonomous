@@ -119,11 +119,9 @@ async function createAndWait(
     return textResult(redactResult(req), { request_id: req.id, state: req.state });
   }
 
-  const started = Date.now();
-  // User OTP / credential forms may sit longer than a 5‑minute agent run;
-  // the host pauses the runtime clock while status=waiting.
-  const timeoutMs = 60 * 60 * 1000;
-  while (Date.now() - started < timeoutMs) {
+  // Human credential forms stay pending until answered, declined, or aborted.
+  // The host pauses the runtime clock while status=waiting.
+  while (true) {
     if (signal?.aborted) {
       return textResult("Vault request aborted before the user responded.", {
         request_id: req.id,
@@ -141,10 +139,6 @@ async function createAndWait(
       });
     }
   }
-  return textResult(
-    `Vault request ${req.id} still pending after timeout. Ask the user to approve the form in chat, then retry.`,
-    { request_id: req.id, state: "pending" },
-  );
 }
 
 export default function (pi: ExtensionAPI) {

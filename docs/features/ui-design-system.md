@@ -9,11 +9,11 @@
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-13 (rail and conversation scrollbars sit on the edge)
+**Last updated**: 2026-11-16 (all accent icon badges share solid --accent-badge #f9ebdb)
 
 ## User behaviour
 
-- Light Soft UI: soft canvas (`--bg-canvas`), elevated white cards, orange accent, soft shadows.
+- Light Soft UI: soft canvas (`--bg-canvas`), elevated white cards, orange accent, soft shadows. Every orange icon badge (`.ui-icon-badge` / `.is-accent`, setup update ico, user bubbles) uses solid `--accent-badge: #f9ebdb` — not a transparent rgba that shifts with the parent surface. Muted / ok / danger badges stay on their own tones. Chat markdown links use `--accent-ink` (same brown as accent icon glyphs).
 - Settings sections are card-based with icon badges (Générale, LLM, Grounding, Consumption, vault, memory, companions). Consumption is a flush full-height chart on a wide screen, and a day bar plus a table under 760px (no cards). General stays a single full-width column. The language switch is centered. The default-model picker spans its card. **Add a provider** and **Add a model** are centered under their lists. The grounding attempt field and **Test notification** sit on the right of their row. LLM settings (`.llm-settings`) is four cards — default model, providers, models, other models — each body a flex column with one gap.
 - `UiIcon` `memory` = [SVG Repo brain](https://www.svgrepo.com/svg/521533/brain) (filled `currentColor`) — settings nav Mémoire + inspector Mémoire.
 - Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Manager, Veille, **MCP (puzzle)**. Manager uses `UiToggleRow` `tip` (custom bubble on the switch) instead of the `<small>` hint; when locked, the tip shows the “already a Manager” reason.

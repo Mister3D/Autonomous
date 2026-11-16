@@ -1,4 +1,4 @@
-/** After the onboarding language clarify, send the prefs script in that locale. */
+/** After the onboarding language clarify, send or translate the English prefs script. */
 
 import { api } from "./api";
 import { i18n, setLocale } from "./i18n";
@@ -33,7 +33,7 @@ export function rawMessage(key, locale, vars = null) {
 /**
  * Map a language answer to UI locale + agent speak label.
  * Returns null only for empty answers.
- * @returns {{ ui: 'fr'|'en', script: 'fr'|'en'|'other', speak: string } | null}
+ * @returns {{ ui: 'fr'|'en', script: 'en'|'other', speak: string } | null}
  */
 export function resolveOnboardingLang(answer) {
   const raw = String(answer || "").trim();
@@ -44,7 +44,7 @@ export function resolveOnboardingLang(answer) {
     a.includes("francais") ||
     a.includes("french")
   ) {
-    return { ui: "fr", script: "fr", speak: "Français" };
+    return { ui: "fr", script: "other", speak: "French" };
   }
   if (
     /^(english|anglais|en)$/.test(a) ||
@@ -86,6 +86,11 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function setLocalBotStatus(name, status) {
+  const row = (state.bots || []).find((b) => b.name === name);
+  if (row) row.status = status;
+}
+
 function turnIsLive(name) {
   const row = (state.bots || []).find((b) => b.name === name);
   const status = String(row?.status || "");
@@ -100,19 +105,36 @@ function turnIsLive(name) {
 }
 
 /**
- * The language answer resumes the same run. Posting the next user message
- * while that run is live parks it in the queue, where Send now and Stop both
- * abort the turn. Wait until the bot is idle.
+ * Language resolve resumes the same Pi turn. If that turn invents more cards,
+ * status stays ``waiting`` and the prefs script never sends. Stop the run so
+ * the strict prefs prompt can start cleanly.
  */
+async function stopLanguageTurn(name) {
+  try {
+    await api.stopBot(name);
+  } catch {
+    /* already idle */
+  }
+  setLocalBotStatus(name, "idle");
+  // Let SSE / stop sweeps settle before we post the prefs message.
+  await delay(500);
+  try {
+    const bot = await api.getBot(name);
+    if (bot?.status) setLocalBotStatus(name, bot.status);
+  } catch {
+    /* keep local idle guess */
+  }
+}
+
 async function waitUntilAgentIdle(name) {
-  const deadline = Date.now() + 180000;
-  const notBefore = Date.now() + 1200;
+  const deadline = Date.now() + 60000;
+  const notBefore = Date.now() + 400;
   while (Date.now() < deadline) {
     if (!turnIsLive(name) && Date.now() >= notBefore) {
-      await delay(400);
+      await delay(300);
       if (!turnIsLive(name)) return true;
     }
-    await delay(250);
+    await delay(200);
   }
   return false;
 }
@@ -135,11 +157,10 @@ async function deliverPrefs(bot, visible, script) {
 let prefsInFlight = false;
 
 function prefsPayload(resolved) {
-  if (resolved.script === "fr" || resolved.script === "en") {
-    const loc = resolved.script;
+  if (resolved.script === "en") {
     return {
-      visible: rawMessage("setup.firstChatPrefsVisible", loc),
-      script: rawMessage("setup.firstChatScript", loc),
+      visible: rawMessage("setup.firstChatPrefsVisible", "en"),
+      script: rawMessage("setup.firstChatScript", "en"),
     };
   }
   return {
@@ -178,10 +199,14 @@ export async function maybeContinueFirstChatPrefs(bot, answer) {
     if (!script || script.length < 200) {
       throw new Error("Onboarding prefs script missing or truncated");
     }
-    // Keep the pending flag until the message is actually accepted, so a
-    // reload during the wait can resume. Do not paint a queued bubble.
+    // Cut any post-language improvisation (and orphan waiting cards) before
+    // the prefs script can get stuck behind status=waiting forever.
+    await stopLanguageTurn(bot);
     const idle = await waitUntilAgentIdle(bot);
-    if (!idle) return false;
+    if (!idle) {
+      // Last resort: force local idle and try to send anyway (hold parks it).
+      setLocalBotStatus(bot, "idle");
+    }
     const saved = await deliverPrefs(bot, visible, script);
     if (!saved) return false;
     state.firstChatPrefsPending = null;

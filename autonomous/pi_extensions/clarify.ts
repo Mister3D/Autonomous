@@ -141,9 +141,7 @@ export default function (pi: ExtensionAPI) {
         });
       }
 
-      const started = Date.now();
-      const timeoutMs = 60 * 60 * 1000;
-      while (Date.now() - started < timeoutMs) {
+      while (true) {
         if (signal?.aborted) {
           return textResult("ask_clarify aborted before the user responded.", {
             request_id: req.id,
@@ -165,10 +163,6 @@ export default function (pi: ExtensionAPI) {
           });
         }
       }
-      return textResult(
-        `Clarify ${req.id} still pending after timeout. Ask the user to use the card, then retry.`,
-        { request_id: req.id, state: "pending", error: true },
-      );
     },
   });
 }

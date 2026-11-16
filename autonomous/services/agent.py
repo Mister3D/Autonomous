@@ -95,7 +95,7 @@ _RESTART_TOOL_ERROR = "Agent session interrupted (server restart)."
 
 
 def has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
-    """True when a vault / approval / clarify / desk card still needs the user."""
+    """True when a blocking chat card still needs the user."""
     try:
         from autonomous.services import approvals as approval_svc
 
@@ -122,6 +122,13 @@ def has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
 
         flags = desk_svc._desk_request_flags(bot, home=home)
         if flags.get("pending_state") == "pending":
+            return True
+    except Exception:
+        pass
+    try:
+        from autonomous.services import household as household_svc
+
+        if household_svc.list_pending_delete_for_bot(bot, home=home):
             return True
     except Exception:
         pass
@@ -1288,10 +1295,19 @@ class PiAgent:
             )
         except Exception:
             log.exception("close_running_tools failed after stop for %s", bot)
+        # Idle before cancelling cards so clarify finalize does not post a Resume card.
         try:
             bots_svc.patch_bot(bot, {"status": "idle"}, home=home)
         except Exception:
             pass
+        try:
+            from autonomous.services import clarifies as clarify_svc
+
+            clarify_svc.cancel_pending_for_bot(
+                bot, home=home, reason="Agent stopped."
+            )
+        except Exception:
+            log.exception("cancel pending clarifies failed after stop for %s", bot)
         # Pi events already in flight when we stopped (e.g. a tool_execution_start
         # read just after the sweep above) would leave a card stuck on "En cours"
         # forever: sweep again once the reader thread has drained.
