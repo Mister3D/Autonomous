@@ -9,11 +9,12 @@
 - `docker/desktop/chrome-policy.json`
 - `docker/desktop/webgl-spoof-cdp.py` / `webgl-spoof.js`
 
-**Last updated**: 2026-11-15 (Chrome 151 terms dialog skipped via the EULA Accepted sentinel)
+**Last updated**: 2026-11-17 (Chrome starts on demand — not at desk boot)
 
 ## Expected behaviour in the VM
 
-- Chrome starts **maximised** on the 1920×1200 desktop (usable area ~1920×1171 excluding the bar).
+- Chrome does **not** autostart with the desk (no XFCE `chrome.desktop`, no `xstartup` launch, no `restart_bot_chrome` on create/wake). The first `browser_*` / CDP call runs `ensure_bot_chrome` on the host. Shell-only / calculator tasks keep a light desktop.
+- When started, Chrome opens **maximised** on the 1920×1200 desktop (usable area ~1920×1171 excluding the bar).
 - **Chrome sandbox enabled** (default): the desk starts with `security_opt: seccomp=unconfined` so that the zygote/userns works. **No** `--no-sandbox` or `--test-type` except the escape hatch `BOT_CHROME_NO_SANDBOX=1`. If CDP doesn't come up → **explicit error** (no half-dead browser).
 - Useful flags in `bot-chrome`: `--start-maximized`, `--remote-debugging-port`, `--lang=fr-FR`, plus CDP helper/`maximize-window.py`.
 - **Persistent CDP profile**: `BOT_CHROME_USER_DATA_DIR` = **`$HOME/shared/.autonomous-chrome`** (host bind-mount `data/bots/<bot>/home`). Cookies / localStorage / anti-bot "clearance" cookies survive a container **recreate**. The old path `$HOME/.autonomous-chrome` (container layer) is migrated on first launch. Not `~/.config/google-chrome` (Chrome ≥136 ignores remote-debugging on it).
@@ -67,11 +68,19 @@ docker exec -u root <container> install -m 644 /tmp/autonomous.json /etc/opt/chr
 - No `/dev/dri` in the container → real GPU impossible; the JS spoof is mandatory.
 - Chrome preferences (`window_placement.maximized`) help at startup; the maximizer remains a safety net.
 - If `curl 127.0.0.1:9222/json/version` refuses in headed mode: check that Chrome is not using `~/.config/google-chrome` (hot-patch `bot-chrome` + kill Chrome + relaunch).
-- On desk **creation**, the host syncs `docker/desktop/bot-chrome` (+ WebGL spoof, etc.) then **relaunches Chrome** (`restart_bot_chrome`). Otherwise xstartup starts **the image's** `bot-chrome` (often still `~/.config/google-chrome`) → Chrome ≥136 **cuts CDP** → WebGL spoof never applied → **`llvmpipe`** fingerprint → anti-bot block.
-- **`desk.state` stays `creating` until the job has finished** (sync + Chrome relaunch). `desk.status()` no longer switches it to `running` as soon as the Docker container is running (except `creating` > 240 s = dead job). Before this fix the agent was released ~20 s too early: its first tab died in the Chrome relaunch (`about:blank` page, "Chrome Terms of Service" dialog).
-- Check after create: `curl 127.0.0.1:9222/json/version` = 200, cmdline with `--user-data-dir=…/shared/.autonomous-chrome`, spoof log "WebGL spoof applied", and on the host `data/bots/<bot>/home/.autonomous-chrome/` present.
+- On desk **creation**, the host syncs `docker/desktop/bot-chrome` (+ WebGL spoof, `xstartup`, etc.) and **does not** start Chrome. The first `browser_*` tool calls `ensure_bot_chrome` → `restart_bot_chrome` so CDP uses the synced script + `shared/.autonomous-chrome` (not a stale image default profile).
+- **`desk.state` stays `creating` until the job has finished** (script sync). `desk.status()` no longer switches it to `running` as soon as the Docker container is running (except `creating` > 240 s = dead job).
+- After the first browser tool: `curl 127.0.0.1:9222/json/version` = 200, cmdline with `--user-data-dir=…/shared/.autonomous-chrome`, spoof log "WebGL spoof applied". Before any browser tool, CDP may be down — that is expected.
 - `desk reset` (volume wipe) **also erases** the shared Chrome profile — deliberate recreate = new fingerprint.
 - **No** `--disable-blink-features=AutomationControlled`: Chrome ≥ 150 shows an "unsupported command-line flag" bar (automation signal, and it shifts the viewport) while `navigator.webdriver` stays `false` with `--remote-debugging-port` alone. Verified: bot.sannysoft.com all green, bot-detector.rebrowser.net without `runtimeEnableLeak` or `navigatorWebdriver`.
 - `desk restart` **does not resync** `bot-chrome` (only `desk create` does): after modifying the script, **recreate** the desktop (destroy + create) to test.
 - Remaining detectable flags: `--remote-debugging-port` (needed for the WebGL spoof / agent). Avoid `--no-sandbox` / `--test-type`.
-- Rebuild the image when the repo moves forward: `docker build -t autonomous-desktop:latest docker/desktop` (avoids depending on the hot-sync).
+- Rebuild the image when the repo moves forward: `docker build -t autonomous-desktop:latest docker/desktop` (avoids depending on the hot-sync). Live desks also get `xstartup` + removal of `~/.config/autostart/chrome.desktop` via `sync_desktop_scripts` (create/wake).
+
+## Quick check
+
+```bash
+pytest tests/test_ensure_bot_chrome.py -q
+# Desk up, no browser tool yet → CDP 9222 down, no chrome process.
+# After browser_tabs / navigate → curl 127.0.0.1:9222/json/version = 200
+```

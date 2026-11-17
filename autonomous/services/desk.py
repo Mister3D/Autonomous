@@ -106,7 +106,11 @@ _DESKTOP_SCRIPTS = (
     ("webgl-spoof.js", "/usr/local/share/autonomous/webgl-spoof.js", 0o644),
     ("chrome-policy.json", "/etc/opt/chrome/policies/managed/autonomous.json", 0o644),
     ("autonomous-hook", "/usr/local/bin/autonomous-hook", 0o755),
+    # Lazy Chrome: xstartup must not autostart the browser (synced into live desks).
+    ("xstartup", "/home/autonomous/.vnc/xstartup", 0o755),
 )
+_chrome_ensure_locks: dict[str, threading.Lock] = {}
+_chrome_ensure_guard = threading.Lock()
 
 
 def _now() -> str:
@@ -211,6 +215,25 @@ def sync_desktop_scripts(bot: str, home: Path | None = None) -> list[str]:
             updated.append(src_name)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             continue
+    # Drop legacy XFCE Chrome autostart (old volumes / images).
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-u",
+                "autonomous",
+                name,
+                "rm",
+                "-f",
+                "/home/autonomous/.config/autostart/chrome.desktop",
+            ],
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
     _stamp_chrome_eula(name)
     return updated
 
@@ -244,12 +267,56 @@ def _stamp_chrome_eula(name: str) -> None:
         pass
 
 
+def _chrome_cdp_ready(bot: str, *, home: Path | None = None) -> bool:
+    """True when Chrome answers CDP on ``127.0.0.1:9222`` inside the desk."""
+    name = container_name(bot, home=home)
+    try:
+        probe = subprocess.run(
+            [
+                "docker",
+                "exec",
+                name,
+                "curl",
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://127.0.0.1:9222/json/version",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return (probe.stdout or "").strip() == "200"
+
+
+def _chrome_lock(bot: str) -> threading.Lock:
+    with _chrome_ensure_guard:
+        lock = _chrome_ensure_locks.get(bot)
+        if lock is None:
+            lock = threading.Lock()
+            _chrome_ensure_locks[bot] = lock
+        return lock
+
+
+def ensure_bot_chrome(bot: str, home: Path | None = None) -> bool:
+    """Start ``bot-chrome`` if CDP is down. Idempotent; used by browser tools.
+
+    Desks no longer autostart Chrome — shell-only tasks stay without a browser.
+    """
+    with _chrome_lock(bot):
+        if _chrome_cdp_ready(bot, home=home):
+            return True
+        return restart_bot_chrome(bot, home=home)
+
+
 def restart_bot_chrome(bot: str, home: Path | None = None) -> bool:
     """Kill Chrome + WebGL spoof and relaunch ``bot-chrome`` (CDP profile).
 
-    Needed after ``sync_desktop_scripts`` on first boot: xstartup often starts the
-    *image* bot-chrome (default profile → CDP dead → spoof never attaches →
-    ``llvmpipe`` fingerprint → flagged by anti-bot services) before the host sync.
+    Used by ``ensure_bot_chrome`` when CDP is down, and by explicit desk restarts.
     """
     name = container_name(bot, home=home)
     # Kill → wait → relaunch → require CDP 200 AND autonomous-chrome profile.
@@ -632,54 +699,31 @@ def _finish_wake_background(bot: str, home: Path | None) -> None:
         _ensure_files_alias(bot, home=home)
     except Exception:
         pass
-    # A terms dialog already on screen is a separate window. Accept it without
-    # killing Chrome (a relaunch would drop the page the user is on).
-    try:
-        subprocess.run(
-            [
-                "docker",
-                "exec",
-                "-u",
-                "autonomous",
-                "-e",
-                "DISPLAY=:1",
-                "-e",
-                "HOME=/home/autonomous",
-                container_name(bot, home=home),
-                "python3",
-                "/usr/local/bin/dismiss-chrome-tos.py",
-            ],
-            check=False,
-            capture_output=True,
-            timeout=20,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-    # xstartup starts Chrome on its own. Only relaunch if CDP is still down
-    # after that, so a normal wake does not kill the window the user just opened.
-    time.sleep(3)
-    try:
-        probe = subprocess.run(
-            [
-                "docker",
-                "exec",
-                container_name(bot, home=home),
-                "curl",
-                "-s",
-                "-o",
-                "/dev/null",
-                "-w",
-                "%{http_code}",
-                "http://127.0.0.1:9222/json/version",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        if (probe.stdout or "").strip() != "200":
-            restart_bot_chrome(bot, home=home)
-    except Exception:
-        pass
+    # If Chrome is already up (user left it open before sleep), accept a terms
+    # dialog without killing the window. Do not start Chrome on wake — browser
+    # tools call ensure_bot_chrome when they need CDP.
+    if _chrome_cdp_ready(bot, home=home):
+        try:
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-u",
+                    "autonomous",
+                    "-e",
+                    "DISPLAY=:1",
+                    "-e",
+                    "HOME=/home/autonomous",
+                    container_name(bot, home=home),
+                    "python3",
+                    "/usr/local/bin/dismiss-chrome-tos.py",
+                ],
+                check=False,
+                capture_output=True,
+                timeout=20,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
 
 def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:
@@ -1198,17 +1242,13 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
             progress=90,
             home=home,
         )
-    # Image may still ship old bot-chrome; xstartup often already launched it.
-    # Relaunch so CDP + WebGL spoof (Intel UHD, not llvmpipe) are live.
-    if restart_bot_chrome(bot, home=home):
-        _job_log(job_id, "Chrome relancé (profil CDP + spoof WebGL)", progress=94, home=home)
-    else:
-        _job_log(
-            job_id,
-            "avertissement : relance Chrome / CDP non confirmée",
-            progress=94,
-            home=home,
-        )
+    # Chrome stays off until a browser_* / CDP tool calls ensure_bot_chrome.
+    _job_log(
+        job_id,
+        "Chrome en attente (démarrage à la demande au premier outil navigateur)",
+        progress=94,
+        home=home,
+    )
 
     desk.update(
         {

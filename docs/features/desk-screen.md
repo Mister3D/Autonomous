@@ -55,7 +55,7 @@
 - Don't re-centre a large opaque label over the whole viewport: the desktop must stay readable in view-only mode.
 - Keep the connect/disconnect `postMessage` in the injection (otherwise the UI thinks it's "stuck" with no feedback).
 - Containers created before the `~/files` mount: `serve` start links `~/files` → `workspace` on desks already running, before Pi recovery. Sleeping desks get the link on wake. `~/shared` may still exist (Chrome). New desks bind all three names. The prompt tells the bot not to use `~/shared`.
-- Stale Docker image ≠ `docker/desktop/` sources on the host → rebuild or `docker cp` the scripts (`bot-chrome`, etc.).
+- Stale Docker image ≠ `docker/desktop/` sources on the host → rebuild or `docker cp` the scripts (`bot-chrome`, `xstartup`, etc.). Chrome is on-demand (`ensure_bot_chrome`); see [`chrome-desktop-image.md`](./chrome-desktop-image.md).
 - Never add an authorization timeout or let a chat message cancel a pending desk card.
 
 ## Quick check

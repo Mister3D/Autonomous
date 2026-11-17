@@ -21,17 +21,8 @@ mkdir -p "$BOT_CHROME_USER_DATA_DIR"
 find "$HOME/Desktop" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
 # Binaries are already +x in the image; non-root cannot chmod /usr/local/bin.
 chmod +x "$HOME/.vnc/xstartup" 2>/dev/null || true
-# Ensure Chrome autostart desktop entry exists (idempotent for old volumes).
-if [ ! -f "$HOME/.config/autostart/chrome.desktop" ]; then
-  cat >"$HOME/.config/autostart/chrome.desktop" <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Google Chrome
-Exec=/usr/local/bin/bot-chrome
-Terminal=false
-X-GNOME-Autostart-enabled=true
-EOF
-fi
+# Chrome starts on demand (first browser tool) — drop legacy XFCE autostart.
+rm -f "$HOME/.config/autostart/chrome.desktop" 2>/dev/null || true
 
 # Pre-start WebGL CDP spoof watcher (attaches when Chrome opens port 9222)
 if ! pgrep -f "webgl-spoof-cdp.py" >/dev/null 2>&1; then

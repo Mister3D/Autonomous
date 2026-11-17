@@ -69,6 +69,12 @@ def _run(bot: str, args: list[str], *, home: Path | None = None) -> dict[str, An
     from autonomous.services import desk as desk_svc
 
     _ensure_desk(bot, home=home)
+    # Desks no longer autostart Chrome — bring CDP up for this browser tool.
+    if not desk_svc.ensure_bot_chrome(bot, home=home):
+        raise AutonomousError(
+            "Chrome did not start (CDP port 9222). Try again or restart the desk.",
+            code="browser_chrome_start_failed",
+        )
     _copy_workers(bot, home=home)
     cmd = [
         "docker",
