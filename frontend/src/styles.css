@@ -5554,6 +5554,26 @@ button.msg-queued-action:disabled {
   text-align: left;
 }
 
+.run-progress-text > :first-child {
+  margin-top: 0;
+}
+
+.run-progress-text > :last-child {
+  margin-bottom: 0;
+}
+
+.run-progress-text p {
+  margin: 0;
+}
+
+.run-progress-text img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.35rem 0;
+  border-radius: 8px;
+}
+
 .tool-row-head {
   width: 100%;
   display: flex;

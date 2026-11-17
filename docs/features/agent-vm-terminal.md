@@ -2,11 +2,12 @@
 
 **Status**: in place (one-shot exec; interactive PTY = UI tab only)  
 **Key files**: `autonomous/services/terminal.py`, `autonomous/pi_extensions/vm.ts`, `autonomous/services/pi_rpc.py`, `POST /bots/:name/terminal/exec`  
-**Last updated**: 2026-11-15 (a sleeping VM wakes on the tool that needs it, shown as `vm_wake`)
+**Last updated**: 2026-11-17 (VM sudo / apt is allowed — no invented permission barrier)
 
 ## User behaviour
 
 - In the chat, the Pi agent runs commands (`date`, `curl`, `ping`, everything else) **in the VM** via `vm_terminal_exec`. Without a desktop, the tool requests the VM and waits. It does not invent the output.
+- The desk user `autonomous` has **passwordless sudo**. Installing packages (`sudo apt-get install -y …`) for the task is normal. The agent must not invent an “I don’t have permission / authorize apt” story, and must not `ask_approval` for ordinary VM installs. The only desk gate is `vm_request_desk`.
 - Calls are made **server-side** (`docker exec`) — **no open UI** is needed.
 - There is **no host bash**: Pi always starts with `--exclude-tools bash`. To act on the Autonomous host machine itself, the operator gives credentials via the vault (or works outside Autonomous).
 - Pi VM tools:

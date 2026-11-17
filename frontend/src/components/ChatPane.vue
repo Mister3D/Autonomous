@@ -104,11 +104,12 @@
           :data-msg-id="item.id"
         >
           <div class="run-progress-stack">
-            <p
+            <div
               v-for="m in item.messages"
               :key="m.id"
               class="run-progress-text"
-            >{{ m.content }}</p>
+              v-html="render(m)"
+            />
           </div>
         </article>
         <article v-else-if="item.kind === 'notice'" class="msg notice" :data-msg-id="item.message.id">
@@ -248,11 +249,12 @@
             v-if="item.progress?.length"
             class="run-progress-stack"
           >
-            <p
+            <div
               v-for="m in item.progress"
               :key="m.id"
               class="run-progress-text"
-            >{{ m.content }}</p>
+              v-html="render(m)"
+            />
           </div>
           <p v-if="sourceOf(item.message)" class="msg-source">
             {{ t("chat.from") }}
@@ -2377,22 +2379,33 @@ const thread = computed(() => {
     );
   }
 
-  /** Next message that would show in the thread (skip hidden / empty). */
-  function nextVisible(fromIdx) {
+  /**
+   * Next thread message after ``fromIdx``, skipping hidden/empty rows and
+   * trailing llm_turn cards. A seal reflection after the final assistant reply
+   * must not force that reply into run_text.
+   */
+  function nextAfterLlmTurns(fromIdx) {
     for (let j = fromIdx; j < msgs.length; j++) {
       const n = msgs[j];
       if (isHiddenTool(n)) continue;
       if (isEmptyAssistant(n)) continue;
       if (awaitNotifyAck && isNotifyAck(n)) continue;
+      if (isLlmTurn(n)) continue;
       return n;
     }
     return null;
   }
 
-  /** Assistant text mid-run stays in the tool group so order stays chronological. */
+  /** Pasteable chat image markdown — must stay a real bubble (not plain run_progress). */
+  function hasChatImageMarkdown(m) {
+    return /!\[[^\]]*\]\([^)\s]+\)/.test(String(m?.content || ""));
+  }
+
+  /** Assistant text mid-run stays with the tool group so order stays chronological. */
   function isRunContinue(n) {
     if (!n) return false;
-    if (isActivity(n)) return true;
+    // llm_turns alone are not a "run continues" signal — see nextAfterLlmTurns.
+    if (isTool(n) || isGrounding(n) || isScreenshot(n)) return true;
     return (
       isVault(n) ||
       isApproval(n) ||
@@ -2434,10 +2447,14 @@ const thread = computed(() => {
       continue;
     }
     // Mid-run asides: buffer with tools, then flush under the group.
+    // Never fold image markdown — run_progress used to show it as raw `![…](…)`.
+    // Look past llm_turns so a trailing reflection after the final reply does
+    // not mis-classify that reply as a mid-run aside.
     if (
       m?.role === "assistant" &&
       activityBuf.length &&
-      isRunContinue(nextVisible(i + 1))
+      !hasChatImageMarkdown(m) &&
+      isRunContinue(nextAfterLlmTurns(i + 1))
     ) {
       activityBuf.push({
         ...m,
@@ -2531,6 +2548,40 @@ const thread = computed(() => {
       next.message?.role === "assistant"
     ) {
       next.progress = it.messages;
+      items.splice(i, 1);
+      continue;
+    }
+    i += 1;
+  }
+  // message_end often seals the final llm_turn *after* the assistant bubble is
+  // written → a lone « 1 réflexion » bar under the reply (same content). Pull
+  // those llm-only groups back into the preceding tools group (above the bubble).
+  for (let i = 0; i < items.length; ) {
+    const it = items[i];
+    if (
+      it.kind !== "tools" ||
+      !it.entries?.length ||
+      !it.entries.every((e) => isLlmTurn(e))
+    ) {
+      i += 1;
+      continue;
+    }
+    let prevTools = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      const k = items[j].kind;
+      if (k === "tools") {
+        prevTools = j;
+        break;
+      }
+      if (k === "run_progress") continue;
+      if (k === "msg" && items[j].message?.role === "assistant") continue;
+      break;
+    }
+    if (prevTools >= 0) {
+      items[prevTools].entries = sortByCreatedAt([
+        ...items[prevTools].entries,
+        ...it.entries,
+      ]);
       items.splice(i, 1);
       continue;
     }

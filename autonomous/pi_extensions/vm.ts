@@ -732,7 +732,9 @@ export default function (pi: ExtensionAPI) {
     label: "VM terminal",
     description:
       "Run a non-interactive shell command inside this bot's desktop VM (server-side docker exec). " +
-      "This is the shell for date, curl, ping, and any other command. " +
+      "This is the shell for date, curl, ping, apt/pip installs, and any other command. " +
+      "User autonomous has passwordless sudo — use `sudo apt-get install -y …` when a package is missing; " +
+      "do not invent a permission barrier or ask the user to authorize apt. " +
       "If there is no desk, this call asks the user for the VM and waits — do not invent the output. " +
       "There is no host bash on the Autonomous server. Works even when no user has the web UI open. " +
       "cwd is /home/autonomous/workspace. For reading/writing bot files prefer files_list/read/write (no desk needed). " +

@@ -44,7 +44,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. Switching bots drops the previous desktop and connects to the selected one. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). Orb label shows phase + elapsed. | [`pi-agent.md`](./pi-agent.md) |
-| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines and **Réflexion** LLM rows, in `created_at` order. Mid-run asides fold onto the assistant bubble in `ChatPane`. User-facing desk captures belong in the assistant markdown (`vm_screenshot` → paste), not as a collapsed-group preview. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md), [`agent-vm-screenshot.md`](./agent-vm-screenshot.md) |
+| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines and **Réflexion** LLM rows, in `created_at` order. Mid-run asides fold onto the assistant bubble in `ChatPane` (never fold image markdown; look past trailing `llm_turn` seals; absorb a post-bubble llm-only group back into the tools above). User-facing desk captures belong in the assistant markdown (`vm_screenshot` → paste), not as a collapsed-group preview. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md), [`agent-vm-screenshot.md`](./agent-vm-screenshot.md) |
 
 ## Inspector panes
 
