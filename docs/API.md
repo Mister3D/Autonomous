@@ -55,6 +55,8 @@ GET|POST /bots/:name/household/delete-requests/:id     # poll / confirm|deny (+ 
 GET    /bots/:name/messages        # page `limit`≤200, `before`; the client pages back up to the user message
 POST   /bots/:name/messages         # {content?, attachments?, prompt?} → run Pi (prompt = agent text if set)
 POST   /bots/:name/reactions        # {emoji, message_id?} — emoji on the turn's user bubble; does not cut the reply
+POST   /bots/:name/llm-turns        # Pi llm_trace: open reflection row ({request_file, request_kind=provider})
+GET    /bots/:name/llm-turns/:id/request|response  # Full provider / assistant JSON for that turn
 GET    /bots/:name/chat/attachments/:file  # pasted image
 POST   /bots/:name/chat/files       # multipart → ~/files/upload/<uuid>/<name>
 DELETE /bots/:name/messages         # + Pi session rotation

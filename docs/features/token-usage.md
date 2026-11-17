@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**:
-- `bots.tokens_in` / `tokens_out`, `bots.add_token_usage`, `agent.message_end`, `ChatPane` (badge)
+- `bots.tokens_in` / `tokens_out`, `bots.add_token_usage`, `agent.message_end`, `ChatPane` (badge + per-call llm_turn cards)
 - `bot_token_usage_daily`, `token_usage_history.py`, `GET /bots/token-usage`, `TokenUsageChart.vue`
 **Last updated**: 2026-11-15 (narrow screens show a table instead of the chart)
 

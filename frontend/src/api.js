@@ -215,6 +215,10 @@ export const api = {
       method: "POST",
       body: {},
     }),
+  llmTurnPayload: (name, messageId, side) =>
+    request(
+      `/bots/${encodeURIComponent(name)}/llm-turns/${encodeURIComponent(messageId)}/${encodeURIComponent(side)}`
+    ),
   resumeBot: (name) => request(`/bots/${name}/resume`, { method: "POST", body: {} }),
   retryBot: (name) => request(`/bots/${name}/retry`, { method: "POST", body: {} }),
   vaultEntries: () => request("/vault/entries"),

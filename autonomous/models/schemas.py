@@ -232,6 +232,17 @@ class ReactionCreateSchema(Schema):
     message_id = fields.Str(load_default=None)
 
 
+class LlmTurnCreateSchema(Schema):
+    """Opened by the Pi llm_trace extension before each provider call."""
+
+    request = fields.Str(load_default="")
+    # Relative path under bots/<bot>/pi/, e.g. llm_turns/req_….json
+    request_file = fields.Str(load_default=None, allow_none=True)
+    # "provider" = exact before_provider_request JSON on disk.
+    request_kind = fields.Str(load_default="provider")
+    model = fields.Str(load_default=None, allow_none=True)
+
+
 class MessageCreateSchema(Schema):
     content = fields.Str(load_default="")
     attachments = fields.List(fields.Raw(), load_default=list)

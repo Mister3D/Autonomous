@@ -209,6 +209,14 @@ def recover_stale_runs(*, home: Path | None = None) -> list[str]:
         except Exception:
             log.exception("recover: close_running_tools failed for %s", name)
         try:
+            from autonomous.services import llm_turns as llm_turns_svc
+
+            llm_turns_svc.close_running_turns(
+                name, home=home, error=_RESTART_TOOL_ERROR
+            )
+        except Exception:
+            log.exception("recover: close_running llm_turns failed for %s", name)
+        try:
             abort_streaming_assistants(name, home=home)
         except Exception:
             log.exception("recover: abort streaming failed for %s", name)
@@ -393,6 +401,8 @@ _HIDDEN_TOOL_CARDS = frozenset(
         "chat_search",
         # Emoji on the user bubble — no tool card.
         "react",
+        # Desk auth: DeskRequestCard only (no « vm_request_desk · En cours » tool row).
+        "vm_request_desk",
     }
 )
 
@@ -563,6 +573,8 @@ class PiAgent:
             "guard_gate_violation": False,  # tools attempted while gate open
             "guard_tools_blocked": False,  # gate-only follow-up run: block every tool
             "compaction_msg_id": None,
+            # True once this LLM call has an open llm_turn card (extension or fallback).
+            "llm_turn_ensured": False,
             # CONTINUE arrived after a gate abort — settle must resume the task.
             "guard_resume_task": False,
             "pending_secret_reformulate": False,
@@ -694,6 +706,28 @@ class PiAgent:
             except Exception:
                 log.exception("compaction notice failed for %s", bot)
 
+        def ensure_llm_turn_open() -> None:
+            """Fallback clock when llm_trace has not opened a card yet."""
+            if state.get("llm_turn_ensured"):
+                return
+            try:
+                from autonomous.services import llm_turns as llm_turns_svc
+
+                if llm_turns_svc.find_open_turn(bot, home=home):
+                    state["llm_turn_ensured"] = True
+                    return
+                # No request text here — the lone user prompt is not the payload.
+                # llm_trace fills request_kind=context when the extension is loaded.
+                llm_turns_svc.open_turn(
+                    bot,
+                    request="",
+                    model=model,
+                    home=home,
+                )
+                state["llm_turn_ensured"] = True
+            except Exception:
+                log.exception("llm_turn open fallback failed for %s", bot)
+
         def on_event(record: dict[str, Any]) -> None:
             touch_run_progress(bot)
             rtype = record.get("type")
@@ -706,6 +740,7 @@ class PiAgent:
                 if etype == "text_delta":
                     delta = ev.get("delta") or ""
                     if delta:
+                        ensure_llm_turn_open()
                         msg_id = ensure_assistant()
                         state["content"] += delta
                         # Open the gate as soon as CONTINUE streams — tools in the
@@ -745,9 +780,24 @@ class PiAgent:
                             )
                 elif etype == "toolcall_start":
                     # Close open text bubble so the tool card sits between turns.
+                    # Do not open a new llm_turn here: message_end often already
+                    # finalised the reflection; opening again duplicated the row.
                     close_assistant()
             elif rtype == "tool_execution_start":
                 close_assistant()
+                # Seal only if a turn is still running (message_end not yet).
+                # Never ensure/open here — that created a second « Réflexion »
+                # with only « [tool name] » right before the tool card.
+                try:
+                    from autonomous.services import llm_turns as llm_turns_svc
+
+                    llm_turns_svc.seal_turn_for_tools(
+                        bot,
+                        tool_name=str(record.get("toolName") or ""),
+                        home=home,
+                    )
+                except Exception:
+                    log.exception("llm_turn tool seal failed for %s", bot)
                 # CONTINUE may already be in the closed bubble content.
                 if _wants_guard_continue(state.get("content") or ""):
                     _release_guard_gate(bot, state=state, from_continue=True)
@@ -995,16 +1045,48 @@ class PiAgent:
                                     "remember vision limit failed for %s", bot
                                 )
                     usage = message_obj.get("usage")
+                    tokens_in = 0
+                    tokens_out = 0
                     if isinstance(usage, dict):
+                        tokens_in = int(usage.get("input") or 0)
+                        tokens_out = int(usage.get("output") or 0)
                         try:
                             bots_svc.add_token_usage(
                                 bot,
-                                int(usage.get("input") or 0),
-                                int(usage.get("output") or 0),
+                                tokens_in,
+                                tokens_out,
                                 home=home,
                             )
                         except Exception:
                             log.exception("token usage update failed for %s", bot)
+                    # Seal the llm_turn card opened by llm_trace (or create one).
+                    try:
+                        from autonomous.services import llm_turns as llm_turns_svc
+
+                        llm_turns_svc.finalize_turn(
+                            bot,
+                            response=llm_turns_svc.summarize_assistant_message(
+                                message_obj
+                            ),
+                            response_json=message_obj,
+                            tokens_in=tokens_in,
+                            tokens_out=tokens_out,
+                            stop_reason=str(message_obj.get("stopReason") or "")
+                            or None,
+                            error=str(err) if err else None,
+                            model=str(
+                                message_obj.get("responseModel")
+                                or message_obj.get("model")
+                                or model
+                                or ""
+                            )
+                            or None,
+                            home=home,
+                        )
+                        # Next provider call may open a fresh card.
+                        state["llm_turn_ensured"] = False
+                    except Exception:
+                        log.exception("llm_turn finalize failed for %s", bot)
             elif rtype == "auto_retry_end":
                 if record.get("success") is False and not state["settled"].is_set():
                     state["error"] = state["error"] or "Pi provider failed after retries"
@@ -1197,6 +1279,12 @@ class PiAgent:
                     chat_svc.finalize_streaming_assistants(bot, home=home)
                 except Exception:
                     pass
+                try:
+                    from autonomous.services import llm_turns as llm_turns_svc
+
+                    llm_turns_svc.close_running_turns(bot, home=home)
+                except Exception:
+                    log.exception("close_running llm_turns failed for %s", bot)
                 need_secret_fix = bool(
                     state.get("pending_secret_reformulate")
                     or _pending_secret_reformulate.get(bot)
@@ -1295,6 +1383,14 @@ class PiAgent:
             )
         except Exception:
             log.exception("close_running_tools failed after stop for %s", bot)
+        try:
+            from autonomous.services import llm_turns as llm_turns_svc
+
+            llm_turns_svc.close_running_turns(
+                bot, home=home, error="Tour LLM interrompu (stop)."
+            )
+        except Exception:
+            log.exception("close_running llm_turns failed after stop for %s", bot)
         # Idle before cancelling cards so clarify finalize does not post a Resume card.
         try:
             bots_svc.patch_bot(bot, {"status": "idle"}, home=home)

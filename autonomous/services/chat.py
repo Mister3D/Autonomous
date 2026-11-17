@@ -1183,6 +1183,12 @@ def clear_messages(bot: str, home: Path | None = None) -> int:
 
     MANAGER.stop(bot)
     purge_pi_sessions(bot, home=home)
+    try:
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        llm_turns_svc.purge_turn_files(bot, home=home)
+    except Exception:
+        pass
     new_id = new_session_id(bot)
     bots_svc.patch_bot(bot, {"pi_session_id": new_id, "status": "idle"}, home=home)
     with get_db(home) as conn:

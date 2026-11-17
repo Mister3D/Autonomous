@@ -1310,6 +1310,16 @@ def request_authorization(
             bots_svc.patch_bot(bot, {"status": "waiting"}, home=home)
     except Exception:
         pass
+    # End any still-running « Réflexion… » card so it does not sit above the
+    # Autorisation VM card while message_end is delayed.
+    try:
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        llm_turns_svc.seal_turn_for_tools(
+            bot, tool_name="vm_request_desk", home=home
+        )
+    except Exception:
+        pass
     BUS.publish(
         "notification",
         {

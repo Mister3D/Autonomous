@@ -64,33 +64,52 @@
         </div>
         <template v-else-if="item.kind === 'live'">
           <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
-            <div class="thinking-row waiting">
-              <span class="thinking-label">{{ t("desk.creating") }}</span>
+            <div class="thinking-stack">
+              <div class="thinking-row waiting">
+                <span class="thinking-label">{{ deskCreatingLabel }}</span>
+              </div>
             </div>
           </article>
           <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
-            <div class="thinking-row waiting">
-              <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
+            <div class="thinking-stack">
+              <div class="thinking-row waiting">
+                <span class="thinking-label">{{ waitingHumanLabel }}</span>
+              </div>
             </div>
           </article>
           <article v-else-if="showAgentOrb" class="msg assistant thinking" aria-live="polite">
-            <div class="thinking-row">
-              <WorkingOrb state="working" :size="22" :label="t('chat.working')" />
-              <span class="thinking-label">{{ t("chat.working") }}</span>
-              <button
-                type="button"
-                class="agent-stop-btn"
-                :aria-label="t('chat.stop')"
-                :title="t('chat.stopHint')"
-                @click="stop"
-              >
-                {{ t("chat.stop") }}
-              </button>
+            <div class="thinking-stack">
+              <div class="thinking-row">
+                <WorkingOrb state="working" :size="22" :label="agentOrbLabel" />
+                <span class="thinking-label">{{ agentOrbLabel }}</span>
+                <button
+                  type="button"
+                  class="agent-stop-btn"
+                  :aria-label="t('chat.stop')"
+                  :title="t('chat.stopHint')"
+                  @click="stop"
+                >
+                  {{ t("chat.stop") }}
+                </button>
+              </div>
             </div>
           </article>
         </template>
         <article v-else-if="item.kind === 'tools'" class="msg tool" :data-msg-id="item.id">
           <ToolGroup :entries="item.entries" :sealed="item.sealed" :bot="bot.name" />
+        </article>
+        <article
+          v-else-if="item.kind === 'run_progress'"
+          class="msg run-progress"
+          :data-msg-id="item.id"
+        >
+          <div class="run-progress-stack">
+            <p
+              v-for="m in item.messages"
+              :key="m.id"
+              class="run-progress-text"
+            >{{ m.content }}</p>
+          </div>
         </article>
         <article v-else-if="item.kind === 'notice'" class="msg notice" :data-msg-id="item.message.id">
           <div class="notice-card" :class="item.message.meta?.status">
@@ -225,6 +244,16 @@
           :data-msg-id="item.message.id"
           :data-queued="item.message.meta?.queued ? '1' : undefined"
         >
+          <div
+            v-if="item.progress?.length"
+            class="run-progress-stack"
+          >
+            <p
+              v-for="m in item.progress"
+              :key="m.id"
+              class="run-progress-text"
+            >{{ m.content }}</p>
+          </div>
           <p v-if="sourceOf(item.message)" class="msg-source">
             {{ t("chat.from") }}
             <span class="src-pip" :style="{ background: avatarColor(sourceOf(item.message)) }" />
@@ -511,28 +540,34 @@
       </template>
       <template v-if="!hasQueued">
         <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
-          <div class="thinking-row waiting">
-            <span class="thinking-label">{{ t("desk.creating") }}</span>
+          <div class="thinking-stack">
+            <div class="thinking-row waiting">
+              <span class="thinking-label">{{ deskCreatingLabel }}</span>
+            </div>
           </div>
         </article>
         <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
-          <div class="thinking-row waiting">
-            <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
+          <div class="thinking-stack">
+            <div class="thinking-row waiting">
+              <span class="thinking-label">{{ waitingHumanLabel }}</span>
+            </div>
           </div>
         </article>
         <article v-else-if="showAgentOrb" class="msg assistant thinking" aria-live="polite">
-          <div class="thinking-row">
-            <WorkingOrb state="working" :size="22" :label="t('chat.working')" />
-            <span class="thinking-label">{{ t("chat.working") }}</span>
-            <button
-              type="button"
-              class="agent-stop-btn"
-              :aria-label="t('chat.stop')"
-              :title="t('chat.stopHint')"
-              @click="stop"
-            >
-              {{ t("chat.stop") }}
-            </button>
+          <div class="thinking-stack">
+            <div class="thinking-row">
+              <WorkingOrb state="working" :size="22" :label="agentOrbLabel" />
+              <span class="thinking-label">{{ agentOrbLabel }}</span>
+              <button
+                type="button"
+                class="agent-stop-btn"
+                :aria-label="t('chat.stop')"
+                :title="t('chat.stopHint')"
+                @click="stop"
+              >
+                {{ t("chat.stop") }}
+              </button>
+            </div>
           </div>
         </article>
       </template>
@@ -758,6 +793,7 @@ import {
   setComposerPending,
   clearComposerPending,
 } from "../composerDrafts.js";
+import { formatDurationMs, isShowRunTimings } from "../runTimings";
 
 /** Pasted images kept in the chat. The model receives a smaller copy. */
 const MAX_PENDING_IMAGES = 16;
@@ -837,8 +873,31 @@ const busy = computed(() => props.bot.status === "busy");
 /** VM boot in progress — not an agent run yet. */
 const deskCreating = computed(() => props.bot.desk?.state === "creating");
 /** Agent mid-run but blocked on vault/desk user approval. */
+/** Pending vault / desk / approval / clarify / delete card in the thread. */
+const hasPendingHumanCard = computed(() => {
+  const msgs = state.messages[props.bot.name] || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    const kind = m?.meta?.kind;
+    const st = m?.meta?.state;
+    if (
+      (kind === "desk_request" ||
+        kind === "vault_request" ||
+        kind === "approval_request" ||
+        kind === "clarify_request" ||
+        kind === "bot_delete_request") &&
+      st === "pending"
+    ) {
+      return true;
+    }
+  }
+  return false;
+});
+
 const waitingHuman = computed(
-  () => props.bot.status === "waiting" && !deskCreating.value
+  () =>
+    !deskCreating.value &&
+    (props.bot.status === "waiting" || hasPendingHumanCard.value)
 );
 const runLocked = computed(
   () => busy.value || waitingHuman.value || deskCreating.value
@@ -855,6 +914,90 @@ const waitingForReply = computed(() => {
 });
 /** Left-side orb for the whole run, including tools and streaming text. */
 const showAgentOrb = computed(() => busy.value && !waitingHuman.value);
+
+const showRunTimings = computed(() => isShowRunTimings(props.bot?.name));
+
+/** Live phase key while the agent (or a wait) is active. */
+const runTimingPhaseKey = computed(() => {
+  if (deskCreating.value) return "desk";
+  if (waitingHuman.value) return "wait";
+  if (!busy.value) return "";
+  const msgs = state.messages[props.bot.name] || [];
+  let lastUser = -1;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m?.role !== "user" || m?.meta?.hidden_prompt || m?.meta?.queued) continue;
+    lastUser = i;
+    break;
+  }
+  const slice = lastUser >= 0 ? msgs.slice(lastUser + 1) : msgs;
+  for (let i = slice.length - 1; i >= 0; i--) {
+    const m = slice[i];
+    if (m?.meta?.kind === "tool" && m?.meta?.status === "running") {
+      const name = String(m.meta.tool_name || m.meta.name || "tool").trim() || "tool";
+      return `tool:${name}`;
+    }
+  }
+  if (slice.some((m) => m?.role === "assistant" && m?.meta?.streaming)) {
+    return "reply";
+  }
+  return "reflect";
+});
+
+function runTimingPhaseLabel(key) {
+  if (!key) return "";
+  if (key === "reflect") return t("chat.timing.reflect");
+  if (key === "reply") return t("chat.timing.reply");
+  if (key === "wait") return t("chat.waitingHuman");
+  if (key === "desk") return t("desk.creating");
+  if (key.startsWith("tool:")) return key.slice(5) || t("chat.timing.tool");
+  return key;
+}
+
+const runTimingNowMs = ref(Date.now());
+const runTimingPhaseStartedAt = ref(Date.now());
+let runTimingTick = 0;
+
+const runTimingLiveLabel = computed(() => {
+  const key = runTimingPhaseKey.value;
+  if (!key || !showRunTimings.value) return "";
+  const ms = Math.max(0, runTimingNowMs.value - runTimingPhaseStartedAt.value);
+  const dur = formatDurationMs(ms);
+  const label = runTimingPhaseLabel(key);
+  return dur ? `${label} · ${dur}` : label;
+});
+
+const agentOrbLabel = computed(() =>
+  showRunTimings.value && runTimingLiveLabel.value
+    ? runTimingLiveLabel.value
+    : t("chat.working")
+);
+
+const deskCreatingLabel = computed(() => {
+  if (!showRunTimings.value || runTimingPhaseKey.value !== "desk") {
+    return t("desk.creating");
+  }
+  return runTimingLiveLabel.value || t("desk.creating");
+});
+
+/** No live chrono while waiting on the human — that clock is noise. */
+const waitingHumanLabel = computed(() => t("chat.waitingHuman"));
+
+watch(
+  runTimingPhaseKey,
+  () => {
+    runTimingNowMs.value = Date.now();
+    runTimingPhaseStartedAt.value = Date.now();
+  },
+  { flush: "sync" }
+);
+
+watch(
+  () => props.bot?.name,
+  () => {
+    runTimingPhaseStartedAt.value = Date.now();
+  }
+)
 
 const otherBots = computed(() =>
   (state.bots || []).filter((b) => b.name && b.name !== props.bot.name)
@@ -1629,6 +1772,8 @@ const HIDDEN_TOOL_CARDS = new Set([
   "report_user_secret",
   "chat_search",
   "react",
+  // Autorisation VM : DeskRequestCard only.
+  "vm_request_desk",
 ]);
 
 function isEventTrigger(m) {
@@ -1972,6 +2117,10 @@ function compactionItem(m) {
   };
 }
 
+function isLlmTurn(m) {
+  return m?.role === "system" && m?.meta?.kind === "llm_turn";
+}
+
 function isSecretLeak(m) {
   if (m?.role !== "system") return false;
   const kind = m?.meta?.kind;
@@ -2097,7 +2246,13 @@ function isGroundingShot(m) {
 function isActivity(m) {
   // Fold vm_screenshot cards into the tool group so they don't split the run
   // (standalone screenshot between tools). Workspace images use markdown, not this.
-  return isTool(m) || isGrounding(m) || isScreenshot(m);
+  // LLM turns (when Details → step timings is on) sit in the same tool group.
+  return (
+    isTool(m) ||
+    isGrounding(m) ||
+    isScreenshot(m) ||
+    (showRunTimings.value && isLlmTurn(m))
+  );
 }
 
 function parseDate(iso) {
@@ -2153,17 +2308,106 @@ const thread = computed(() => {
   let activityBuf = [];
   let awaitNotifyAck = false;
 
-  function flushActivity() {
-    if (!activityBuf.length) return;
-    items.push({
-      kind: "tools",
-      id: `tools-${activityBuf[0].id}`,
-      entries: activityBuf.slice(),
-    });
-    activityBuf = [];
+  /**
+   * Drop orphan seal-only reflections (« [tool X] », no tokens).
+   * Keep strict created_at order — no sticky reordering.
+   */
+  function pruneOrphanLlmSeals(entries) {
+    const out = [];
+    for (const m of entries) {
+      if (!isLlmTurn(m)) {
+        out.push(m);
+        continue;
+      }
+      const meta = m.meta || {};
+      const resp = String(meta.response || "").trim();
+      const seal = resp.match(/^\[tool\s+([^\]]+)\]$/i);
+      const noTok =
+        !Number.isFinite(Number(meta.tokens_in)) &&
+        !Number.isFinite(Number(meta.tokens_out));
+      if (seal && noTok && !meta.response_file) continue;
+      out.push(m);
+    }
+    return out;
   }
 
-  for (const m of msgs) {
+  function sortByCreatedAt(entries) {
+    return entries
+      .slice()
+      .sort((a, b) =>
+        String(a?.created_at || "").localeCompare(String(b?.created_at || ""))
+      );
+  }
+
+  function flushActivity() {
+    if (!activityBuf.length) return;
+    const raw = sortByCreatedAt(pruneOrphanLlmSeals(activityBuf));
+    activityBuf = [];
+    const entries = [];
+    const progress = [];
+    for (const m of raw) {
+      if (m?.meta?.kind === "run_text") progress.push(m);
+      else entries.push(m);
+    }
+    if (entries.length) {
+      items.push({
+        kind: "tools",
+        id: `tools-${entries[0].id}`,
+        entries,
+      });
+    }
+    // One left-aligned stack (merged onto the next assistant bubble when present).
+    if (progress.length) {
+      items.push({
+        kind: "run_progress",
+        id: `progress-${progress[0].id}`,
+        messages: progress,
+      });
+    }
+  }
+
+  function pushHumanCard(kind, m) {
+    flushActivity();
+    awaitNotifyAck = false;
+    items.push({ kind, id: m.id, message: m });
+  }
+
+  function isEmptyAssistant(m) {
+    return (
+      m?.role === "assistant" &&
+      !(m.content || "").trim() &&
+      !m?.meta?.streaming &&
+      !(m.attachments && m.attachments.length)
+    );
+  }
+
+  /** Next message that would show in the thread (skip hidden / empty). */
+  function nextVisible(fromIdx) {
+    for (let j = fromIdx; j < msgs.length; j++) {
+      const n = msgs[j];
+      if (isHiddenTool(n)) continue;
+      if (isEmptyAssistant(n)) continue;
+      if (awaitNotifyAck && isNotifyAck(n)) continue;
+      return n;
+    }
+    return null;
+  }
+
+  /** Assistant text mid-run stays in the tool group so order stays chronological. */
+  function isRunContinue(n) {
+    if (!n) return false;
+    if (isActivity(n)) return true;
+    return (
+      isVault(n) ||
+      isApproval(n) ||
+      isClarify(n) ||
+      isDeskReq(n) ||
+      isBotDelete(n)
+    );
+  }
+
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i];
     const d = parseDate(m.created_at);
     if (d) {
       const key = dayKey(d);
@@ -2190,45 +2434,53 @@ const thread = computed(() => {
     if (isHiddenTool(m)) {
       continue;
     }
-    // Whitespace-only assistant turns leave a timestamp with no bubble — skip.
+    if (isEmptyAssistant(m)) {
+      continue;
+    }
+    // Mid-run asides: buffer with tools, then flush under the group.
     if (
       m?.role === "assistant" &&
-      !(m.content || "").trim() &&
-      !m?.meta?.streaming &&
-      !(m.attachments && m.attachments.length)
+      activityBuf.length &&
+      isRunContinue(nextVisible(i + 1))
     ) {
+      activityBuf.push({
+        ...m,
+        meta: { ...(m.meta || {}), kind: "run_text" },
+      });
       continue;
     }
     if (isActivity(m)) {
       activityBuf.push(m);
       continue;
     }
-    flushActivity();
-    awaitNotifyAck = false;
     if (isVault(m)) {
-      items.push({ kind: "vault", id: m.id, message: m });
+      pushHumanCard("vault", m);
       continue;
     }
     if (isMemoryProposal(m)) {
+      flushActivity();
+      awaitNotifyAck = false;
       items.push({ kind: "memory", id: m.id, message: m });
       continue;
     }
     if (isApproval(m)) {
-      items.push({ kind: "approval", id: m.id, message: m });
+      pushHumanCard("approval", m);
       continue;
     }
     if (isBotDelete(m)) {
-      items.push({ kind: "bot_delete", id: m.id, message: m });
+      pushHumanCard("bot_delete", m);
       continue;
     }
     if (isClarify(m)) {
-      items.push({ kind: "clarify", id: m.id, message: m });
+      pushHumanCard("clarify", m);
       continue;
     }
     if (isDeskReq(m)) {
-      items.push({ kind: "desk", id: m.id, message: m });
+      pushHumanCard("desk", m);
       continue;
     }
+    flushActivity();
+    awaitNotifyAck = false;
     if (isResume(m)) {
       items.push({ kind: "resume", id: m.id, message: m });
       continue;
@@ -2250,6 +2502,10 @@ const thread = computed(() => {
       items.push(compactionItem(m));
       continue;
     }
+    // Off: hide. On: folded into tool groups via isActivity.
+    if (isLlmTurn(m)) {
+      continue;
+    }
     if (isNotebook(m)) {
       items.push(notebookItem(m));
       continue;
@@ -2258,7 +2514,6 @@ const thread = computed(() => {
     if (reply) {
       items.push(guardItem(m));
       if (reply.rest.trim()) {
-        // Texte après le jeton : bulle normale juste sous la carte.
         items.push({
           kind: "msg",
           id: `${m.id}-rest`,
@@ -2270,6 +2525,21 @@ const thread = computed(() => {
     items.push({ kind: "msg", id: m.id, message: m });
   }
   flushActivity();
+  // Fold mid-run asides onto the following assistant bubble (same left column).
+  for (let i = 0; i < items.length; ) {
+    const it = items[i];
+    const next = items[i + 1];
+    if (
+      it.kind === "run_progress" &&
+      next?.kind === "msg" &&
+      next.message?.role === "assistant"
+    ) {
+      next.progress = it.messages;
+      items.splice(i, 1);
+      continue;
+    }
+    i += 1;
+  }
   // Guard cards must not seal tool groups (that collapsed the live panel and
   // jumped the thread). Walking backwards: only the last tools group stays
   // live; earlier ones seal. Stay unsealed between tools of the active group
@@ -2838,6 +3108,15 @@ onMounted(async () => {
   composerMq = window.matchMedia("(max-width: 720px)");
   compactComposerPh.value = composerMq.matches;
   composerMq.addEventListener("change", onComposerMqChange);
+  runTimingTick = window.setInterval(() => {
+    if (!showRunTimings.value) return;
+    const liveOrb = busy.value || waitingHuman.value || deskCreating.value;
+    const liveTurn = (state.messages[props.bot.name] || []).some(
+      (m) => m?.meta?.kind === "llm_turn" && m?.meta?.status === "running"
+    );
+    if (!liveOrb && !liveTurn) return;
+    runTimingNowMs.value = Date.now();
+  }, 1000);
   await nextTick();
   autosize();
   revealThread();
@@ -2872,6 +3151,7 @@ onBeforeUnmount(() => {
   if (flashTimer) clearTimeout(flashTimer);
   clearTimeout(messagesScrollUiTimer);
   clearTimeout(idleQueuedTimer);
+  if (runTimingTick) window.clearInterval(runTimingTick);
   scroller.value?.classList.remove("messages-scrolling");
   window.removeEventListener("keydown", onLightboxKey);
   composerMq?.removeEventListener("change", onComposerMqChange);

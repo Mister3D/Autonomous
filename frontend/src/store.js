@@ -180,14 +180,16 @@ export function preferLiveStreamingMessage(local, remote) {
   };
 }
 
+export function dismissNotification(id) {
+  const i = state.notifications.findIndex((n) => n.id === id);
+  if (i >= 0) state.notifications.splice(i, 1);
+}
+
 export function pushNotification(text, kind = "info") {
   const id = uid();
   state.notifications.unshift({ id, text, kind, ts: Date.now() });
   if (state.notifications.length > 20) state.notifications.pop();
-  setTimeout(() => {
-    const i = state.notifications.findIndex((n) => n.id === id);
-    if (i >= 0) state.notifications.splice(i, 1);
-  }, 6000);
+  setTimeout(() => dismissNotification(id), 6000);
 }
 
 export function applyEvent(envelope, { fromBroadcast = false } = {}) {

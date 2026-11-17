@@ -69,6 +69,7 @@ from autonomous.models.schemas import (
     MessageListQuerySchema,
     MessageSchema,
     ReactionCreateSchema,
+    LlmTurnCreateSchema,
     NovncInfoSchema,
     OkSchema,
     RetryUnprocessedSchema,
@@ -302,6 +303,45 @@ class BotReactions(MethodView):
             )
         except AutonomousError as exc:
             _handle(exc)
+
+
+@blp.route("/<string:name>/llm-turns")
+class BotLlmTurns(MethodView):
+    @blp.arguments(LlmTurnCreateSchema)
+    @blp.response(201, MessageSchema)
+    def post(self, data, name):
+        """Open a running LLM-turn card (Pi llm_trace extension, before each call)."""
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        try:
+            return llm_turns_svc.open_turn(
+                name,
+                request=data.get("request") or "",
+                request_file=data.get("request_file"),
+                request_kind=data.get("request_kind") or "provider",
+                model=data.get("model"),
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/llm-turns/<string:message_id>/<string:side>")
+class BotLlmTurnPayload(MethodView):
+    def get(self, name, message_id, side):
+        """Return the full request or response JSON for an llm_turn row."""
+        from flask import jsonify
+
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        try:
+            payload = llm_turns_svc.get_payload(
+                name, message_id, side=side, home=g.home
+            )
+            return jsonify(payload)
+        except AutonomousError as exc:
+            _handle(exc)
+            return None
 
 
 @blp.route("/<string:name>/chat/attachments/<string:filename>")

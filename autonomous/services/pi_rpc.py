@@ -41,6 +41,8 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
     _EXTENSIONS_DIR / "vision_budget.ts",
+    # After vision_budget so the request preview matches what is actually sent.
+    _EXTENSIONS_DIR / "llm_trace.ts",
 )
 
 _BATCH_SYSTEM_HINT = (

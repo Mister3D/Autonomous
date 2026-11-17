@@ -106,6 +106,16 @@
         <UiIcon name="moon" :size="16" />
       </template>
     </UiToggleRow>
+    <UiToggleRow
+      :title="t('details.runTimings')"
+      :hint="t('details.runTimingsHint')"
+      :model-value="showRunTimings"
+      @change="toggleRunTimings"
+    >
+      <template #icon>
+        <UiIcon name="clock" :size="16" />
+      </template>
+    </UiToggleRow>
     <BotMcpGrants :bot="bot" />
 
     <div class="package-usage" aria-live="polite">
@@ -167,6 +177,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import { isShowRunTimings, setShowRunTimings } from "../runTimings";
 import BotCompanion from "./BotCompanion.vue";
 import BotMcpGrants from "./BotMcpGrants.vue";
 import ManageMenu from "./ManageMenu.vue";
@@ -178,6 +189,8 @@ import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
+
+const showRunTimings = computed(() => isShowRunTimings(props.bot?.name));
 
 const pkg = ref(null);
 const pkgLoading = ref(false);
@@ -392,6 +405,10 @@ async function toggleSleep(ev) {
     ev.target.checked = prev !== false;
     alert(e.message);
   }
+}
+
+function toggleRunTimings(ev) {
+  setShowRunTimings(props.bot.name, !!ev.target.checked);
 }
 
 </script>

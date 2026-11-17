@@ -42,6 +42,7 @@ _HIDDEN_TOOLS = frozenset(
         "report_user_secret",
         "chat_search",
         "react",
+        "vm_request_desk",
     }
 )
 

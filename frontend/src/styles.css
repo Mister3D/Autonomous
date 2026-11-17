@@ -1640,6 +1640,14 @@ a:focus-visible {
   max-width: min(680px, 90%);
 }
 
+.thinking-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  max-width: min(520px, 92%);
+}
+
 .thinking-row {
   display: inline-flex;
   align-items: center;
@@ -5503,6 +5511,49 @@ button.msg-queued-action:disabled {
   box-shadow: inset 3px 0 0 color-mix(in srgb, #c92a2a 65%, transparent);
 }
 
+.tool-row.run-text-row {
+  padding: 0.45rem 0.65rem 0.55rem;
+}
+
+.tool-run-text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--text, inherit);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Mid-run asides: left column like the assistant bubble, stacked just above it. */
+.msg.run-progress {
+  align-self: flex-start;
+  width: 90%;
+  max-width: 90%;
+}
+
+.msg.assistant > .run-progress-stack {
+  margin-bottom: 0;
+}
+
+.run-progress-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.04rem;
+  width: 100%;
+}
+
+.run-progress-text {
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  color: var(--muted, #6b6b76);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .tool-row-head {
   width: 100%;
   display: flex;
@@ -5553,6 +5604,15 @@ button.msg-queued-action:disabled {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 0.2rem;
+}
+
+.tool-section pre.llm-json-pre {
+  max-height: min(28rem, 55vh);
+  overflow: auto;
+  white-space: pre;
+  word-break: normal;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .tool-section pre {
@@ -6675,15 +6735,18 @@ a.bot-mention:hover,
 
 .toast-stack {
   position: fixed;
+  top: 1rem;
   right: 1rem;
-  bottom: 1rem;
+  bottom: auto;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   z-index: 50;
+  pointer-events: none;
 }
 
 .toast {
+  pointer-events: auto;
   background: #fff;
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
@@ -6692,6 +6755,14 @@ a.bot-mention:hover,
   min-width: 220px;
   max-width: 360px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.toast:hover {
+  background: #fafafa;
 }
 
 .login-page {

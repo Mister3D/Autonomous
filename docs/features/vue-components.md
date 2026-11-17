@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-11 (event modal also shows the webhook body)
+**Last updated**: 2026-11-17 (tool group created_at; mid-run run_progress under tools)
 
 ## Why this note exists
 
@@ -32,7 +32,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role |
 |-----------|------|
-| `App.vue` | Root: auth gate → `LoginView` or `HubView`; boots locale + events. |
+| `App.vue` | Root: auth gate → `LoginView` or `HubView`; boots locale + events. Hub toasts sit top-right; click dismisses. |
 | `views/LoginView.vue` | Password login / forced password change. |
 | `views/HubView.vue` | App chrome: bot rail, search, stage tabs (discussion / terminal / screen), split, inspector panels, mobile master–detail. Keeps `ScreenPane` mounted off-tab so noVNC stays alive. |
 
@@ -40,17 +40,17 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `ChatPane.vue` | Conversation thread (newest page first, older pages on scroll up), composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back, ArrowUp in an empty field recalls the newest queued text), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. A notebook save is a centred line, not a tool card. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md), [`notebook.md`](./notebook.md) |
+| `ChatPane.vue` | Conversation thread (newest page first, older pages on scroll up), composer, queue « En file » (Envoyer maintenant on the first bubble, Éditer puts the text back, ArrowUp in an empty field recalls the newest queued text), Relancer bar, token pill, markdown, attachments, @mentions. Hosts chat cards. When Details → step timings is on, LLM turns fold into tool groups. A notebook save is a centred line, not a tool card. | [`pi-agent.md`](./pi-agent.md), [`chat-files.md`](./chat-files.md), [`composer-drafts.md`](./composer-drafts.md), [`token-usage.md`](./token-usage.md), [`notebook.md`](./notebook.md) |
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. Switching bots drops the previous desktop and connects to the selected one. | [`desk-screen.md`](./desk-screen.md) |
-| `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). | [`pi-agent.md`](./pi-agent.md) |
-| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md) |
+| `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). With step timings on, the orb label shows phase + elapsed. | [`pi-agent.md`](./pi-agent.md) |
+| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines and optional **Réflexion** LLM rows (Details → step timings), in `created_at` order. Mid-run asides fold onto the assistant bubble in `ChatPane`. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md) |
 
 ## Inspector panes
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `DetailsPane.vue` | Bot details: model, capability, memory, notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md) |
+| `DetailsPane.vue` | Bot details: model, capability, memory, notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions, **step timings** toggle (`localStorage`). | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md), [`pi-agent.md`](./pi-agent.md) |
 | `LibraryPane.vue` | Files / `~/files` (private per bot): list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
 | `EventsPane.vue` | Schedules + webhooks list (pause / copy curl / delete confirm). | [`events.md`](./events.md) |
 | `EventInstructionModal.vue` | Large modal: standing instruction, plus the webhook POST body when opened from a chat bubble. | [`events.md`](./events.md) |
@@ -70,7 +70,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `AgentResumeCard.vue` | Manual Resume fallback after interrupt (rare; server auto-resumes first). | [`pi-agent.md`](./pi-agent.md) |
 | `BotDeleteCard.vue` | Manager household delete checkboxes. | [`household.md`](./household.md) |
 
-The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as a centred card in the thread (`meta.kind` `guard` or `compaction`). See [`pi-agent.md`](./pi-agent.md).
+The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as centred cards (`meta.kind` `guard` or `compaction`). LLM turns are rows inside `ToolGroup` when step timings is on. See [`pi-agent.md`](./pi-agent.md).
 
 ## Modals / overlays
 
