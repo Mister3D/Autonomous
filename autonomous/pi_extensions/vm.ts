@@ -220,18 +220,81 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  async function formatScreenshotResult(
+    cfg: { base: string; token: string; bot: string },
+    shot: Json,
+    showInChat: boolean,
+    extraNote = "",
+  ) {
+    const shotId = String(shot.id || "");
+    const url = String(shot.url || "");
+    const path = String(
+      shot.path || (shotId ? `.autonomous/screenshots/${shotId}.png` : ""),
+    );
+    const w = shot.width || "?";
+    const h = shot.height || "?";
+    const details: Json = {
+      screenshot_id: shotId,
+      url,
+      path,
+      width: shot.width,
+      height: shot.height,
+    };
+    let markdown = "";
+    if (showInChat && path) {
+      const share = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/files/share`,
+        {
+          path,
+          caption:
+            typeof w === "number" && typeof h === "number"
+              ? `Capture ${w}×${h}`
+              : "Capture d’écran",
+        },
+      );
+      markdown = String(share.data?.markdown || "").trim();
+      if (markdown) details.markdown = markdown;
+    }
+    let text =
+      `Screenshot captured ${w}×${h}.\n` +
+      `id: ${shotId}\n` +
+      `path: ${path}\n` +
+      `url: ${url}\n`;
+    if (showInChat && markdown) {
+      text +=
+        "To show the user this image IN YOUR ASSISTANT REPLY, paste this exact markdown " +
+        "(the tools list alone is NOT a visible bubble — do not claim they already see it):\n\n" +
+        `${markdown}\n`;
+    } else if (showInChat) {
+      text +=
+        "show_in_chat was requested but no share markdown was built — call " +
+        `files_share_image(${JSON.stringify(path)}) and paste its markdown.\n`;
+    } else {
+      text += "Silent capture (show_in_chat=false) — not for the user bubble.\n";
+    }
+    text +=
+      "(PNG is never attached to the model — use vm_ground for pixel localization.)";
+    if (extraNote) text += `\n${extraNote}`;
+    return textResult(text, details);
+  }
+
   pi.registerTool({
     name: "vm_screenshot",
     label: "VM screenshot",
     description:
-      "Take a screenshot of this bot's desktop (server-side X11 capture). " +
-      "Returns the image for tool-chaining / vision, and can post it in the chat. " +
-      "Works without the user having the UI open. Requires a running desk.",
+      "Capture this bot's desktop (server-side X11). Requires a running desk. " +
+      "Does NOT put a picture in your reply by itself — the tools list is technical only. " +
+      "With show_in_chat=true (default), the result includes a markdown image line you MUST " +
+      "paste into your assistant text so the user sees it in the bubble. " +
+      "show_in_chat=false: silent file for chaining / grounding prep.",
     parameters: Type.Object({
       show_in_chat: Type.Optional(
         Type.Boolean({
           description:
-            "If true (default), also show the screenshot in the conversation for the user. Set false for silent tool-chain use.",
+            "If true (default), return markdown you must paste into your reply so the user " +
+            "sees the image in the bubble. The tool event is NOT a user-facing message. " +
+            "Set false for silent tool-chain use.",
         }),
       ),
     }),
@@ -264,18 +327,11 @@ export default function (pi: ExtensionAPI) {
               { show_in_chat: showInChat },
             );
             if (retry.ok) {
-              const shot = retry.data || {};
-              return textResult(
-                `Screenshot captured ${shot.width || "?"}×${shot.height || "?"}.\n` +
-                  `id: ${shot.id || ""}\n` +
-                  `url: ${shot.url || ""}\n` +
-                  "(Desk was authorized during this call.)",
-                {
-                  screenshot_id: String(shot.id || ""),
-                  url: String(shot.url || ""),
-                  width: shot.width,
-                  height: shot.height,
-                },
+              return formatScreenshotResult(
+                cfg,
+                retry.data || {},
+                showInChat,
+                "(Desk was authorized during this call.)",
               );
             }
             hint = errMessage(retry.data, retry.status);
@@ -285,25 +341,7 @@ export default function (pi: ExtensionAPI) {
         }
         return textResult(hint, { error: true, code });
       }
-      const shot = res.data || {};
-      const shotId = String(shot.id || "");
-      const url = String(shot.url || "");
-      const w = shot.width || "?";
-      const h = shot.height || "?";
-      const text =
-        `Screenshot captured ${w}×${h}.\n` +
-        `id: ${shotId}\n` +
-        `url: ${url}\n` +
-        (showInChat
-          ? "Also posted in the chat for the user."
-          : "Not posted in chat (show_in_chat=false).") +
-        "\n(PNG never attached to the model — use vm_ground for pixel localization.)";
-      return textResult(text, {
-        screenshot_id: shotId,
-        url,
-        width: shot.width,
-        height: shot.height,
-      });
+      return formatScreenshotResult(cfg, res.data || {}, showInChat);
     },
   });
 

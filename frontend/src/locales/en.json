@@ -109,8 +109,6 @@
   "chat.llmTurnWaiting": "Waiting for the response…",
   "chat.llmTurnLoading": "Loading JSON…",
   "chat.llmTurnLoadError": "Could not load the JSON.",
-  "details.runTimings": "Step timings",
-  "details.runTimingsHint": "Inside tool groups: Thinking rows (duration, tokens, request/response JSON). The orb also shows the current phase.",
   "chat.waitingHuman": "Waiting for your reply…",
   "chat.waitingHumanHint": "The agent is waiting for your approval (vault / desk). Click to stop.",
   "chat.retry": "Retry",

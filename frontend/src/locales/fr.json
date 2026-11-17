@@ -109,8 +109,6 @@
   "chat.llmTurnWaiting": "En attente de la réponse…",
   "chat.llmTurnLoading": "Chargement du JSON…",
   "chat.llmTurnLoadError": "Impossible de charger le JSON.",
-  "details.runTimings": "Temps des étapes",
-  "details.runTimingsHint": "Dans le groupe d’outils : lignes Réflexion (durée, tokens, JSON requête/réponse). L’orbe affiche aussi la phase en cours.",
   "chat.waitingHuman": "En attente de votre réponse…",
   "chat.waitingHumanHint": "L’agent attend votre approbation (coffre / bureau). Cliquer pour arrêter.",
   "chat.retry": "Relancer",

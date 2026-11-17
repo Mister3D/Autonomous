@@ -793,7 +793,7 @@ import {
   setComposerPending,
   clearComposerPending,
 } from "../composerDrafts.js";
-import { formatDurationMs, isShowRunTimings } from "../runTimings";
+import { formatDurationMs } from "../runTimings";
 
 /** Pasted images kept in the chat. The model receives a smaller copy. */
 const MAX_PENDING_IMAGES = 16;
@@ -915,8 +915,6 @@ const waitingForReply = computed(() => {
 /** Left-side orb for the whole run, including tools and streaming text. */
 const showAgentOrb = computed(() => busy.value && !waitingHuman.value);
 
-const showRunTimings = computed(() => isShowRunTimings(props.bot?.name));
-
 /** Live phase key while the agent (or a wait) is active. */
 const runTimingPhaseKey = computed(() => {
   if (deskCreating.value) return "desk";
@@ -960,7 +958,7 @@ let runTimingTick = 0;
 
 const runTimingLiveLabel = computed(() => {
   const key = runTimingPhaseKey.value;
-  if (!key || !showRunTimings.value) return "";
+  if (!key) return "";
   const ms = Math.max(0, runTimingNowMs.value - runTimingPhaseStartedAt.value);
   const dur = formatDurationMs(ms);
   const label = runTimingPhaseLabel(key);
@@ -968,13 +966,11 @@ const runTimingLiveLabel = computed(() => {
 });
 
 const agentOrbLabel = computed(() =>
-  showRunTimings.value && runTimingLiveLabel.value
-    ? runTimingLiveLabel.value
-    : t("chat.working")
+  runTimingLiveLabel.value || t("chat.working")
 );
 
 const deskCreatingLabel = computed(() => {
-  if (!showRunTimings.value || runTimingPhaseKey.value !== "desk") {
+  if (runTimingPhaseKey.value !== "desk") {
     return t("desk.creating");
   }
   return runTimingLiveLabel.value || t("desk.creating");
@@ -2246,12 +2242,12 @@ function isGroundingShot(m) {
 function isActivity(m) {
   // Fold vm_screenshot cards into the tool group so they don't split the run
   // (standalone screenshot between tools). Workspace images use markdown, not this.
-  // LLM turns (when Details → step timings is on) sit in the same tool group.
+  // LLM turns sit in the same tool group as Réflexion rows.
   return (
     isTool(m) ||
     isGrounding(m) ||
     isScreenshot(m) ||
-    (showRunTimings.value && isLlmTurn(m))
+    isLlmTurn(m)
   );
 }
 
@@ -2502,7 +2498,7 @@ const thread = computed(() => {
       items.push(compactionItem(m));
       continue;
     }
-    // Off: hide. On: folded into tool groups via isActivity.
+    // Folded into tool groups via isActivity — skip stray leftovers.
     if (isLlmTurn(m)) {
       continue;
     }
@@ -3109,7 +3105,6 @@ onMounted(async () => {
   compactComposerPh.value = composerMq.matches;
   composerMq.addEventListener("change", onComposerMqChange);
   runTimingTick = window.setInterval(() => {
-    if (!showRunTimings.value) return;
     const liveOrb = busy.value || waitingHuman.value || deskCreating.value;
     const liveTurn = (state.messages[props.bot.name] || []).some(
       (m) => m?.meta?.kind === "llm_turn" && m?.meta?.status === "running"

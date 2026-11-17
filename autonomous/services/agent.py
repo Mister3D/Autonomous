@@ -909,7 +909,7 @@ class PiAgent:
                 if not is_error:
                     pending = state.setdefault("pending_images_md", [])
                     found: list[str] = []
-                    if tool_name == "files_share_image":
+                    if tool_name in ("files_share_image", "vm_screenshot"):
                         md = _extract_share_image_markdown(record.get("result"))
                         if md:
                             found.append(md)
