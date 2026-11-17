@@ -183,6 +183,57 @@ def models_json_path() -> Path:
     return pi_agent_dir() / "models.json"
 
 
+def settings_json_path() -> Path:
+    return pi_agent_dir() / "settings.json"
+
+
+# Forced on every serve / Pi spawn so all Autonomous installs share the same
+# long-idle + no-auto-retry behaviour (proxy queue / Relancer handle recovery).
+PI_HTTP_IDLE_TIMEOUT_MS = 600_000  # 10 min Undici idle (LLM turn + compaction)
+
+
+def ensure_pi_runtime_settings() -> bool:
+    """Merge Autonomous-owned keys into ``~/.pi/agent/settings.json``.
+
+    Always sets:
+
+    - ``httpIdleTimeoutMs`` = ``PI_HTTP_IDLE_TIMEOUT_MS`` (long streaming / compaction)
+    - ``retry.enabled`` = ``false`` (no Pi auto-retry; user uses Relancer)
+
+    Preserves unrelated keys (``packages``, ``compaction``, …). Creates the file
+    if missing. Returns ``True`` when the file was rewritten.
+    """
+    path = settings_json_path()
+    data: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                data = raw
+        except (OSError, json.JSONDecodeError):
+            data = {}
+
+    changed = False
+    if data.get("httpIdleTimeoutMs") != PI_HTTP_IDLE_TIMEOUT_MS:
+        data["httpIdleTimeoutMs"] = PI_HTTP_IDLE_TIMEOUT_MS
+        changed = True
+
+    retry = data.get("retry")
+    if not isinstance(retry, dict):
+        data["retry"] = {"enabled": False}
+        changed = True
+    elif retry.get("enabled") is not False:
+        retry = dict(retry)
+        retry["enabled"] = False
+        data["retry"] = retry
+        changed = True
+
+    if not changed:
+        return False
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return True
+
+
 def _read_models_json() -> dict[str, Any]:
     path = models_json_path()
     if not path.is_file():

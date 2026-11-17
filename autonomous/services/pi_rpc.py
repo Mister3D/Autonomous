@@ -426,6 +426,12 @@ class PiRpcSession:
         with self._lock:
             if self.alive:
                 return
+            try:
+                from autonomous.services.setup_config import ensure_pi_runtime_settings
+
+                ensure_pi_runtime_settings()
+            except Exception:
+                log.exception("ensure_pi_runtime_settings failed before Pi start")
             binary = resolve_pi_bin()
             if not binary:
                 raise PiRpcError("Pi is not installed")

@@ -36,10 +36,11 @@
 - Do not require a model when saving provider credentials alone.
 - Built-in providers via Pi `/login` stay outside this editor (custom OpenAI-compat only).
 - Set `contextWindow` on custom models to the real vLLM `--max-model-len` (Pi defaults to **128K** when omitted — wrong compaction / overflow). Compaction headroom: `~/.pi/agent/settings.json` → `compaction.reserveTokens` / `keepRecentTokens` (and optional `modelOverrides`). Our Mister3D Qwen ref uses `contextWindow: 262144` with reserve **49152** / keepRecent **28000** so auto-compact leaves room before a fat tool batch. vLLM prefix caching has **no TTL** → leave Pi `cacheWarming` **off**; session-affinity headers only matter with several replicas behind a LB (single node: irrelevant).
+- **Pi HTTP idle + retry (forced by Autonomous)**: on every `serve` start and before each Pi spawn, `ensure_pi_runtime_settings()` merges into `~/.pi/agent/settings.json`: `httpIdleTimeoutMs: 600000` (10 min Undici idle for long LLM / compaction) and `retry.enabled: false` (no Pi auto-retry on stream/compaction failure — Relancer is manual). Other keys are preserved. Align the reverse proxy idle with ≥600 s; the LLM proxy should queue clients and cancel vLLM work on disconnect (no Autonomous-side LLM mutex).
 - Future Autonomous code must not rewrite the Pi system prefix every message (no per-turn “now” / fresh memory in system) — see [pi-agent.md](./pi-agent.md) pitfalls.
 
 ## Quick check
 
 ```bash
-pytest tests/test_llm_models_limits.py tests/test_setup_models.py -q
+pytest tests/test_llm_models_limits.py tests/test_setup_models.py tests/test_pi_runtime_settings.py -q
 ```

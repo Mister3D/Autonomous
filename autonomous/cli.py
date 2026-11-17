@@ -252,12 +252,27 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
     app = create_app(home)
     # Pi tools need this URL. Recovery below may start a session before the
     # pid file exists; the in-process value covers that window.
-    from autonomous.services.pi_rpc import set_serve_api_base
+    from autonomous.services.pi_rpc import MANAGER, set_serve_api_base
 
     api_host = host
     if api_host in ("0.0.0.0", "::", "[::]"):
         api_host = "127.0.0.1"
     set_serve_api_base(f"http://{api_host}:{port}/api/v1")
+    try:
+        # Long LLM idle + no Pi auto-retry for every Autonomous install.
+        from autonomous.services.setup_config import ensure_pi_runtime_settings
+
+        if ensure_pi_runtime_settings():
+            print(
+                "[pi] applied runtime settings (httpIdleTimeoutMs=600000, retry.enabled=false)",
+                file=sys.stderr,
+            )
+            try:
+                MANAGER.stop_all()
+            except Exception as stop_exc:  # never block serve
+                print(f"[pi] stop_all after settings: {stop_exc}", file=sys.stderr)
+    except Exception as exc:  # never block serve
+        print(f"[pi] runtime settings failed: {exc}", file=sys.stderr)
     try:
         # Existing desks: ~/files must exist before recovered Pi sessions start.
         desk_svc.ensure_files_aliases(home=home)
