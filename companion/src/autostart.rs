@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 const LINUX_NAME: &str = "autonomous-companion.desktop";
-const MACOS_LABEL: &str = "fr.mister3d.autonomous-companion";
+const MACOS_LABEL: &str = "app.autonomous.companion";
 const WINDOWS_CMD: &str = "Autonomous Companion.cmd";
 
 pub fn linux_desktop(exe: &Path) -> String {

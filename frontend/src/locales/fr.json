@@ -415,7 +415,7 @@
   "update.channelCustom": "Personnalisé",
   "update.channelCustomHint": "branche libre",
   "update.customBranch": "Nom de la branche",
-  "update.customBranchPlaceholder": "ex. dev_peter",
+  "update.customBranchPlaceholder": "ex. dev",
   "update.customBranchSave": "Utiliser cette branche",
   "update.unknownBranch": "La branche {branch} n’est pas sur le dépôt.",
   "update.remoteUrl": "URL du dépôt",

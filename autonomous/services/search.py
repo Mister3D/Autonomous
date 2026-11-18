@@ -458,7 +458,6 @@ def _llm_config() -> dict[str, str] | None:
         key
         or env.get(f"{provider.upper()}_API_KEY")
         or env.get("AUTONOMOUS_LLM_API_KEY")
-        or env.get("MISTER3D_API_KEY")  # legacy name
         or env.get("OPENAI_API_KEY")
         or ""
     )
@@ -466,7 +465,6 @@ def _llm_config() -> dict[str, str] | None:
         base
         or env.get(f"{provider.upper()}_BASE_URL")
         or env.get("AUTONOMOUS_LLM_BASE_URL")
-        or env.get("MISTER3D_BASE_URL")  # legacy name
         or env.get("OPENAI_BASE_URL")
         or ""
     ).rstrip("/")

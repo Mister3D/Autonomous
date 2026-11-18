@@ -153,11 +153,11 @@ def test_check_endpoint_forces(auth_client, monkeypatch):
 
 def test_match_remote_resets_without_deleting_untracked():
     steps = dict(
-        updates_svc.sync_steps("origin", "dev_peter", force=False, match_remote=True)
+        updates_svc.sync_steps("origin", "dev", force=False, match_remote=True)
     )
     assert "clean" not in steps
     assert "ff-only" not in steps
-    assert steps["reset"][-4:] == ["-f", "-B", "dev_peter", "origin/dev_peter"]
+    assert steps["reset"][-4:] == ["-f", "-B", "dev", "origin/dev"]
 
 
 def test_rewritten_remote_is_an_update(home, monkeypatch):
@@ -165,11 +165,11 @@ def test_rewritten_remote_is_an_update(home, monkeypatch):
     monkeypatch.setattr(updates_svc, "_dirty", lambda: False)
     monkeypatch.setattr(updates_svc, "_fetch_remote_name", lambda home=None: "origin")
     monkeypatch.setattr(updates_svc, "origin_url", lambda: None)
-    monkeypatch.setattr(updates_svc, "channel", lambda home=None: "dev_peter")
+    monkeypatch.setattr(updates_svc, "channel", lambda home=None: "dev")
     monkeypatch.setattr(
         updates_svc,
         "_rev_parse",
-        lambda ref: {"HEAD": "local", "origin/dev_peter": "remote"}.get(ref),
+        lambda ref: {"HEAD": "local", "origin/dev": "remote"}.get(ref),
     )
     monkeypatch.setattr(updates_svc, "_behind_count", lambda local, remote: 4)
     monkeypatch.setattr(updates_svc, "_is_ancestor", lambda ancestor, descendant: False)
@@ -188,11 +188,11 @@ def test_rewritten_remote_is_an_update(home, monkeypatch):
 
 
 def test_force_sync_resets_to_remote_tip():
-    steps = dict(updates_svc.sync_steps("origin", "dev_peter", force=True))
-    assert steps["fetch"][-3:] == ["fetch", "origin", "dev_peter"]
+    steps = dict(updates_svc.sync_steps("origin", "dev", force=True))
+    assert steps["fetch"][-3:] == ["fetch", "origin", "dev"]
     assert steps["clean"][-2:] == ["clean", "-fd"]
     assert "clean" in steps["clean"] and "-x" not in steps["clean"]
-    assert steps["reset"][-4:] == ["-f", "-B", "dev_peter", "origin/dev_peter"]
+    assert steps["reset"][-4:] == ["-f", "-B", "dev", "origin/dev"]
     plain = dict(updates_svc.sync_steps("origin", "main", force=False))
     assert "ff-only" in plain
     assert plain["ff-only"][-2:] == ["--ff-only", "origin/main"]
@@ -284,7 +284,7 @@ def test_squashed_migration_numbers_do_not_block_switch(home, monkeypatch):
         "_migration_versions_in_tree",
         lambda ref=None, present=present: set(present),
     )
-    gate = updates_svc.can_switch_to("dev_peter", home=home)
+    gate = updates_svc.can_switch_to("dev", home=home)
     assert gate["ok"] is True
 
     with get_db(home) as conn:

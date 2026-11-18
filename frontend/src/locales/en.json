@@ -415,7 +415,7 @@
   "update.channelCustom": "Custom",
   "update.channelCustomHint": "any branch",
   "update.customBranch": "Branch name",
-  "update.customBranchPlaceholder": "e.g. dev_peter",
+  "update.customBranchPlaceholder": "e.g. dev",
   "update.customBranchSave": "Use this branch",
   "update.unknownBranch": "Branch {branch} is not on the repository.",
   "update.remoteUrl": "Repository URL",

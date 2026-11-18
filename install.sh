@@ -8,10 +8,8 @@
 set -eu
 
 REPO_URL="${AUTONOMOUS_REPO_URL:-https://github.com/Mister3D/Autonomous}"
-# Default ref installed by this script. On ``main`` keep ``main``; feature branches
-# that ship installer fixes should default to themselves so ``curl …/branch/install.sh``
-# also checks out that branch (override with AUTONOMOUS_VERSION / --version).
-VERSION="${AUTONOMOUS_VERSION:-dev_peter}"
+# Default ref installed by this script (override with AUTONOMOUS_VERSION / --version).
+VERSION="${AUTONOMOUS_VERSION:-main}"
 PREFIX="${AUTONOMOUS_PREFIX:-$HOME/autonomous}"
 DATA_HOME="${AUTONOMOUS_HOME:-}"
 PORT="${AUTONOMOUS_PORT:-8787}"
