@@ -801,6 +801,9 @@ class PiAgent:
                 # CONTINUE may already be in the closed bubble content.
                 if _wants_guard_continue(state.get("content") or ""):
                     _release_guard_gate(bot, state=state, from_continue=True)
+                # Same-turn tools after CONTINUE — no separate resume run needed.
+                if state.get("guard_resume_task") and state.get("guard_gate") is None:
+                    state["guard_resume_task"] = False
                 state["action_count"] = int(state.get("action_count") or 0) + 1
                 limit = int(state.get("action_limit") or 1000)
                 review_every = int(state.get("review_every") or 0)
@@ -1524,12 +1527,10 @@ def _release_guard_gate(
     from_continue: bool = False,
 ) -> None:
     """Allow tools again after GUARD:CONTINUE / STOP (STOP still aborts separately)."""
-    # If CONTINUE arrives after we already aborted for a gate violation, the
-    # in-flight turn is dead — schedule a task resume on settle (do not clear
-    # that need by wiping violation without a follow-up).
-    if from_continue and (
-        state.get("guard_gate_violation") or state.get("aborted")
-    ):
+    # CONTINUE always arms a task resume. If more tools run in this same turn,
+    # tool_execution_start clears the flag. If the turn settles with no further
+    # tools (common after a mid-batch gate abort), settle kicks the resume run.
+    if from_continue:
         state["guard_resume_task"] = True
     state["guard_gate"] = None
     state["guard_gate_count"] = None
@@ -1549,7 +1550,6 @@ def _block_tools_for_guard_gate(
     No chat card — the review card already signals the gate; a follow-up run asks
     for GUARD:CONTINUE / STOP quietly.
     """
-    del home  # reserved (cards intentionally omitted)
     # Undo the increment — the tool did not actually run.
     try:
         state["action_count"] = max(0, int(state.get("action_count") or 1) - 1)
@@ -1557,12 +1557,25 @@ def _block_tools_for_guard_gate(
         pass
     state["guard_gate_violation"] = True
     state["aborted"] = True
+    # Arm the gate follow-up immediately so a settle race cannot drop it.
+    try:
+        _queue_pending_guard_gate(
+            bot,
+            count=int(
+                state.get("guard_gate_count") or state.get("action_count") or 0
+            ),
+            limit=int(state.get("action_limit") or 1000),
+            review_every=int(state.get("review_every") or 0),
+        )
+    except Exception:
+        log.exception("queue pending guard gate failed for %s", bot)
     mark_silent_abort(bot)
     try:
         MANAGER.abort(bot)
     except Exception:
         pass
     state["settled"].set()
+    del home  # reserved (cards intentionally omitted)
 
 
 _GUARD_GATE_RETRY_STEER = (
