@@ -25,6 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-inconsolata fonts-opensymbol fonts-cantarell fontconfig \
     procps net-tools psmisc \
     nano vim-tiny less \
+    galculator \
+    drawing \
+    libreoffice-calc libreoffice-math \
+    wmctrl \
     && sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
     && sed -i 's/^# *fr_FR.UTF-8 UTF-8/fr_FR.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
