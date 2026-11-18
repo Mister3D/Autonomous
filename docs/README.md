@@ -75,6 +75,7 @@ Local index: [features/README.md](./features/README.md).
 | [API.md](./API.md) | HTTP map (+ live OpenAPI) |
 | [CLI.md](./CLI.md) | CLI |
 | [DATA_MODEL.md](./DATA_MODEL.md) | SQLite |
+| [manual-chat-tests.md](./manual-chat-tests.md) | Live chat prompts (vault, calc, guard echo×250, multi-agent IM) — run by **id** |
 
 ## 5. Typical user phrase
 
