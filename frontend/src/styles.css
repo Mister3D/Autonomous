@@ -1667,6 +1667,7 @@ a:focus-visible {
 
 .agent-stop-btn,
 .tool-stop-btn {
+  flex: none;
   margin-left: 0.15rem;
   border: 1px solid rgba(180, 60, 40, 0.45);
   background: #fff;
@@ -1675,6 +1676,7 @@ a:focus-visible {
   padding: 0.12rem 0.55rem;
   font-size: 0.75rem;
   line-height: 1.3;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -5343,16 +5345,22 @@ button.msg-queued-action:disabled {
 }
 
 .tool-live-status {
+  flex: none;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .tool-live-hint {
+  min-width: 0;
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   color: #5a5a60;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tool-group.live .tool-group-live .tool-section pre {
@@ -5499,6 +5507,10 @@ button.msg-queued-action:disabled {
   font-size: 0.72rem;
   color: #1c3f8a;
   margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shot-coords {
@@ -5658,10 +5670,17 @@ button.msg-queued-action:disabled {
   background: transparent;
   padding: 0.55rem 0.6rem;
   text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
 }
 
 .tool-row-head:hover {
   background: rgba(0, 0, 0, 0.03);
+}
+
+.tool-row-head:focus-visible {
+  outline: 2px solid rgba(47, 111, 237, 0.45);
+  outline-offset: -2px;
 }
 
 .tool-row-name {
@@ -5675,10 +5694,12 @@ button.msg-queued-action:disabled {
 }
 
 .tool-row-status {
+  flex: none;
   font-size: 0.68rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .tool-row.error .tool-row-status:not(.timeout) {

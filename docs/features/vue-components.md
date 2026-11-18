@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-18 (centred notebook card in chat)
+**Last updated**: 2026-11-18 (tool-row stop button no longer overlaps)
 
 ## Why this note exists
 
@@ -44,7 +44,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. Switching bots drops the previous desktop and connects to the selected one. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). Orb label shows phase + elapsed. | [`pi-agent.md`](./pi-agent.md) |
-| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines, **Réflexion** LLM rows, and mid-run assistant asides (`run_text`) in `created_at` order — not a separate `run_progress` stack (that flashed a full bubble then shrank). Never fold image markdown or `GUARD:CONTINUE`/`STOP` into `run_text` (those stay centred guard cards); while busy with no later item yet, treat other asides as `run_text` to avoid the flash. Absorb a post-bubble llm-only group back into the tools above. User-facing desk captures (`vm_screenshot`) stay **out of the assistant bubble**; when the group is folded, the latest non-grounding shot is shown as a preview under the summary bar (also nested under the tool row when the list is open). | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md), [`agent-vm-screenshot.md`](./agent-vm-screenshot.md) |
+| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines, **Réflexion** LLM rows, and mid-run assistant asides (`run_text`) in `created_at` order — not a separate `run_progress` stack (that flashed a full bubble then shrank). Never fold image markdown or `GUARD:CONTINUE`/`STOP` into `run_text` (those stay centred guard cards); while busy with no later item yet, treat other asides as `run_text` to avoid the flash. Absorb a post-bubble llm-only group back into the tools above. User-facing desk captures (`vm_screenshot`) stay **out of the assistant bubble**; when the group is folded, the latest non-grounding shot is shown as a preview under the summary bar (also nested under the tool row when the list is open). Running-tool row head is a `div` (not a `<button>`) so **Arrêter l’outil** can sit in the same flex row without nested-button layout breakage. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md), [`agent-vm-screenshot.md`](./agent-vm-screenshot.md) |
 
 ## Inspector panes
 

@@ -186,7 +186,15 @@
           </div>
         </template>
         <template v-else>
-          <button class="tool-row-head" type="button" @click="toggle(m.id)">
+          <!-- div (not button): a nested stop <button> inside <button> breaks the flex layout. -->
+          <div
+            class="tool-row-head"
+            role="button"
+            tabindex="0"
+            @click="toggle(m.id)"
+            @keydown.enter.prevent="toggle(m.id)"
+            @keydown.space.prevent="toggle(m.id)"
+          >
             <span class="tool-row-name">{{ m.meta?.tool_name || t("chat.tool") }}</span>
             <span
               v-if="toolDurationLabel(m)"
@@ -231,7 +239,7 @@
                 stroke-linejoin="round"
               />
             </svg>
-          </button>
+          </div>
           <div v-if="expanded[m.id]" class="tool-row-body">
             <div v-if="argsText(m)" class="tool-section">
               <span class="tool-section-label">{{ t("chat.toolArgs") }}</span>
