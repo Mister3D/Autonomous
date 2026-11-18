@@ -38,7 +38,14 @@ DEFAULTS: dict[str, Any] = {
 
 # Removed product setting (was a Cursor test harness, not a feature).
 # Include the bad underscore key some PUTs wrote via Marshmallow attr names.
-_OBSOLETE_KEYS = ("guard.max_runtime_sec", "guard_max_runtime_sec")
+# Heavy gate moved to per-model ``autonomous.heavyGate`` in models.json.
+_OBSOLETE_KEYS = (
+    "guard.max_runtime_sec",
+    "guard_max_runtime_sec",
+    "llm.heavy_gate_enabled",
+    "llm.heavy_max_concurrent",
+    "llm.heavy_token_threshold",
+)
 
 
 def ensure_defaults(home: Path | None = None) -> None:

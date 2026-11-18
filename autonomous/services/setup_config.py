@@ -286,6 +286,9 @@ def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
     max_images = _int_or_none(images_lim.get("maxPerRequest"), lo=1, hi=32)
     if max_images is None:
         max_images = _int_or_none(images_lim.get("maxPerMessage"), lo=1, hi=32)
+    from autonomous.services.llm_heavy_gate import concurrency_from_entry
+
+    conc = concurrency_from_entry(entry)
     return {
         "id": str(entry.get("id") or ""),
         "name": str(entry.get("name") or ""),
@@ -293,6 +296,11 @@ def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
         "max_images": max_images,
         "context_window": _int_or_none(entry.get("contextWindow"), lo=1024, hi=2_000_000),
         "max_tokens": _int_or_none(entry.get("maxTokens"), lo=256, hi=512_000),
+        "parallel_gate_enabled": conc["parallel_gate_enabled"],
+        "max_parallel": conc["max_parallel"],
+        "heavy_gate_enabled": conc["heavy_gate_enabled"],
+        "heavy_max_concurrent": conc["heavy_max_concurrent"],
+        "heavy_token_threshold": conc["heavy_token_threshold"],
     }
 
 
@@ -353,6 +361,86 @@ def _patch_model_entry(entry: dict[str, Any], patch: dict[str, Any]) -> None:
             entry.pop("maxTokens", None)
         else:
             entry["maxTokens"] = mt
+
+    _HEAVY_KEYS = (
+        "heavy_gate_enabled",
+        "heavy_max_concurrent",
+        "heavy_token_threshold",
+        "heavy_gate",
+    )
+    _PARALLEL_KEYS = (
+        "parallel_gate_enabled",
+        "max_parallel",
+        "parallel_gate",
+    )
+    if any(k in patch for k in _HEAVY_KEYS + _PARALLEL_KEYS):
+        auto = entry.get("autonomous")
+        auto = dict(auto) if isinstance(auto, dict) else {}
+
+        if any(k in patch for k in _HEAVY_KEYS):
+            raw_gate = patch.get("heavy_gate") if isinstance(patch.get("heavy_gate"), dict) else {}
+            enabled = bool(
+                patch["heavy_gate_enabled"]
+                if "heavy_gate_enabled" in patch
+                else raw_gate.get("enabled", False)
+            )
+            max_c = _int_or_none(
+                patch["heavy_max_concurrent"]
+                if "heavy_max_concurrent" in patch
+                else raw_gate.get("maxConcurrent", raw_gate.get("max_concurrent")),
+                lo=1,
+                hi=64,
+            )
+            thresh = _int_or_none(
+                patch["heavy_token_threshold"]
+                if "heavy_token_threshold" in patch
+                else raw_gate.get("tokenThreshold", raw_gate.get("token_threshold")),
+                lo=0,
+                hi=2_000_000,
+            )
+            if not enabled and max_c is None and thresh is None and "heavy_gate_enabled" in patch:
+                auto.pop("heavyGate", None)
+                auto.pop("heavy_gate", None)
+            else:
+                auto["heavyGate"] = {
+                    "enabled": enabled,
+                    "maxConcurrent": max_c if max_c is not None else 2,
+                    "tokenThreshold": thresh if thresh is not None else 10000,
+                }
+                auto.pop("heavy_gate", None)
+
+        if any(k in patch for k in _PARALLEL_KEYS):
+            raw_p = (
+                patch.get("parallel_gate")
+                if isinstance(patch.get("parallel_gate"), dict)
+                else {}
+            )
+            p_enabled = bool(
+                patch["parallel_gate_enabled"]
+                if "parallel_gate_enabled" in patch
+                else raw_p.get("enabled", False)
+            )
+            p_max = _int_or_none(
+                patch["max_parallel"]
+                if "max_parallel" in patch
+                else raw_p.get("maxConcurrent", raw_p.get("max_concurrent")),
+                lo=1,
+                hi=64,
+            )
+            if not p_enabled and p_max is None and "parallel_gate_enabled" in patch:
+                auto.pop("parallelGate", None)
+                auto.pop("parallel_gate", None)
+            else:
+                auto["parallelGate"] = {
+                    "enabled": p_enabled,
+                    "maxConcurrent": p_max if p_max is not None else 2,
+                }
+                auto.pop("parallel_gate", None)
+
+        if auto:
+            entry["autonomous"] = auto
+        else:
+            entry.pop("autonomous", None)
 
 
 def split_model_ref(ref: str | None) -> tuple[str, str]:
@@ -552,6 +640,17 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
                 patch["context_window"] = row.get("context_window")
             if "max_tokens" in row:
                 patch["max_tokens"] = row.get("max_tokens")
+            for hk in (
+                "heavy_gate_enabled",
+                "heavy_max_concurrent",
+                "heavy_token_threshold",
+                "heavy_gate",
+                "parallel_gate_enabled",
+                "max_parallel",
+                "parallel_gate",
+            ):
+                if hk in row:
+                    patch[hk] = row.get(hk)
             if patch:
                 _patch_model_entry(entry, patch)
             ordered.append(entry)
@@ -571,6 +670,17 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
             patch["context_window"] = body.get("context_window")
         if "max_tokens" in body:
             patch["max_tokens"] = body.get("max_tokens")
+        for hk in (
+            "heavy_gate_enabled",
+            "heavy_max_concurrent",
+            "heavy_token_threshold",
+            "heavy_gate",
+            "parallel_gate_enabled",
+            "max_parallel",
+            "parallel_gate",
+        ):
+            if hk in body:
+                patch[hk] = body.get(hk)
         _patch_model_entry(entry, patch)
         rest = [m for m in existing_models if str(m.get("id")) != model_id]
         conf["models"] = [entry, *rest]

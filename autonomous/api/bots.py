@@ -70,6 +70,8 @@ from autonomous.models.schemas import (
     MessageSchema,
     ReactionCreateSchema,
     LlmTurnCreateSchema,
+    LlmHeavyGateAcquireSchema,
+    LlmHeavyGateReleaseSchema,
     NovncInfoSchema,
     OkSchema,
     RetryUnprocessedSchema,
@@ -324,6 +326,46 @@ class BotLlmTurns(MethodView):
             )
         except AutonomousError as exc:
             _handle(exc)
+
+
+@blp.route("/<string:name>/llm-heavy-gate/acquire")
+class BotLlmHeavyGateAcquire(MethodView):
+    @blp.arguments(LlmHeavyGateAcquireSchema)
+    def post(self, data, name):
+        """Block until a large-LLM slot is free (Pi llm_heavy_gate extension)."""
+        from flask import jsonify
+
+        from autonomous.services import llm_heavy_gate as gate_svc
+
+        try:
+            out = gate_svc.acquire(
+                name,
+                int(data.get("tokens") or 0),
+                model=data.get("model"),
+                home=g.home,
+                wait_sec=data.get("wait_sec"),
+            )
+            return jsonify(out)
+        except AutonomousError as exc:
+            _handle(exc)
+            return None
+
+
+@blp.route("/<string:name>/llm-heavy-gate/release")
+class BotLlmHeavyGateRelease(MethodView):
+    @blp.arguments(LlmHeavyGateReleaseSchema)
+    def post(self, data, name):
+        """Release a large-LLM lease (idempotent)."""
+        from flask import jsonify
+
+        from autonomous.services import llm_heavy_gate as gate_svc
+
+        del name  # bot is recorded on the lease; any bot token may release its id
+        try:
+            return jsonify(gate_svc.release(data.get("lease_id")))
+        except AutonomousError as exc:
+            _handle(exc)
+            return None
 
 
 @blp.route("/<string:name>/llm-turns/<string:message_id>/<string:side>")

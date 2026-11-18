@@ -243,6 +243,21 @@ class LlmTurnCreateSchema(Schema):
     model = fields.Str(load_default=None, allow_none=True)
 
 
+class LlmHeavyGateAcquireSchema(Schema):
+    """Pi llm_heavy_gate: reserve a large-request slot before the provider HTTP call."""
+
+    tokens = fields.Integer(required=True)
+    # Optional provider/id or bare id from the provider payload; else bot.model.
+    model = fields.Str(load_default=None, allow_none=True)
+    wait_sec = fields.Float(load_default=None, allow_none=True)
+
+
+class LlmHeavyGateReleaseSchema(Schema):
+    """Pi llm_heavy_gate: free a previously acquired large-request lease."""
+
+    lease_id = fields.Str(required=True, validate=validate.Length(min=1))
+
+
 class MessageCreateSchema(Schema):
     content = fields.Str(load_default="")
     attachments = fields.List(fields.Raw(), load_default=list)
@@ -365,7 +380,6 @@ class SettingsSchema(Schema):
     grounding_max_loops = fields.Integer(
         data_key="grounding.max_loops", allow_none=True
     )
-
     @pre_dump
     def _expose_dotted_keys(self, data, **kwargs):
         # Stored keys are dotted (`guard.review_every`). Field names are not,

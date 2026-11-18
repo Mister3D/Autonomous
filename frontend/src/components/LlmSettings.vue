@@ -243,6 +243,72 @@
               <small>{{ t("llm.maxTokensHint") }}</small>
             </label>
           </div>
+          <label class="toggle-row">
+            <span>
+              <strong>{{ t("llm.parallelEnabled") }}</strong>
+              <small>{{ t("llm.parallelEnabledHint") }}</small>
+            </span>
+            <input
+              v-model="m.parallel_gate_enabled"
+              type="checkbox"
+              role="switch"
+              :aria-label="t('llm.parallelEnabled')"
+            />
+          </label>
+          <div class="llm-limits-grid">
+            <label class="settings-field">
+              <span>{{ t("llm.maxParallel") }}</span>
+              <input
+                v-model.number="m.max_parallel"
+                type="number"
+                min="1"
+                max="64"
+                step="1"
+                :disabled="!m.parallel_gate_enabled"
+                placeholder="2"
+              />
+              <small>{{ t("llm.maxParallelHint") }}</small>
+            </label>
+          </div>
+          <label class="toggle-row">
+            <span>
+              <strong>{{ t("llm.heavyEnabled") }}</strong>
+              <small>{{ t("llm.heavyEnabledHint") }}</small>
+            </span>
+            <input
+              v-model="m.heavy_gate_enabled"
+              type="checkbox"
+              role="switch"
+              :aria-label="t('llm.heavyEnabled')"
+            />
+          </label>
+          <div class="llm-limits-grid">
+            <label class="settings-field">
+              <span>{{ t("llm.heavyMaxConcurrent") }}</span>
+              <input
+                v-model.number="m.heavy_max_concurrent"
+                type="number"
+                min="1"
+                max="64"
+                step="1"
+                :disabled="!m.heavy_gate_enabled"
+                placeholder="2"
+              />
+              <small>{{ t("llm.heavyMaxConcurrentHint") }}</small>
+            </label>
+            <label class="settings-field">
+              <span>{{ t("llm.heavyTokenThreshold") }}</span>
+              <input
+                v-model.number="m.heavy_token_threshold"
+                type="number"
+                min="0"
+                step="1000"
+                :disabled="!m.heavy_gate_enabled"
+                placeholder="10000"
+              />
+              <small>{{ t("llm.heavyTokenThresholdHint") }}</small>
+            </label>
+          </div>
           <div class="setup-toolbar">
             <button
               class="btn primary"
@@ -320,6 +386,11 @@ function modelFingerprint(m) {
     max_images: normNum(m.max_images),
     context_window: normNum(m.context_window),
     max_tokens: normNum(m.max_tokens),
+    parallel_gate_enabled: !!m.parallel_gate_enabled,
+    max_parallel: normNum(m.max_parallel) ?? 2,
+    heavy_gate_enabled: !!m.heavy_gate_enabled,
+    heavy_max_concurrent: normNum(m.heavy_max_concurrent) ?? 2,
+    heavy_token_threshold: normNum(m.heavy_token_threshold) ?? 10000,
   });
 }
 
@@ -342,6 +413,11 @@ function blankModel(partial = {}) {
     max_images: null,
     context_window: null,
     max_tokens: null,
+    parallel_gate_enabled: false,
+    max_parallel: 2,
+    heavy_gate_enabled: false,
+    heavy_max_concurrent: 2,
+    heavy_token_threshold: 10000,
     _isNew: false,
     _open: false,
     _originProvider: "",
@@ -533,6 +609,11 @@ function applyView(data) {
         max_images: m.max_images ?? null,
         context_window: m.context_window ?? null,
         max_tokens: m.max_tokens ?? null,
+        parallel_gate_enabled: !!m.parallel_gate_enabled,
+        max_parallel: m.max_parallel ?? 2,
+        heavy_gate_enabled: !!m.heavy_gate_enabled,
+        heavy_max_concurrent: m.heavy_max_concurrent ?? 2,
+        heavy_token_threshold: m.heavy_token_threshold ?? 10000,
         _originProvider: p.provider,
         _originId: id,
         _open: keepModelOpen.has(`${p.provider}\n${id}`),
@@ -689,6 +770,11 @@ async function saveModel(m) {
       max_images: normNum(m.max_images),
       context_window: normNum(m.context_window),
       max_tokens: normNum(m.max_tokens),
+      parallel_gate_enabled: !!m.parallel_gate_enabled,
+      max_parallel: Math.max(1, Math.min(64, Math.round(normNum(m.max_parallel) || 2))),
+      heavy_gate_enabled: !!m.heavy_gate_enabled,
+      heavy_max_concurrent: Math.max(1, Math.min(64, Math.round(normNum(m.heavy_max_concurrent) || 2))),
+      heavy_token_threshold: Math.max(0, Math.round(normNum(m.heavy_token_threshold) ?? 10000)),
     });
     m._isNew = false;
     applyView(data);
@@ -726,6 +812,11 @@ async function removeModel(m) {
       max_images: normNum(row.max_images),
       context_window: normNum(row.context_window),
       max_tokens: normNum(row.max_tokens),
+      parallel_gate_enabled: !!row.parallel_gate_enabled,
+      max_parallel: Math.max(1, Math.min(64, Math.round(normNum(row.max_parallel) || 2))),
+      heavy_gate_enabled: !!row.heavy_gate_enabled,
+      heavy_max_concurrent: Math.max(1, Math.min(64, Math.round(normNum(row.heavy_max_concurrent) || 2))),
+      heavy_token_threshold: Math.max(0, Math.round(normNum(row.heavy_token_threshold) ?? 10000)),
     }))
     .filter((row) => !!row.id);
   try {

@@ -57,6 +57,8 @@ POST   /bots/:name/messages         # {content?, attachments?, prompt?} → run 
 POST   /bots/:name/reactions        # {emoji, message_id?} — emoji on the turn's user bubble; does not cut the reply
 POST   /bots/:name/llm-turns        # Pi llm_trace: open reflection row ({request_file, request_kind=provider})
 GET    /bots/:name/llm-turns/:id/request|response  # Full provider / assistant JSON for that turn
+POST   /bots/:name/llm-heavy-gate/acquire  # Per-model slot ({tokens, model?, wait_sec?}); parallelGate and/or heavyGate
+POST   /bots/:name/llm-heavy-gate/release  # Free lease ({lease_id})
 GET    /bots/:name/chat/attachments/:file  # pasted image
 POST   /bots/:name/chat/files       # multipart → ~/files/upload/<uuid>/<name>
 DELETE /bots/:name/messages         # + Pi session rotation

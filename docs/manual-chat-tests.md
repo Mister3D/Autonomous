@@ -108,6 +108,7 @@ Launch a calculator in your VM and show me a screenshot that displays the result
 - Call *n* runs only `echo n` (n from 1 to 250)
 - No loops, no scripts, no batching several echoes in one tool call
 - Final reply states the total number of tool calls performed
+- Time budget target: **&lt; 15 min**
 
 ### Prompt
 
