@@ -1,78 +1,82 @@
 <template>
-  <div class="modal-backdrop" @click.self="state.createOpen = false">
-    <form class="modal create-bot-modal" @submit.prevent="submit">
-      <h2>{{ t("create.title") }}</h2>
-      <div class="create-bot-grid">
-        <div class="create-bot-fields">
-          <div class="field">
-            <label>{{ t("create.name") }}</label>
-            <input
-              v-model="name"
-              autocomplete="off"
-              required
-              maxlength="64"
-              :placeholder="t('create.namePlaceholder')"
-            />
-            <p class="field-hint">
-              {{ t("create.nameHint") }}
-              <span v-if="slugPreview" class="field-hint-slug">{{
-                t("create.slugPreview", { slug: slugPreview })
-              }}</span>
-            </p>
-          </div>
-          <div class="field">
-            <label>{{ t("create.model") }}</label>
-            <ModelPicker field :model="model" @update:model="(v) => (model = v)" />
-          </div>
-          <div class="create-bot-options">
-            <UiToggleRow :title="t('create.internet')" v-model="internet" />
-            <UiToggleRow
-              :title="t('create.memoryAccess')"
-              :hint="t('create.memoryAccessHint')"
-              v-model="memoryAccess"
-            />
-            <UiToggleRow
-              :title="t('create.isManager')"
-              :hint="
-                managerTaken
-                  ? t('create.isManagerTaken', { name: managerTaken.label || managerTaken.name })
-                  : t('create.isManagerHint')
-              "
-              :tip="managerTaken ? t('create.isManagerTaken', { name: managerTaken.label || managerTaken.name }) : ''"
-              :disabled="!!managerTaken"
-              :muted="!!managerTaken"
-              v-model="isManager"
-            />
-          </div>
+  <UiModal
+    as="form"
+    panel-class="create-bot-modal"
+    :aria-label="t('create.title')"
+    @close="state.createOpen = false"
+    @submit.prevent="submit"
+  >
+    <h2>{{ t("create.title") }}</h2>
+    <div class="create-bot-grid">
+      <div class="create-bot-fields">
+        <div class="field">
+          <label>{{ t("create.name") }}</label>
+          <input
+            v-model="name"
+            autocomplete="off"
+            required
+            maxlength="64"
+            :placeholder="t('create.namePlaceholder')"
+          />
+          <p class="field-hint">
+            {{ t("create.nameHint") }}
+            <span v-if="slugPreview" class="field-hint-slug">{{
+              t("create.slugPreview", { slug: slugPreview })
+            }}</span>
+          </p>
         </div>
-        <div class="create-avatar-block">
-          <CompanionAvatarPicker
-            v-model:character="avatar"
-            v-model:color="avatarColor"
-            :character-label="t('avatar.character')"
-            :color-label="t('avatar.color')"
+        <div class="field">
+          <label>{{ t("create.model") }}</label>
+          <ModelPicker field :model="model" @update:model="(v) => (model = v)" />
+        </div>
+        <div class="create-bot-options">
+          <UiToggleRow :title="t('create.internet')" v-model="internet" />
+          <UiToggleRow
+            :title="t('create.memoryAccess')"
+            :hint="t('create.memoryAccessHint')"
+            v-model="memoryAccess"
+          />
+          <UiToggleRow
+            :title="t('create.isManager')"
+            :hint="
+              managerTaken
+                ? t('create.isManagerTaken', { name: managerTaken.label || managerTaken.name })
+                : t('create.isManagerHint')
+            "
+            :tip="managerTaken ? t('create.isManagerTaken', { name: managerTaken.label || managerTaken.name }) : ''"
+            :disabled="!!managerTaken"
+            :muted="!!managerTaken"
+            v-model="isManager"
           />
         </div>
       </div>
-      <p v-if="!ready" class="create-bot-error">
-        {{ t("setup.createBlocked") }}
-        <router-link to="/" @click="state.createOpen = false">{{ t("setup.open") }}</router-link>
-      </p>
-      <p v-if="error" class="create-bot-error">{{ error }}</p>
-      <div class="create-bot-actions">
-        <button class="btn ghost" type="button" @click="state.createOpen = false">
-          {{ t("create.cancel") }}
-        </button>
-        <button
-          class="btn primary"
-          type="submit"
-          :disabled="busy || !name.trim() || !model.trim() || !ready"
-        >
-          {{ t("create.submit") }}
-        </button>
+      <div class="create-avatar-block">
+        <CompanionAvatarPicker
+          v-model:character="avatar"
+          v-model:color="avatarColor"
+          :character-label="t('avatar.character')"
+          :color-label="t('avatar.color')"
+        />
       </div>
-    </form>
-  </div>
+    </div>
+    <p v-if="!ready" class="create-bot-error">
+      {{ t("setup.createBlocked") }}
+      <router-link to="/" @click="state.createOpen = false">{{ t("setup.open") }}</router-link>
+    </p>
+    <p v-if="error" class="create-bot-error">{{ error }}</p>
+    <div class="create-bot-actions">
+      <UiButton variant="ghost" type="button" @click="state.createOpen = false">
+        {{ t("create.cancel") }}
+      </UiButton>
+      <UiButton
+        variant="primary"
+        type="submit"
+        :disabled="busy || !name.trim() || !model.trim() || !ready"
+      >
+        {{ t("create.submit") }}
+      </UiButton>
+    </div>
+  </UiModal>
 </template>
 
 <script setup>
@@ -83,6 +87,8 @@ import { CompanionAvatarPicker, CHARACTER_IDS } from "@companion-avatar";
 import { api } from "../api";
 import { state, setupReady } from "../store";
 import ModelPicker from "./ModelPicker.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiModal from "./ui/UiModal.vue";
 import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const { t } = useI18n();

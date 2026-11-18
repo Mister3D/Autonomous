@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-19 (UiActionConfirm / UiSwitch; chat-request-card shared chrome)
+**Last updated**: 2026-11-19 (UiModal / UiIconButton; MenuSelect compact; UiButton on cards/modals)
 
 ## Why this note exists
 
@@ -109,16 +109,18 @@ Prefer these for new chrome. Re-exported from `components/ui/index.js`.
 
 | Component | Role |
 |-----------|------|
-| `UiButton.vue` | Soft button variants. |
+| `UiButton.vue` | Soft button variants (`variant`, `to` / `href` for links) — prefer over raw `.btn` everywhere. |
 | `UiOrb.vue` | 28px round inspector button (MCP add, notebook eye). |
 | `UiCard.vue` | Settings / section card with optional icon slot. |
-| `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, …). |
+| `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, `trash`, …). |
 | `UiIconBadge.vue` | Icon in soft badge (inspector rows, settings nav). |
+| `UiIconButton.vue` | Icon-only soft button (trash / revoke) — vault, memory, LLM, Files. |
 | `UiToggleRow.vue` | Title + hint + switch; **custom tooltip** on the switch (`tip` / `disabledReason`) — never browser `title` for that tip. |
 | `UiSwitch.vue` | Switch alone (optional `compact`) — Events rows, inline companion notify. |
 | `UiActionConfirm.vue` | Arm→check confirm control (check icon + tip) — ManageMenu, Files, Settings delete-all / vault. |
+| `UiModal.vue` | Teleport + backdrop + panel (`as="form"` supported, Escape / backdrop close) — Create*/Avatar/Event/MCP/notebook. |
 
-Shared patterns: chat request cards share `.chat-request-card` (+ head / state / actions); **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`).
+Shared patterns: chat request cards share `.chat-request-card` (+ head / state / actions); Soft checkboxes use `.ui-check` (BotDeleteCard); **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`). `MenuSelect` `compact` = Hub split pane pickers.
 
 ## Pitfalls / non-regressions
 
@@ -133,4 +135,5 @@ Shared patterns: chat request cards share `.chat-request-card` (+ head / state /
 ```bash
 ls frontend/src/components/*.vue frontend/src/components/ui/*.vue frontend/src/views/*.vue
 # After UI work: serve --dev, hard-refresh, exercise the touched pane.
+# 2026-11-19 Soft factor: create-bot modal, Hub split MenuSelect compact, npm run build OK.
 ```

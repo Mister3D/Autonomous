@@ -11,6 +11,7 @@
         <label class="bot-delete-row">
           <input
             v-model="row.selected"
+            class="ui-check"
             type="checkbox"
             :disabled="!pending || busy"
           />
@@ -24,17 +25,18 @@
     <template v-if="pending">
       <p v-if="error" class="bot-delete-error">{{ error }}</p>
       <div class="chat-request-card-actions bot-delete-actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
+        <UiButton variant="ghost" type="button" :disabled="busy" @click="resolve('deny')">
           {{ t("botDelete.cancel") }}
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          variant="primary"
           type="button"
-          class="btn primary bot-delete-confirm"
+          class="bot-delete-confirm"
           :disabled="busy || !selectedNames.length"
           @click="resolve('confirm')"
         >
           {{ t("botDelete.confirm") }}
-        </button>
+        </UiButton>
       </div>
     </template>
     <p v-else class="bot-delete-resolved">{{ resolvedText }}</p>
@@ -46,6 +48,7 @@ import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import BotAvatar from "./BotAvatar.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

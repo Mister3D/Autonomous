@@ -9,16 +9,16 @@
     <template v-if="pending">
       <p v-if="error" class="clarify-error">{{ error }}</p>
       <div v-if="choices.length" class="clarify-choices">
-        <button
+        <UiButton
           v-for="label in choices"
           :key="label"
           type="button"
-          class="btn clarify-choice"
+          class="clarify-choice"
           :disabled="busy"
           @click="submit({ choice: label })"
         >
           {{ label }}
-        </button>
+        </UiButton>
       </div>
       <form v-if="allowText" class="clarify-text" @submit.prevent="submitText">
         <p v-if="choices.length" class="clarify-or">{{ t("clarify.or") }}</p>
@@ -31,9 +31,9 @@
             :disabled="busy"
             :aria-label="t('clarify.placeholder')"
           />
-          <button type="submit" class="btn primary" :disabled="busy || !draft.trim()">
+          <UiButton variant="primary" type="submit" :disabled="busy || !draft.trim()">
             {{ t("clarify.send") }}
-          </button>
+          </UiButton>
         </div>
       </form>
     </template>
@@ -46,6 +46,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { maybeContinueFirstChatPrefs } from "../firstChatPrefs";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

@@ -9,9 +9,9 @@
         autocomplete="new-password"
         @update:model-value="$emit('update:modelValue', $event)"
       />
-      <button class="btn" type="button" :disabled="fetching || field.readonly" @click="$emit('fetch')">
+      <UiButton type="button" :disabled="fetching || field.readonly" @click="$emit('fetch')">
         {{ fetching ? t("llm.fetching") : t("llm.fetchModels") }}
-      </button>
+      </UiButton>
     </div>
     <input
       v-else
@@ -50,6 +50,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import MenuSelect from "./MenuSelect.vue";
 import SecretInput from "./SecretInput.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   id: { type: String, required: true },

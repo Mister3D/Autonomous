@@ -8,12 +8,17 @@
       <h2 class="setup-title">{{ setup.ready ? t("setup.titleReady") : t("setup.title") }}</h2>
       <p class="hint">{{ setup.ready ? t("setup.introReady") : t("setup.intro") }}</p>
       <div class="setup-toolbar">
-        <button class="btn" type="button" :disabled="checking" @click="recheck">
+        <UiButton type="button" :disabled="checking" @click="recheck">
           {{ checking ? t("setup.checking") : t("setup.recheck") }}
-        </button>
-        <router-link v-if="setup.ready" class="btn primary" to="/" @click="forceList = false">
+        </UiButton>
+        <UiButton
+          v-if="setup.ready"
+          variant="primary"
+          to="/"
+          @click="forceList = false"
+        >
           {{ t("setup.done") }}
-        </router-link>
+        </UiButton>
       </div>
 
       <h3 class="setup-section">{{ t("setup.required") }}</h3>
@@ -25,15 +30,15 @@
         <SetupItem v-for="c in optional" :key="c.id" :check="c" :log="itemLog(c)" @job="runJob" />
       </ul>
       <div v-if="showFirstChatCta" class="setup-first-chat">
-        <button
-          class="btn primary"
+        <UiButton
+          variant="primary"
           type="button"
           :disabled="!canStartFirstChat || starting"
           :title="canStartFirstChat ? undefined : t('setup.firstChatLocked')"
           @click="startFirstChat"
         >
           {{ starting ? t("setup.firstChatBusy") : t("setup.firstChat") }}
-        </button>
+        </UiButton>
         <p class="hint">{{ t("setup.firstChatHint") }}</p>
       </div>
       <p v-if="error" class="vault-error">{{ error }}</p>
@@ -191,24 +196,25 @@
               <p v-if="updateMeta" class="setup-update-meta">{{ updateMeta }}</p>
             </div>
           </div>
-          <button
+          <UiButton
             v-if="canApplyUpdate || updateApplying"
-            class="btn primary setup-update-apply"
+            variant="primary"
+            class="setup-update-apply"
             type="button"
             :disabled="!canApplyUpdate || updateBusy"
             @click="runApplyUpdate"
           >
             {{ updateApplying ? t("update.applying") : t("update.apply") }}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             v-if="showForceUpdate && !updateApplying"
-            class="btn setup-update-apply setup-update-force"
+            class="setup-update-apply setup-update-force"
             type="button"
             :disabled="updateBusy"
             @click="runForceUpdate"
           >
             {{ t("update.force") }}
-          </button>
+          </UiButton>
         </div>
         <pre v-if="updateLog.length" class="setup-log">{{ updateLog.join("\n") }}</pre>
         <p v-if="updateError" class="vault-error">{{ updateError }}</p>
@@ -226,15 +232,15 @@
           </button>
         </span>
         <p v-if="updateError" class="vault-error">{{ updateError }}</p>
-        <button
+        <UiButton
           v-if="showForceUpdate && !updateApplying"
-          class="btn setup-update-force"
+          class="setup-update-force"
           type="button"
           :disabled="updateBusy"
           @click="runForceUpdate"
         >
           {{ t("update.force") }}
-        </button>
+        </UiButton>
       </template>
     </div>
   </div>
@@ -259,6 +265,7 @@ import {
   writeUpdateStatus,
 } from "../updateStatusCache";
 import SetupItem from "./SetupItem.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const FIRST_AVATAR = "renard";
 const FIRST_AVATAR_COLOR = 0; // Original drawing swatch

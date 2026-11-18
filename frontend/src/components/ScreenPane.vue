@@ -22,14 +22,13 @@
           />
           <div v-if="linkState !== 'connected'" class="novnc-status" :class="linkState">
             <p>{{ statusLabel }}</p>
-            <button
+            <UiButton
               v-if="linkState === 'error' || linkState === 'disconnected'"
               type="button"
-              class="btn"
               @click="retryNovnc"
             >
               {{ t("screen.reconnect") }}
-            </button>
+            </UiButton>
           </div>
           <button
             v-if="!state.humanControl && linkState === 'connected'"
@@ -63,22 +62,22 @@
     <div v-else-if="waking && active" class="desk-status">
       <h3>{{ t("desk.waking") }}</h3>
       <p v-if="wakeError" style="color: var(--danger)">{{ wakeError }}</p>
-      <button
+      <UiButton
         v-if="wakeError"
-        class="btn primary"
+        variant="primary"
         type="button"
         :disabled="waking"
         @click="wake"
       >
         {{ t("desk.wakeRetry") }}
-      </button>
+      </UiButton>
     </div>
 
     <div v-else-if="sleeping && active" class="desk-status is-center">
       <h3>{{ t("desk.asleep") }}</h3>
-      <button class="btn primary" type="button" :disabled="waking" @click="wake">
+      <UiButton variant="primary" type="button" :disabled="waking" @click="wake">
         {{ t("desk.wake") }}
-      </button>
+      </UiButton>
       <p v-if="wakeError" class="desk-wake-error">{{ wakeError }}</p>
     </div>
     <!-- Keep a quiet placeholder while sleeping but tab not visible (v-show mount). -->
@@ -87,14 +86,14 @@
     <div v-else-if="errored" class="desk-status">
       <h3>{{ t("status.error") }}</h3>
       <p style="color: var(--danger)">{{ bot.desk?.last_error || t("desk.createFailed") }}</p>
-      <button class="btn primary" @click="showCreate = true">{{ t("screen.create") }}</button>
+      <UiButton variant="primary" type="button" @click="showCreate = true">{{ t("screen.create") }}</UiButton>
     </div>
 
     <div v-else class="empty">
       <p>{{ t("screen.empty") }}</p>
-      <button class="btn primary" type="button" @click="showCreate = true">
+      <UiButton variant="primary" type="button" @click="showCreate = true">
         {{ t("screen.create") }}
-      </button>
+      </UiButton>
     </div>
   </div>
 </template>
@@ -106,6 +105,7 @@ import { api } from "../api";
 import { wakeBotDesk } from "../deskWake";
 import { state } from "../store";
 import CreateDeskModal from "./CreateDeskModal.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },

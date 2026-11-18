@@ -1,41 +1,35 @@
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="modal-backdrop"
-      @click.self="emit('close')"
-    >
-      <div
-        class="modal events-instruction-modal"
-        role="dialog"
-        aria-modal="true"
-        :aria-labelledby="titleId"
-      >
-        <header class="events-instruction-head">
-          <p class="events-instruction-kind">{{ kindLabel }}</p>
-          <h2 :id="titleId">{{ displayName }}</h2>
-        </header>
-        <div class="events-instruction-scroll">
-          <template v-if="showPayload">
-            <p class="events-instruction-label">{{ t("chat.webhookPayload") }}</p>
-            <pre class="events-instruction-body events-payload-pre">{{ payloadText }}</pre>
-          </template>
-          <p class="events-instruction-label">{{ t("events.instructionLabel") }}</p>
-          <p class="events-instruction-body">{{ displayText }}</p>
-        </div>
-        <div class="events-instruction-actions">
-          <button type="button" class="btn primary" @click="emit('close')">
-            {{ t("events.closeInstruction") }}
-          </button>
-        </div>
-      </div>
+  <UiModal
+    :open="open"
+    panel-class="events-instruction-modal"
+    :aria-labelledby="titleId"
+    @close="emit('close')"
+  >
+    <header class="events-instruction-head">
+      <p class="events-instruction-kind">{{ kindLabel }}</p>
+      <h2 :id="titleId">{{ displayName }}</h2>
+    </header>
+    <div class="events-instruction-scroll">
+      <template v-if="showPayload">
+        <p class="events-instruction-label">{{ t("chat.webhookPayload") }}</p>
+        <pre class="events-instruction-body events-payload-pre">{{ payloadText }}</pre>
+      </template>
+      <p class="events-instruction-label">{{ t("events.instructionLabel") }}</p>
+      <p class="events-instruction-body">{{ displayText }}</p>
     </div>
-  </Teleport>
+    <div class="events-instruction-actions">
+      <UiButton variant="primary" type="button" @click="emit('close')">
+        {{ t("events.closeInstruction") }}
+      </UiButton>
+    </div>
+  </UiModal>
 </template>
 
 <script setup>
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import UiButton from "./ui/UiButton.vue";
+import UiModal from "./ui/UiModal.vue";
 
 const props = defineProps({
   open: { type: Boolean, default: false },

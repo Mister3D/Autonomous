@@ -55,12 +55,12 @@
         <p class="vault-hint">{{ t("vault.neverLlm") }}</p>
         <p v-if="error" class="vault-error">{{ error }}</p>
         <div class="chat-request-card-actions vault-actions">
-          <button type="button" class="btn ghost" :disabled="busy" @click="submit('deny')">
+          <UiButton variant="ghost" type="button" :disabled="busy" @click="submit('deny')">
             {{ t("vault.deny") }}
-          </button>
-          <button type="submit" class="btn primary" :disabled="busy || !canApprove">
+          </UiButton>
+          <UiButton variant="primary" type="submit" :disabled="busy || !canApprove">
             {{ t("vault.approve") }}
-          </button>
+          </UiButton>
         </div>
       </form>
     </template>
@@ -74,6 +74,7 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import MenuSelect from "./MenuSelect.vue";
 import SecretInput from "./SecretInput.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

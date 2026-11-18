@@ -1,24 +1,26 @@
 <template>
-  <div class="modal-backdrop" @click.self="close">
-    <div class="modal avatar-edit-modal" role="dialog" aria-modal="true">
-      <h2>{{ t("avatar.editTitle") }}</h2>
-      <CompanionAvatarPicker
-        v-model:character="character"
-        v-model:color="color"
-        :character-label="t('avatar.character')"
-        :color-label="t('avatar.color')"
-      />
-      <p v-if="error" class="avatar-edit-error">{{ error }}</p>
-      <div class="avatar-edit-actions">
-        <button class="btn ghost" type="button" @click="close">
-          {{ t("avatar.cancel") }}
-        </button>
-        <button class="btn primary" type="button" :disabled="busy" @click="save">
-          {{ busy ? t("avatar.saving") : t("avatar.save") }}
-        </button>
-      </div>
+  <UiModal
+    panel-class="avatar-edit-modal"
+    :aria-label="t('avatar.editTitle')"
+    @close="close"
+  >
+    <h2>{{ t("avatar.editTitle") }}</h2>
+    <CompanionAvatarPicker
+      v-model:character="character"
+      v-model:color="color"
+      :character-label="t('avatar.character')"
+      :color-label="t('avatar.color')"
+    />
+    <p v-if="error" class="avatar-edit-error">{{ error }}</p>
+    <div class="avatar-edit-actions">
+      <UiButton variant="ghost" type="button" @click="close">
+        {{ t("avatar.cancel") }}
+      </UiButton>
+      <UiButton variant="primary" type="button" :disabled="busy" @click="save">
+        {{ busy ? t("avatar.saving") : t("avatar.save") }}
+      </UiButton>
     </div>
-  </div>
+  </UiModal>
 </template>
 
 <script setup>
@@ -26,6 +28,8 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { CompanionAvatarPicker, CHARACTER_IDS } from "@companion-avatar";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
+import UiModal from "./ui/UiModal.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },

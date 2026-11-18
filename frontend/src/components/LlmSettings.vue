@@ -40,19 +40,13 @@
           @focusin="p._tip = true"
           @focusout="p._tip = false"
         >
-          <button
-            class="vault-trash"
-            type="button"
+          <UiIconButton
+            icon="trash"
+            danger
             :disabled="providerInUse(p) || p._saving"
-            :aria-label="providerTip(p)"
+            :label="providerTip(p)"
             @click.stop="removeProvider(p)"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path d="M5 7.5h14" />
-              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-            </svg>
-          </button>
+          />
           <span v-if="p._tip" class="llm-provider-tip" role="tooltip">{{ providerTip(p) }}</span>
         </span>
         <button
@@ -106,14 +100,14 @@
           <small>{{ providerKeyHint(p) }}</small>
         </label>
         <div class="setup-toolbar">
-          <button
-            class="btn primary"
+          <UiButton
+            variant="primary"
             type="button"
             :disabled="!isProviderDirty(p) || p._saving || !canSaveProvider(p)"
             @click="saveProvider(p)"
           >
             {{ p._saving ? "…" : t("llm.saveProvider") }}
-          </button>
+          </UiButton>
           <span v-if="p._ok" class="setup-ok">{{ p._ok }}</span>
           <span v-if="p._error" class="vault-error">{{ p._error }}</span>
         </div>
@@ -122,9 +116,9 @@
     </ul>
     <p v-else class="hint">{{ t("llm.providersEmpty") }}</p>
     <div class="setup-toolbar">
-      <button class="btn" type="button" :disabled="addingProvider" @click="startAddProvider">
+      <UiButton type="button" :disabled="addingProvider" @click="startAddProvider">
         {{ t("llm.addProvider") }}
-      </button>
+      </UiButton>
     </div>
   </UiCard>
 
@@ -147,19 +141,13 @@
           @focusin="m._tip = true"
           @focusout="m._tip = false"
         >
-          <button
-            class="vault-trash"
-            type="button"
+          <UiIconButton
+            icon="trash"
+            danger
             :disabled="m._saving"
-            :aria-label="t('llm.deleteModel')"
+            :label="t('llm.deleteModel')"
             @click.stop="removeModel(m)"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path d="M5 7.5h14" />
-              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-            </svg>
-          </button>
+          />
           <span v-if="m._tip" class="llm-provider-tip" role="tooltip">{{ t("llm.deleteModel") }}</span>
         </span>
         <button
@@ -294,14 +282,14 @@
             </label>
           </div>
           <div class="setup-toolbar">
-            <button
-              class="btn primary"
+            <UiButton
+              variant="primary"
               type="button"
               :disabled="!isModelDirty(m) || m._saving || !canSaveModel(m)"
               @click="saveModel(m)"
             >
               {{ m._saving ? "…" : t("llm.saveModel") }}
-            </button>
+            </UiButton>
             <span v-if="m._ok" class="setup-ok">{{ m._ok }}</span>
             <span v-if="m._error" class="vault-error">{{ m._error }}</span>
           </div>
@@ -310,9 +298,9 @@
     </ul>
     <p v-else class="hint">{{ t("llm.modelsEmpty") }}</p>
     <div class="setup-toolbar">
-      <button class="btn" type="button" :disabled="addingModel || !savedProviders.length" @click="startAddModel">
+      <UiButton type="button" :disabled="addingModel || !savedProviders.length" @click="startAddModel">
         {{ t("llm.addModel") }}
-      </button>
+      </UiButton>
     </div>
   </UiCard>
 
@@ -351,8 +339,10 @@ import { refreshSetup } from "../store";
 import MenuSelect from "./MenuSelect.vue";
 import ModelPicker from "./ModelPicker.vue";
 import SecretInput from "./SecretInput.vue";
+import UiButton from "./ui/UiButton.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 import UiToggleRow from "./ui/UiToggleRow.vue";
 
 let keySeq = 0;

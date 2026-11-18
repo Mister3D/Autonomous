@@ -187,15 +187,13 @@
             </button>
             <div v-if="splitActive" class="split-pickers">
               <label class="split-picker">
-                <select
-                  :value="leftPane"
+                <MenuSelect
+                  compact
+                  :model-value="leftPane"
+                  :options="paneSelectOptions"
                   :aria-label="t('tabs.sideLeft')"
-                  @change="onPickSide('left', $event)"
-                >
-                  <option v-for="opt in paneOptions" :key="opt.id" :value="opt.id">
-                    {{ opt.label }}
-                  </option>
-                </select>
+                  @update:model-value="(v) => onPickSide('left', v)"
+                />
               </label>
               <button
                 type="button"
@@ -210,15 +208,13 @@
                 </svg>
               </button>
               <label class="split-picker">
-                <select
-                  :value="rightPane"
+                <MenuSelect
+                  compact
+                  :model-value="rightPane"
+                  :options="paneSelectOptions"
                   :aria-label="t('tabs.sideRight')"
-                  @change="onPickSide('right', $event)"
-                >
-                  <option v-for="opt in paneOptions" :key="`r-${opt.id}`" :value="opt.id">
-                    {{ opt.label }}
-                  </option>
-                </select>
+                  @update:model-value="(v) => onPickSide('right', v)"
+                />
               </label>
             </div>
             <div v-else class="stage-tabs seg" role="tablist">
@@ -428,6 +424,7 @@ import SetupPanel from "../components/SetupPanel.vue";
 import AvatarEditModal from "../components/AvatarEditModal.vue";
 import CreateDeskModal from "../components/CreateDeskModal.vue";
 import SettingsMenu from "../components/SettingsMenu.vue";
+import MenuSelect from "../components/MenuSelect.vue";
 import UiIcon from "../components/ui/UiIcon.vue";
 
 const { t } = useI18n();
@@ -697,6 +694,10 @@ const paneOptions = computed(() => [
   { id: "screen", label: t("tabs.screen") },
 ]);
 
+const paneSelectOptions = computed(() =>
+  paneOptions.value.map((opt) => ({ value: opt.id, label: opt.label }))
+);
+
 const splitStyle = computed(() =>
   splitActive.value
     ? { "--split-screen": `${(splitRatio.value * 100).toFixed(2)}%` }
@@ -757,9 +758,9 @@ function toggleSplit() {
   nextTick(() => window.dispatchEvent(new Event("resize")));
 }
 
-function onPickSide(side, ev) {
+function onPickSide(side, raw) {
   const name = state.currentBot;
-  const value = ev?.target?.value;
+  const value = typeof raw === "string" ? raw : raw?.target?.value;
   if (!name || !PANE_IDS.includes(value)) return;
   const cur = layoutOf(name);
   let left = cur.left;
@@ -784,7 +785,7 @@ function swapSides() {
   const name = state.currentBot;
   if (!name) return;
   const cur = layoutOf(name);
-  onPickSide("left", { target: { value: cur.right } });
+  onPickSide("left", cur.right);
 }
 
 function clampSplitRatio(ratio) {

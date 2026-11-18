@@ -20,12 +20,18 @@
     <template v-if="pending">
       <p v-if="error" class="memory-error">{{ error }}</p>
       <div class="chat-request-card-actions memory-actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
+        <UiButton variant="ghost" type="button" :disabled="busy" @click="resolve('deny')">
           {{ t("memory.deny") }}
-        </button>
-        <button type="button" class="btn primary memory-confirm" :disabled="busy" @click="resolve('approve')">
+        </UiButton>
+        <UiButton
+          variant="primary"
+          type="button"
+          class="memory-confirm"
+          :disabled="busy"
+          @click="resolve('approve')"
+        >
           {{ t("memory.confirm") }}
-        </button>
+        </UiButton>
       </div>
     </template>
     <p v-else class="memory-resolved">{{ resolvedText }}</p>
@@ -36,6 +42,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

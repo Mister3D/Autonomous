@@ -6,9 +6,9 @@
     </header>
     <p class="agent-resume-body">{{ message.content || t("chat.resumeBody") }}</p>
     <div v-if="pending" class="chat-request-card-actions agent-resume-actions">
-      <button type="button" class="btn primary" :disabled="busy" @click="resume">
+      <UiButton variant="primary" type="button" :disabled="busy" @click="resume">
         {{ busy ? t("chat.resuming") : t("chat.resume") }}
-      </button>
+      </UiButton>
     </div>
     <p v-else-if="error" class="agent-resume-error">{{ error }}</p>
   </div>
@@ -18,6 +18,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

@@ -9,17 +9,18 @@
     <template v-if="pending">
       <p v-if="error" class="approval-error">{{ error }}</p>
       <div class="chat-request-card-actions approval-actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
+        <UiButton variant="ghost" type="button" :disabled="busy" @click="resolve('deny')">
           {{ t("approval.refuse") }}
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          variant="primary"
           type="button"
-          class="btn primary approval-accept"
+          class="approval-accept"
           :disabled="busy"
           @click="resolve('approve')"
         >
           {{ t("approval.accept") }}
-        </button>
+        </UiButton>
       </div>
     </template>
     <p v-else class="approval-resolved">{{ resolvedText }}</p>
@@ -30,6 +31,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

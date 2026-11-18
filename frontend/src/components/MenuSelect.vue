@@ -1,5 +1,9 @@
 <template>
-  <div class="model-picker" :class="{ open, 'is-field': field }" ref="root">
+  <div
+    class="model-picker"
+    :class="{ open, 'is-field': field, 'is-compact': compact }"
+    ref="root"
+  >
     <button
       class="model-trigger"
       type="button"
@@ -74,6 +78,8 @@ const props = defineProps({
   allowEmpty: { type: Boolean, default: false },
   /** Drop the inspector top margin when the control sits under a field label. */
   field: { type: Boolean, default: false },
+  /** Compact chrome (split pane pickers). */
+  compact: { type: Boolean, default: false },
 });
 const emit = defineEmits(["update:modelValue"]);
 

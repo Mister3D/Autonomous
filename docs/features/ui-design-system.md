@@ -5,11 +5,11 @@
 - `frontend/src/styles/tokens.css` — colour, radius, shadow, type tokens
 - `frontend/src/styles/soft-ui.css` — Soft UI surface + primitive styles
 - `frontend/src/styles.css` — legacy layout / feature CSS (consumes tokens)
-- `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`, `UiSwitch`, `UiActionConfirm`
+- `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiIconButton`, `UiToggleRow`, `UiSwitch`, `UiActionConfirm`, `UiModal`
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-19 (UiActionConfirm, UiSwitch, shared chat-request-card chrome)
+**Last updated**: 2026-11-19 (UiModal, UiIconButton, MenuSelect compact, Soft checkboxes)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@
 - Settings sections are card-based with icon badges (Générale, LLM, Grounding, Consumption, vault, memory, companions). Consumption is a flush full-height chart on a wide screen, and a day bar plus a table under 760px (no cards). General stays a single full-width column. The language switch is centered. The default-model picker spans its card. **Add a provider** and **Add a model** are centered under their lists. The grounding attempt field and **Test notification** sit on the right of their row. LLM settings (`.llm-settings`) is four cards — default model, providers, models, other models — each body a flex column with one gap.
 - `UiIcon` `memory` = [SVG Repo brain](https://www.svgrepo.com/svg/521533/brain) (filled `currentColor`) — settings nav Mémoire + inspector Mémoire.
 - Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Réflexion / Thinking (`MenuSelect` of Pi levels), Manager, Veille, **MCP (puzzle)**. Manager uses `UiToggleRow` `tip` (custom bubble on the switch) instead of the `<small>` hint; when locked, the tip shows the “already a Manager” reason.
-- Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (`UiActionConfirm` arm → check; tooltip = « Confirmer ? »). Chat request cards share `.chat-request-card` chrome; Events uses compact `UiSwitch`.
+- Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (`UiActionConfirm` arm → check; tooltip = « Confirmer ? »). Chat request cards share `.chat-request-card` chrome and `UiButton` actions; Events uses compact `UiSwitch`. Modals go through `UiModal`; trash/revoke use `UiIconButton`. Hub split pane sides use `MenuSelect` `compact`.
 - Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
 - Stage tabs / split toolbar (`right: 0.35rem`) share the chat card’s right edge (same as `.stage-body` horizontal padding) — not a deeper inset.
 - Mobile chat (`≤720px`): stage tabs stay a compact pill (`flex: none` + `margin-left: auto`) before the inspector toggle — never stretch full-width between Back and the panel button.
@@ -29,7 +29,7 @@
 ## Implementation
 
 1. `main.js` loads `tokens.css` → `styles.css` → `soft-ui.css`.
-2. Prefer `components/ui/*` for new chrome (buttons, cards, toggles, icons) instead of duplicating SVG / toggle markup.
+2. Prefer `components/ui/*` for new chrome (buttons, cards, toggles, icons) instead of duplicating SVG / toggle markup. Actionable controls use `UiButton` (incl. `to` / `href`); icon-only trash uses `UiIconButton`. Specialized chrome (`send-btn`, `icon-btn`, `home-cta`, stop buttons) stays local.
 3. Existing feature CSS keeps working; Soft UI overrides polish surfaces (shell, settings, composer, bubbles).
 4. i18n: `tabs.screen` = « Écran », `tabs.discussion` aligned with Conversation, `settings.tabVault|Memory|Companions` for nav consistency.
 5. Top chrome sizes: `--chrome-top` / `--control-h-sm` in `tokens.css`; rail bottom settings orb stays `--control-h`.
@@ -46,6 +46,7 @@
 
 1. `autonomous serve --host 127.0.0.1 --port 8787 --dev`
 2. Open `/b/<bot>/discussion` — Soft canvas, orange active tab, « Écran ».
-3. Open inspector — icon badges on Internet / memory / manager / sleep.
-4. Open `/settings/grounding` — card stack; model picker height matches other fields (`--control-h`); full-width Enregistrer under the cards.
-5. Narrow to ~390px — bot list XOR chat; settings nav scrolls horizontally.
+3. Toggle split — pane sides are `MenuSelect` compact (no native `<select>`).
+4. Open create-bot / notebook / MCP dialogs — `UiModal` backdrop + Escape closes.
+5. Settings → vault / LLM — trash is `UiIconButton`.
+6. Narrow to ~390px — bot list XOR chat; settings nav scrolls horizontally.

@@ -50,33 +50,39 @@
         </template>
       </nav>
       <div class="files-actions">
-        <button
-          class="btn file-action icon-only"
+        <UiButton
+          class="file-action"
+          icon-only
           type="button"
           :disabled="busy"
           :title="t('files.mkdir')"
           :aria-label="t('files.mkdir')"
           @click="startMkdir"
         >
-          <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 9.2V7.1A1.6 1.6 0 0 1 5.1 5.5h4l1.5 1.6h8.3A1.6 1.6 0 0 1 20.5 8.7v1" />
-            <path d="M3.5 10h17l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.3H6.2a1.6 1.6 0 0 1-1.6-1.3L3.5 10Z" />
-            <path d="M12 12.2v5M9.5 14.7h5" />
-          </svg>
-        </button>
-        <button
-          class="btn file-action icon-only"
+          <template #icon>
+            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.5 9.2V7.1A1.6 1.6 0 0 1 5.1 5.5h4l1.5 1.6h8.3A1.6 1.6 0 0 1 20.5 8.7v1" />
+              <path d="M3.5 10h17l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.3H6.2a1.6 1.6 0 0 1-1.6-1.3L3.5 10Z" />
+              <path d="M12 12.2v5M9.5 14.7h5" />
+            </svg>
+          </template>
+        </UiButton>
+        <UiButton
+          class="file-action"
+          icon-only
           type="button"
           :disabled="busy"
           :title="uploading ? t('files.uploading') : t('files.upload')"
           :aria-label="uploading ? t('files.uploading') : t('files.upload')"
           @click="pickFiles"
         >
-          <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 15.5V5.5M8.5 9 12 5.5 15.5 9" />
-            <path d="M5 16.5v1.3A1.7 1.7 0 0 0 6.7 19.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
-          </svg>
-        </button>
+          <template #icon>
+            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15.5V5.5M8.5 9 12 5.5 15.5 9" />
+              <path d="M5 16.5v1.3A1.7 1.7 0 0 0 6.7 19.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
+            </svg>
+          </template>
+        </UiButton>
         <input
           ref="fileInput"
           type="file"
@@ -102,12 +108,12 @@
         :disabled="uploading"
         @keydown.esc.prevent="cancelMkdir"
       />
-      <button class="btn primary" type="submit" :disabled="uploading || !mkdirName.trim()">
+      <UiButton variant="primary" type="submit" :disabled="uploading || !mkdirName.trim()">
         {{ t("ok") }}
-      </button>
-      <button class="btn" type="button" :disabled="uploading" @click="cancelMkdir">
+      </UiButton>
+      <UiButton type="button" :disabled="uploading" @click="cancelMkdir">
         {{ t("files.cancel") }}
-      </button>
+      </UiButton>
     </form>
 
     <p class="files-hint">{{ t("files.sharedHint") }}</p>
@@ -191,20 +197,20 @@
         <div class="file-ops">
           <UiActionConfirm
             v-if="armedDelete === e.path"
-            button-class="file-icon-btn"
+            button-class="ui-icon-btn is-file"
             :disabled="busy"
             @confirm="confirmDelete(e)"
           />
-          <button
-            class="file-icon-btn danger"
-            type="button"
+          <UiIconButton
+            v-else
+            icon="trash"
+            danger
+            size-variant="file"
+            :label="t('files.delete')"
             :title="t('files.delete')"
-            :aria-label="t('files.delete')"
             :disabled="busy"
             @click="armDelete(e)"
-          >
-            <UiIcon class="fi" name="trash" :size="16" />
-          </button>
+          />
         </div>
       </li>
     </ul>
@@ -217,7 +223,8 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
 import UiActionConfirm from "./ui/UiActionConfirm.vue";
-import UiIcon from "./ui/UiIcon.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 
 const INTERNAL_MIME = "application/x-autonomous-file";
 

@@ -178,14 +178,13 @@
                 autocomplete="off"
                 spellcheck="false"
               />
-              <button
-                class="btn"
+              <UiButton
                 type="button"
                 :disabled="updateChannelBusy || !updateGit || updateRemoteDraft.trim() === updateRemoteSaved"
                 @click="saveUpdateRemote"
               >
                 {{ t("update.remoteUrlSave") }}
-              </button>
+              </UiButton>
             </div>
             <small>{{ t("update.remoteUrlHint") }}</small>
           </div>
@@ -245,8 +244,8 @@
                 spellcheck="false"
                 @keydown.enter.prevent="saveCustomBranch"
               />
-              <button
-                class="btn primary"
+              <UiButton
+                variant="primary"
                 type="button"
                 :disabled="
                   updateChannelBusy ||
@@ -257,19 +256,18 @@
                 @click="saveCustomBranch"
               >
                 {{ t("update.customBranchSave") }}
-              </button>
+              </UiButton>
             </div>
             <small>{{ t("update.channelHelp") }}</small>
           </div>
           <div class="settings-field">
-            <button
-              class="btn"
+            <UiButton
               type="button"
               :disabled="updateChannelBusy || updateForcing || !updateGit"
               @click="forceUpdate"
             >
               {{ updateForcing ? t("update.applying") : t("update.forceApply") }}
-            </button>
+            </UiButton>
             <small>{{ t("update.forceHint") }}</small>
           </div>
         </div>
@@ -338,14 +336,13 @@
                 v-if="armedVault === e.id"
                 @confirm="removeEntry(e)"
               />
-              <button
-                class="vault-trash"
-                type="button"
-                :aria-label="t('vault.delete')"
+              <UiIconButton
+                v-else
+                icon="trash"
+                danger
+                :label="t('vault.delete')"
                 @click="armVault(e)"
-              >
-                <UiIcon name="trash" :size="16" />
-              </button>
+              />
             </span>
           </li>
         </ul>
@@ -371,19 +368,13 @@
                 · {{ e.value }}
               </small>
             </div>
-            <button
-              class="vault-trash"
-              type="button"
+            <UiIconButton
+              icon="trash"
+              danger
+              :label="t('memory.delete')"
               :title="t('memory.delete')"
-              :aria-label="t('memory.delete')"
               @click="removeMemory(e)"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path d="M5 7.5h14" />
-                <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-                <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-              </svg>
-            </button>
+            />
           </li>
         </ul>
         <p v-else class="hint">{{ t("memory.empty") }}</p>
@@ -403,9 +394,9 @@
             <span class="companion-instance-label">{{ t("companion.instanceLabel") }}</span>
             <code class="companion-instance-url">{{ instanceUrl }}</code>
           </div>
-          <button class="btn" type="button" @click="copyInstanceUrl">
+          <UiButton type="button" @click="copyInstanceUrl">
             {{ instanceCopied ? t("companion.copied") : t("companion.copy") }}
-          </button>
+          </UiButton>
         </div>
         <UiToggleRow
           class="companion-pairing-toggle"
@@ -422,12 +413,12 @@
               <small>{{ p.name }} · {{ platformLabel(p.platform) }} · {{ t("companion.pending") }}</small>
             </div>
             <span class="settings-row-side">
-              <button class="btn primary" type="button" @click="approveDevice(p)">
+              <UiButton variant="primary" type="button" @click="approveDevice(p)">
                 {{ t("companion.approve") }}
-              </button>
-              <button class="btn" type="button" @click="denyDevice(p)">
+              </UiButton>
+              <UiButton type="button" @click="denyDevice(p)">
                 {{ t("companion.deny") }}
-              </button>
+              </UiButton>
             </span>
           </li>
         </ul>
@@ -449,26 +440,22 @@
               <span class="settings-status" :class="{ off: !d.online }">
                 {{ d.online ? t("companion.online") : t("companion.offline") }}
               </span>
-              <button
-                class="settings-orb companion-revoke"
-                type="button"
+              <UiIconButton
+                icon="trash"
+                danger
+                button-class="companion-revoke"
+                :icon-size="18"
+                :label="t('companion.revoke')"
                 :title="t('companion.revoke')"
-                :aria-label="t('companion.revoke')"
                 @click="revokeDevice(d)"
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path d="M5 7.5h14" />
-                  <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-                  <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-                </svg>
-              </button>
+              />
             </span>
           </li>
         </ul>
         <div v-if="deviceRows.length" class="companion-notify-actions">
-          <button class="btn" type="button" :disabled="notifyTesting" @click="testNotify">
+          <UiButton type="button" :disabled="notifyTesting" @click="testNotify">
             {{ t("companion.testNotify") }}
-          </button>
+          </UiButton>
           <p v-if="notifyNote" class="hint">{{ notifyNote }}</p>
         </div>
         <p v-else-if="devicesReady && !devicePending.length" class="hint">{{ t("companion.empty") }}</p>
@@ -502,7 +489,7 @@
                     <strong>{{ platformLabel(a.platform) }}</strong>
                     <small> · {{ a.download_name || a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
                   </span>
-                  <a class="btn" :href="a.url" :download="a.download_name || ''">{{ t("companion.download") }}</a>
+                  <UiButton :href="a.url" :download="a.download_name || ''">{{ t("companion.download") }}</UiButton>
                 </div>
                 <div v-if="logUnderArtifact(idx)" class="companion-build-panel">
                   <p v-for="n in companionNotes" :key="n" class="hint">{{ n }}</p>
@@ -525,14 +512,13 @@
               </li>
             </ul>
             <div v-if="companionBuild.toolchain" class="companion-rebuild">
-              <button
-                class="btn"
+              <UiButton
                 type="button"
                 :disabled="companionBuild.state === 'building'"
                 @click="rebuildCompanion"
               >
                 {{ companionBuild.state === "building" ? t("setup.running") : t("companion.rebuild") }}
-              </button>
+              </UiButton>
             </div>
             <ul class="settings-list companion-macos-list">
               <li class="companion-macos-row">
@@ -568,9 +554,9 @@
                 <strong>{{ item.name }}</strong>
                 <small>{{ t(item.blurb) }}</small>
               </div>
-              <a class="btn" :href="item.url" target="_blank" rel="noopener noreferrer">
+              <UiButton :href="item.url" target="_blank" rel="noopener noreferrer">
                 {{ t("companion.mcpOpen") }}
-              </a>
+              </UiButton>
             </div>
             <div v-if="item.steps" class="companion-mcp-steps">
               <p class="hint">{{ t(item.steps) }}</p>
@@ -603,6 +589,7 @@ import UiActionConfirm from "./ui/UiActionConfirm.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 import UiSwitch from "./ui/UiSwitch.vue";
 import UiToggleRow from "./ui/UiToggleRow.vue";
 
