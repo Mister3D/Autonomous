@@ -405,11 +405,13 @@ export default function (pi: ExtensionAPI) {
     label: "GUI ground",
     description:
       "Locate a UI element on a FRESH desk screenshot via UI-TARS + optional judge. " +
-      "Returns geometry only — does NOT act. Use it when browser_snapshot / " +
-      "browser_frames_snapshot does NOT list the control (canvas, image, native " +
-      "dialog, drawn widget). If the control has screen=x,y, vm_click that " +
-      "instead — this call is slow. " +
-      "Pass that choice as action_hint. Instruction in English. If ok=false, " +
+      "Returns geometry only — does NOT act. " +
+      "No browser_snapshot required for native desktop. Preferred for native desktop apps (calculator, dialogs, XFCE windows) where there " +
+      "is no browser DOM — then vm_click / vm_type. Also use when browser_snapshot / " +
+      "browser_frames_snapshot does NOT list the control (canvas, image, drawn widget). " +
+      "If the control already has screen=x,y from a snapshot, vm_click that instead. " +
+      "Do not replace this with xdotool or guessed clicks in the shell. " +
+      "Pass the gesture as action_hint. Instruction in English. If ok=false, " +
       "do not invent coordinates. Then: action=click → vm_click; action=drag → " +
       "vm_drag(x,y,x2,y2) press-drag-release (never click a slider).",
     parameters: Type.Object({
@@ -494,6 +496,13 @@ export default function (pi: ExtensionAPI) {
         );
       } else if (action === "click" || action === "left_double" || action === "right_single") {
         lines.push("NEXT: call vm_click with these x,y (unless you need another ground).");
+      }
+      const instr = String(params.instruction || "");
+      if (/\b(digit|key|button)\b/i.test(instr) && /\b[0-9]\b/.test(instr)) {
+        lines.push(
+          "TIP: for a multi-digit number or formula, focus the display once then " +
+            "vm_type the whole string — do not ground every digit.",
+        );
       }
       return textResult(lines.join("\n"), {
         ok: true,
@@ -735,6 +744,9 @@ export default function (pi: ExtensionAPI) {
       "This is the shell for date, curl, ping, apt/pip installs, and any other command. " +
       "User autonomous has passwordless sudo — use `sudo apt-get install -y …` when a package is missing; " +
       "do not invent a permission barrier or ask the user to authorize apt. " +
+      "Launching a GUI app: first `command -v` (install if missing); use DISPLAY=:1; " +
+      "on the first attempt do NOT redirect stderr to /dev/null — you need the real error; " +
+      "then confirm the process is alive before claiming success. " +
       "If there is no desk, this call asks the user for the VM and waits — do not invent the output. " +
       "There is no host bash on the Autonomous server. Works even when no user has the web UI open. " +
       "cwd is /home/autonomous/workspace. For reading/writing bot files prefer files_list/read/write (no desk needed). " +
@@ -742,7 +754,9 @@ export default function (pi: ExtensionAPI) {
       "Do NOT use for interactive TUIs (nano/vim/top) — those need the Terminal tab PTY.",
     parameters: Type.Object({
       command: Type.String({
-        description: "Shell command, e.g. 'uname -a' or 'ls -la'",
+        description:
+          "Shell command, e.g. 'uname -a' or 'ls -la'. " +
+          "Do not hide stderr with >/dev/null 2>&1 on a first GUI launch attempt.",
       }),
       timeout: Type.Optional(
         Type.Number({

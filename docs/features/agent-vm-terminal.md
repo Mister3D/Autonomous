@@ -2,12 +2,14 @@
 
 **Status**: in place (one-shot exec; interactive PTY = UI tab only)  
 **Key files**: `autonomous/services/terminal.py`, `autonomous/pi_extensions/vm.ts`, `autonomous/services/pi_rpc.py`, `POST /bots/:name/terminal/exec`  
-**Last updated**: 2026-11-17 (VM sudo / apt is allowed — no invented permission barrier)
+**Last updated**: 2026-11-17 (GUI launch: no hidden stderr / verify binary + process)
 
 ## User behaviour
 
 - In the chat, the Pi agent runs commands (`date`, `curl`, `ping`, everything else) **in the VM** via `vm_terminal_exec`. Without a desktop, the tool requests the VM and waits. It does not invent the output.
 - The desk user `autonomous` has **passwordless sudo**. Installing packages (`sudo apt-get install -y …`) for the task is normal. The agent must not invent an “I don’t have permission / authorize apt” story, and must not `ask_approval` for ordinary VM installs. The only desk gate is `vm_request_desk`.
+- Opening a GUI app then showing a capture: `command -v` (install if missing), launch with `DISPLAY=:1`, **do not** redirect stderr to `/dev/null` on the first try, confirm the process is alive, then screenshot. Do not claim success from a silent `exit_code=0`. Pixel check → `vm_look` (not inventing from `vm_screenshot`, which never sends the PNG to the model).
+- **Using** a native GUI (press calculator buttons, menus): prefer `vm_ground` → `vm_click` / `vm_type`. Do not drive the UI with `xdotool` or guessed clicks in `vm_terminal_exec`; shell is for install/launch/checks. See [`grounding.md`](./grounding.md).
 - Calls are made **server-side** (`docker exec`) — **no open UI** is needed.
 - There is **no host bash**: Pi always starts with `--exclude-tools bash`. To act on the Autonomous host machine itself, the operator gives credentials via the vault (or works outside Autonomous).
 - Pi VM tools:

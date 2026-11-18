@@ -34,11 +34,15 @@ def test_look_allowed_when_snapshot_is_empty():
     assert gate.refuse_vm_look_message("b1") is None
 
 
-def test_ground_asks_for_a_snapshot_first():
-    early = gate.shortcut_ground("b1", "Connexion button")
-    assert early is not None
-    assert early["ok"] is False
-    assert early["status"] == "no_snapshot"
+def test_ground_without_snapshot_runs_vision():
+    """Native desktop / first ground: no DOM read → do not block; vision runs."""
+    assert gate.shortcut_ground("b1", "digit 4 on the calculator") is None
+
+
+def test_ground_stale_empty_browser_allows_vision():
+    gate.remember_browser_read("b1", {"elements": []})
+    gate.note_gesture("b1")
+    assert gate.shortcut_ground("b1", "digit 4 on the calculator") is None
 
 
 def test_ground_returns_the_snapshot_point():

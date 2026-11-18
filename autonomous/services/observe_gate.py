@@ -261,18 +261,24 @@ def shortcut_ground(
     if hint in ("drag",):
         return None
     snap = _read(bot)
+    # No browser read yet → run UI-TARS on the desk (native apps, first ground).
+    # Do NOT demand browser_snapshot first: desktop GUIs have no DOM.
     if snap is None:
-        return _list_result(
-            "no_snapshot",
-            "Call browser_snapshot first. vm_ground only when that read does "
-            "not list the control. If browser_snapshot fails, use vm_look.",
-        )
+        return None
     if snap["stale"]:
+        controls = snap["elements"]
+        overlays = snap["overlays"]
+        # Empty stale browser page (e.g. about:blank after a desk gesture):
+        # allow vision for native windows. A non-empty stale DOM still needs a
+        # fresh browser_snapshot before clicking listed controls.
+        if not controls and not overlays:
+            return None
         return _list_result(
             "stale",
             "The last snapshot is older than the last click or key. "
             "Call browser_snapshot, then vm_click its screen= point. "
-            "Do not vm_ground a control that read will list.",
+            "Do not vm_ground a control that read will list. "
+            "For a native desktop app with no DOM, vm_ground is fine.",
         )
     overlays = snap["overlays"]
     if overlays:
