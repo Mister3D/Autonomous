@@ -7557,6 +7557,7 @@ a.bot-mention:hover,
   margin: 0.35rem 0.35rem 0.5rem;
   padding: 0;
   display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-xl);
@@ -7596,6 +7597,13 @@ a.bot-mention:hover,
   min-height: 0;
   max-height: none;
   width: 100%;
+  align-self: stretch;
+}
+/* Keep the welcome column at ~880px so text + fox stay close (not stretched edge-to-edge). */
+.main > .empty.brand-empty:has(.setup-panel.is-home) > .setup-panel.is-home {
+  width: min(880px, 100%);
+  max-width: 880px;
+  align-self: center;
 }
 .setup-panel.is-home {
   position: relative;
@@ -7622,9 +7630,9 @@ a.bot-mention:hover,
 }
 .home-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(160px, 0.95fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(140px, 0.7fr);
   align-items: center;
-  gap: 0.4rem 1.2rem;
+  gap: 0.35rem 0.75rem;
   margin-top: 0.35rem;
 }
 .home-hero-copy { text-align: left; }
