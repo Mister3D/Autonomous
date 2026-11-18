@@ -34,10 +34,12 @@ export default function (pi: ExtensionAPI) {
     description:
       "Marker only. Include this once in the same response as other tool calls " +
       "when those calls must run one after another (they must not overlap) and " +
-      "you already know every argument. Prefer a LARGE sequential batch when the " +
-      "user asked for many separate command-tool invocations (each command its " +
-      "own call — never one shell that runs them all). They still finish before " +
-      "the next model call; this does not let a later call read an earlier result. " +
+      "you already know every argument (install then launch; many known shell " +
+      "commands). Prefer a LARGE sequential batch when the user asked for many " +
+      "separate command-tool invocations (each command its own call — never one " +
+      "shell that runs them all). That is still many tool calls in ONE response, " +
+      "not one tool per model turn. They still finish before the next model call; " +
+      "this does not let a later call read an earlier result. " +
       "Omit this tool when the calls are independent and may start together. " +
       "Never call this alone. Never use it for a step that needs a result you " +
       "do not have yet — send that one tool and wait.",

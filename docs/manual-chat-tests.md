@@ -18,6 +18,8 @@ The agent should: open this file → find the scenario by **id** → paste the *
 
 Do not invent a softer prompt. Use the block under each scenario verbatim unless the scenario notes an allowed tweak.
 
+**Scoring**: each scenario’s **Expect** lists hard **Pass** checks and explicit **Fail if**. Time budgets are targets (note `OVER_BUDGET` if exceeded, but do not alone flip Pass→Fail unless the scenario says so). Prefer **one busy bot** (plus intentional peers for multi-agent) so LLM queue latency does not fake a product failure.
+
 ## Index
 
 | Id | Title | Area |
@@ -25,7 +27,7 @@ Do not invent a softer prompt. Use the block under each scenario verbatim unless
 | [vault-fnac-last-order](#vault-fnac-last-order) | Fnac vault → last order amount & contents | Vault + browser |
 | [calc-screenshot](#calc-screenshot) | Launch calculator + chat screenshot | Desk GUI + screenshot |
 | [calc-screenshot-product](#calc-screenshot-product) | Calculator `473×984` result on screen | Grounding + screenshot |
-| [tool-echo-250](#tool-echo-250) | 250 distinct `echo` tool calls | Guard / tool loop |
+| [tool-echo-250](#tool-echo-250) | 250 distinct `echo` tool calls + `batch_sequential` grouping | Guard / tool loop / throughput |
 | [epub-les-miserables](#epub-les-miserables) | Download public-domain *Les Misérables* EPUB | Browser / files |
 | [paint-blue-circle](#paint-blue-circle) | Draw a blue circle, screenshot | Desk GUI + grounding |
 | [desktop-rename-folder](#desktop-rename-folder) | Create + rename desktop folder | XFCE dialogs |
@@ -44,10 +46,13 @@ Do not invent a softer prompt. Use the block under each scenario verbatim unless
 - Desk running (or bot may request one)
 - Network available in the VM
 
-**Expect**:
-- Bot uses the vault (does not ask the human to re-type the password in chat)
-- Retrieves the **amount** and **contents** of the **latest** Fnac order
-- Reports them clearly in the conversation
+**Expect** — Pass when all of:
+- Vault path used (`vault_catalog` / grant / `vault_type` as needed) — password never typed or pasted in chat by the human or the bot
+- Latest Fnac order identified (order id or date clear enough to tell it is the latest)
+- **Amount** (total with currency) and **contents** (line items / product names) stated in the assistant reply
+- No invented order data: figures come from the live site after login
+
+**Fail if**: asks the user for the password in clear text; reports a generic “I can’t access Fnac” while a grant exists; amount or contents missing; fabricates totals without opening the account.
 
 ### Prompt
 
@@ -64,10 +69,13 @@ My Fnac credentials are already saved. Retrieve the amount and the contents of m
 - Desk running (or bot may request one)
 - Calculator package available or installable in the VM (`galculator` / similar)
 
-**Expect**:
-- Calculator window is actually open on the desk (not Chrome / about:blank)
-- A screenshot appears **in the conversation** (markdown image from `vm_screenshot`)
-- No false “success” from a silent `exit_code=0` with stderr discarded
+**Expect** — Pass when all of:
+- A calculator app is running on the desk (process + window), not a browser tab / blank screen
+- At least one screenshot is pasted **in the conversation** (assistant markdown from `vm_screenshot`)
+- The capture visibly shows the calculator UI
+- Known-arg shell steps (e.g. install then launch) may be grouped with `batch_sequential` — preferred, not required for Pass here
+
+**Fail if**: claims success with no image in chat; screenshot shows Chrome/about:blank/empty desktop; “success” inferred only from `exit_code=0` with no capture.
 
 ### Prompt
 
@@ -82,11 +90,13 @@ Launch a calculator in your VM and show me a screenshot in this conversation.
 **Area**: native GUI via `vm_ground` → `vm_click` / type, then screenshot  
 **Prerequisites**: same as [calc-screenshot](#calc-screenshot)
 
-**Expect**:
-- Calculator is used through grounding + clicks (not `xdotool` / shell click loops)
-- On-screen result of **473 × 984** is visible
-- Screenshot of that result is pasted in the conversation
-- Expected product: **465 432**
+**Expect** — Pass when all of:
+- Calculator driven via native GUI (`vm_ground` / `vm_click` / `vm_type` / `vm_key`) — not `xdotool` click chains or shell-only arithmetic
+- On-screen display shows the computation for **473 × 984**
+- Result visible on screen is **465 432** (spaces/separators OK)
+- Screenshot of that result pasted in the conversation
+
+**Fail if**: bot only computes 465432 in chat without the calculator UI showing it; uses shell/`xdotool` as the primary input path; screenshot missing or does not show the result.
 
 ### Prompt
 
@@ -98,17 +108,21 @@ Launch a calculator in your VM and show me a screenshot that displays the result
 
 ## tool-echo-250
 
-**Area**: many real successive `vm_terminal_exec` (or equivalent command tool) calls; guard review gate  
+**Area**: many real successive `vm_terminal_exec` (or equivalent command tool) calls; guard review gate; throughput via `batch_sequential`  
+
 **Prerequisites**:
 - Desk optional if the command tool still runs in the VM shell the bot uses
 - `guard.review_every` may interrupt mid-run — agent must answer `GUARD:CONTINUE` and keep going until 250
 
-**Expect**:
-- Exactly **250** real, independent tool calls
-- Call *n* runs only `echo n` (n from 1 to 250)
-- No loops, no scripts, no batching several echoes in one tool call
-- Final reply states the total number of tool calls performed
-- Time budget target: **&lt; 15 min**
+**Expect** — Pass when all of:
+- Exactly **250** real, independent `vm_terminal_exec` (or equivalent) calls — call *n* runs only `echo n` for n = 1…250 (verified in tool metas, not only the assistant’s claim)
+- No loops/scripts; no packing several echoes into **one** shell string / one tool-call argument
+- **Grouping (hard)**: after arguments are known, many calls in the **same model turn** with `batch_sequential` (large packs). One command per tool call still applies; one tool call per model turn does **not**. Fail if the bulk of the 250 stays turn-by-turn
+- `GUARD:CONTINUE` / resume used correctly if the review gate fires; run reaches 250 (not stuck after a gate)
+- Final reply states the total number of calls performed
+- Time budget target: **&lt; 15 min** (note `OVER_BUDGET` if exceeded)
+
+**Fail if**: &lt;250 distinct echo calls; one shell runs many echoes; almost no multi-tool turns; stops at a GUARD without CONTINUE; invents a total without the tools.
 
 ### Prompt
 
@@ -133,11 +147,13 @@ When the test is finished, state the total number of calls performed.
 - Desk / network available
 - Prefer a known public-domain source (e.g. Project Gutenberg / standard mirror)
 
-**Expect**:
-- An EPUB of *Les Misérables* (Hugo) is downloaded — public domain, no paywall bypass
-- File is available under the bot’s `~/files` (or clearly reported path)
-- Bot states the final filename / path in the chat
+**Expect** — Pass when all of:
+- A real **EPUB** file of *Les Misérables* (Victor Hugo) is obtained from a **public-domain** source (no paywall / DRM bypass)
+- File lands under the bot’s `~/files` (or the documented files path) and is a valid EPUB (zip/EPUB structure), not an HTML error page renamed `.epub`
+- Assistant states the **exact** final path/filename in chat
 - Time budget target: **&lt; 5 min**
+
+**Fail if**: non-EPUB payload; paywalled source abuse; path not reported; empty/corrupt file presented as success.
 
 ### Prompt
 
@@ -152,11 +168,13 @@ Download an EPUB of Les Misérables (Victor Hugo). It is in the public domain. S
 **Area**: native drawing app, grounding, chat screenshot  
 **Prerequisites**: desk running; a paint app installable or present (`kolourpaint`, `gimp`, etc.)
 
-**Expect**:
-- A drawing app is open on the desk
-- A **blue circle** is visible on the canvas
-- Screenshot pasted in the conversation
+**Expect** — Pass when all of:
+- A drawing application window is open on the desk (GIMP, Drawing, KolourPaint, etc.)
+- Canvas shows a **blue circle** (filled or stroke OK; clearly circular and blue)
+- Screenshot pasted in the conversation showing that canvas
 - Time budget target: **&lt; 4 min**
+
+**Fail if**: no image in chat; circle only described in text; wrong colour/shape; screenshot of unrelated UI; app never opened.
 
 ### Prompt
 
@@ -171,11 +189,13 @@ Open a drawing application in your VM, draw a blue circle on the canvas, and sho
 **Area**: XFCE desktop file manager dialogs, grounding  
 **Prerequisites**: desk running with a visible desktop
 
-**Expect**:
-- A folder is created on the desktop
-- It is renamed to **`TestAlpha`** through the GUI (not only `mv` in a shell claiming success)
-- Screenshot shows the renamed folder
+**Expect** — Pass when all of:
+- A folder is created via the **graphical** desktop / file-manager UI (dialogs, not “success” from shell-only `mkdir`+`mv` as the sole method)
+- Folder renamed to **`TestAlpha`** through that GUI
+- Screenshot in chat shows the desktop (or file manager) with **TestAlpha** visible
 - Time budget target: **&lt; 4 min**
+
+**Fail if**: rename done only in shell while claiming GUI; no screenshot; name wrong / folder not visible on the capture.
 
 ### Prompt
 
@@ -190,10 +210,12 @@ On your VM desktop, create a folder, rename it to TestAlpha using the graphical 
 **Area**: browser tools, page load, chat screenshot  
 **Prerequisites**: desk / Chrome available via browser tools
 
-**Expect**:
-- Wikipedia **English** article for « Autonomous system » is open
-- Screenshot in the conversation shows the article **title** clearly
+**Expect** — Pass when all of:
+- English Wikipedia is open on a page whose subject is **« Autonomous system »** (article or the site’s disambiguation page for that title is acceptable if the **title** is clearly readable)
+- Screenshot pasted in chat shows that **page title** clearly (not a blank tab / wrong language / unrelated page)
 - Time budget target: **&lt; 3 min**
+
+**Fail if**: no screenshot; title not readable; wrong wiki language; navigated away before capture.
 
 ### Prompt
 
@@ -208,11 +230,13 @@ Open the English Wikipedia page for “Autonomous system” in the browser and s
 **Area**: generate a file into `~/files`  
 **Prerequisites**: tools to create a PDF in the VM (`python3`, `reportlab`/`fpdf`, `wkhtmltopdf`, LibreOffice, etc. — install if needed with sudo)
 
-**Expect**:
-- A real PDF exists under `~/files`
-- Content includes **Hello World**
-- Bot reports the exact path
+**Expect** — Pass when all of:
+- A real **PDF** file exists under `~/files` (valid PDF header / openable), not a renamed text file
+- Document content includes **Hello World**
+- Assistant reports the **exact** path in chat
 - Time budget target: **&lt; 3 min**
+
+**Fail if**: file missing or not a PDF; text not in the PDF; path omitted or wrong.
 
 ### Prompt
 
@@ -225,15 +249,17 @@ Generate a PDF that says Hello World, save it into my files, and tell me the exa
 ## spreadsheet-sum
 
 **Area**: spreadsheet GUI (LibreOffice Calc or similar), grounding + typing  
-**Prerequisites**: desk running; spreadsheet app available or installable
+**Prerequisites**: desk running; spreadsheet app available or installable  
+**Pitfall** (2026-11-18): opening a hand-built/corrupt `.ods` triggers an LO error dialog; grounding often fails on the Name Box. Prefer launching Calc empty via the GUI, then navigate cells.
 
-**Expect**:
-- Done **through the graphical spreadsheet UI** (not a CSV written only in the shell)
-- Cell **B6** has one numeric value
-- Cell **D5** has another numeric value
-- Cell **F9** shows the **sum** of those two cells (formula or computed result visible)
-- Screenshot in the conversation shows B6, D5, and F9
+**Expect** — Pass when all of:
+- Work done in a **graphical** spreadsheet (LibreOffice Calc or similar) — not a shell-only CSV/`echo` claiming success
+- **B6** and **D5** each contain a numeric value entered via the UI
+- **F9** shows the **sum** of those two cells (formula like `=B6+D5` or the computed total visible)
+- Screenshot in chat makes **B6, D5, and F9** identifiable (values/headers readable enough to verify)
 - Time budget target: **&lt; 5 min**
+
+**Fail if**: spreadsheet never used; cells filled only via file rewrite outside the GUI; screenshot missing or does not show the three cells; F9 not the sum.
 
 ### Prompt
 
@@ -252,11 +278,17 @@ Open a spreadsheet application in your VM using the graphical interface. Put a n
 - Desk / VM for Agent 3 to install, run, and test
 - Do **not** fake tool calls, agents, or test results
 
-**Expect**:
-- Working instant-messaging app (Vue 3 + Node/Express + Socket.IO + SQLite)
-- Real parallel work when possible; Agent 3 integrates and tests
-- App actually started and verified when the environment allows
-- Report of what each agent did + start commands
+**Expect** — Pass when all of:
+- **Three real specialist bots** created and tasked (frontend / backend / integrator) — not a single bot role-playing all three in prose only
+- Stack present as specified: Vue 3 + Vite/TS/Pinia/Tailwind (frontend), Node/TS/Express + Socket.IO + SQLite (backend)
+- Agents actually work (tool calls, files, mail/delegation) — no simulated tool results
+- Integrator (Agent 3) assembles, **starts** frontend + backend when the environment allows, and runs some real verification (HTTP and/or WebSocket)
+- Manager (or orchestrator) reports what each agent did + commands to start the app
+- Time budget target: **&lt; 60 min** (long scenario)
+
+**Fail if**: only generated code dumps with no peers; fake “tests passed” without runs; app never started when a desk/VM was available; Manager goes idle and the scenario is scored before peers finish.
+
+**Partial (note, not Pass)**: peers created and substantial real work, but app not fully verified end-to-end.
 
 ### Prompt
 

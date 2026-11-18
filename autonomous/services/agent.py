@@ -934,12 +934,9 @@ class PiAgent:
                         state.setdefault("mail_sent", []).append(
                             {"tool": tool_name, "to": to}
                         )
-                # One-shot nudge: many tiny independent shell calls → batch them.
-                if (
-                    tool_name == "vm_terminal_exec"
-                    and not is_error
-                    and not state.get("throughput_steered")
-                ):
+                # Nudge: many tiny independent shell calls → batch them.
+                # First steer early; re-steer if the model keeps going turn-by-turn.
+                if tool_name == "vm_terminal_exec" and not is_error:
                     cmd = str((args or {}).get("command") or "").strip()
                     simple = bool(
                         cmd
@@ -951,8 +948,21 @@ class PiAgent:
                     )
                     streak = int(state.get("simple_shell_streak") or 0)
                     state["simple_shell_streak"] = streak + 1 if simple else 0
-                    if state["simple_shell_streak"] >= 8:
-                        state["throughput_steered"] = True
+                    should_steer = False
+                    if simple and not state.get("throughput_steered"):
+                        if state["simple_shell_streak"] >= 3:
+                            state["throughput_steered"] = True
+                            state["post_steer_simple"] = 0
+                            should_steer = True
+                    elif simple and state.get("throughput_steered"):
+                        post = int(state.get("post_steer_simple") or 0) + 1
+                        state["post_steer_simple"] = post
+                        # Model ignored the nudge — remind every 5 more singles.
+                        if post % 5 == 0:
+                            should_steer = True
+                    elif not simple:
+                        state["post_steer_simple"] = 0
+                    if should_steer:
                         try:
                             MANAGER.steer(bot, _THROUGHPUT_BATCH_STEER)
                         except Exception:
@@ -1615,8 +1625,10 @@ _THROUGHPUT_BATCH_STEER = (
     "For every remaining command whose arguments you already know, emit them "
     "NOW in one response: each command is still its own tool call, and include "
     "batch_sequential once so they run one after another without a model turn "
-    "between each. Fill up to the next GUARD review (or the end of the task). "
-    "Do not narrate between them."
+    "between each. A large pack (tens of calls when safe) is expected — not "
+    "two or three. \"One command per tool call\" still means many tool calls "
+    "in this same response. Fill up to the next GUARD review (or the end of "
+    "the task). Do not narrate between them."
 )
 
 

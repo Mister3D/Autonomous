@@ -372,14 +372,20 @@ def test_catchup_advances_next_run(home):
 
 
 def test_prompt_can_batch_tools_parallel_or_sequential():
-    from autonomous.services.pi_rpc import _BATCH_SYSTEM_HINT, _PI_EXTENSIONS
+    from autonomous.services.pi_rpc import (
+        _BATCH_SYSTEM_HINT,
+        _THROUGHPUT_SYSTEM_HINT,
+        _PI_EXTENSIONS,
+    )
 
     hint = _BATCH_SYSTEM_HINT
-    assert "multiple tool calls" in hint
+    assert "SAME response" in hint or "same response" in hint
     assert "batch_sequential" in hint
     assert "same time" in hint
     assert "one after another" in hint
     assert "Never call batch_sequential alone" in hint
+    assert "does NOT mean one tool call per model turn" in hint
+    assert "batch_sequential" in _THROUGHPUT_SYSTEM_HINT
     assert any(path.name == "batch.ts" for path in _PI_EXTENSIONS)
 
 
