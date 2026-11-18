@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/botmail.py`, `autonomous/services/files.py` (mail staging), `autonomous/migrations/001_schema.sql`, `autonomous/api/bots.py` (`/mail/*`, `/files/claim-mail`), `autonomous/pi_extensions/{botmail,files}.ts`, `autonomous/services/{chat,agent,pi_rpc}.py`, `frontend/src/{mentions.js,components/ChatPane.vue}`  
-**Last updated**: 2026-11-16 (an email address is not a bot mention)
+**Last updated**: 2026-11-18 (botmail `#` headings stay body-sized)
 
 ## User behaviour
 
@@ -22,7 +22,7 @@ In a bot's input area:
 - In the thread: centred blue cards for inter-bot mail. UI copy comes from frontend locales (en/fr).
   - **Sent** (sender): when `bot_tell` / `bot_ask` / API mail succeeds, a card shows the **peer-facing body** (« Sent to @x »). Ask *replies* still stamp the assistant bubble as outgoing.
   - **Received** (peer): « Received from @x » with the same body (or the ask answer).
-  - Long bodies are **collapsed** to the first sentence; a click on the card expands/collapses (links stay clickable without toggling).
+  - Long bodies are **collapsed** to the first sentence; a click on the card expands/collapses (links stay clickable without toggling). A leading ATX `#` / `##` … marker is stripped in the collapsed preview so a peer title does not render as a giant H1; expanded cards keep markdown headings but at near-body size (see chat bubble CSS).
   - Attachment **chips** (name + size) stay visible even when the body is collapsed; click downloads.
 
 Pi tools: `bot_tell`, `bot_ask` (all); `bot_list` + `bot_delegate` (**Manager** only — see [manager.md](./manager.md)). Invisible in the thread. `bot_ask` waits (`status=waiting`) — Managers must not use it to orchestrate. **One file path**: `attachments` on `bot_tell` / `bot_ask` only. Managers add `expect_reply` on the same `bot_tell` for async callback. `files_claim_mail` moves a staged attachment into a chosen `~/files` path (tool card hidden).

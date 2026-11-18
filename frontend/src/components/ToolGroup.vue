@@ -69,6 +69,20 @@
       </div>
     </div>
 
+    <!-- Desk captures stay out of assistant bubbles: show the latest user-facing
+         shot on the folded group so it is not buried under Expand → tool row. -->
+    <figure
+      v-if="foldedShotPreview && !listOpen"
+      class="shot-card tool-shot tool-group-shot-preview"
+    >
+      <img
+        :src="foldedShotPreview.meta?.url"
+        :alt="firstLine(foldedShotPreview) || t('chat.screenshot')"
+        loading="lazy"
+      />
+      <figcaption v-if="firstLine(foldedShotPreview)">{{ firstLine(foldedShotPreview) }}</figcaption>
+    </figure>
+
     <!-- Liste d’outils (repliée) : pas de blocs séparés cible / pointeur. -->
     <ul v-if="listOpen" class="tool-group-list">
       <li
@@ -607,6 +621,24 @@ function isShot(m) {
 function isGrounding(m) {
   return m?.meta?.kind === "grounding";
 }
+
+/** Latest desk capture meant for the user (not grounding loop frames). */
+const foldedShotPreview = computed(() => {
+  const shots = (props.entries || []).filter(
+    (m) => isShot(m) && m?.meta?.url && !m?.meta?.grounding
+  );
+  if (!shots.length) return null;
+  // Prefer the shot linked to the last vm_screenshot tool in this group.
+  for (let i = (props.entries || []).length - 1; i >= 0; i--) {
+    const m = props.entries[i];
+    if (m?.meta?.kind === "tool" && m?.meta?.tool_name === "vm_screenshot") {
+      const linked = shotForTool(m);
+      if (linked?.meta?.url) return linked;
+      break;
+    }
+  }
+  return shots[shots.length - 1];
+});
 
 function isTargetShot(m) {
   if (!isShot(m) || !m?.meta?.grounding) return false;

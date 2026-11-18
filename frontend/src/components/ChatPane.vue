@@ -138,10 +138,26 @@
           </div>
         </article>
         <article v-else-if="item.kind === 'notebook'" class="msg notebook" :data-msg-id="item.id">
-          <p class="notebook-line">
-            <span>{{ item.text }}</span>
-            <time v-if="item.time" :datetime="item.iso">{{ item.time }}</time>
-          </p>
+          <div
+            class="notebook-card"
+            :class="[item.tier, item.action === 'close' ? 'removed' : 'added']"
+          >
+            <span class="notebook-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7">
+                <path d="M6 4.5h10.5A1.5 1.5 0 0 1 18 6v13.2a.8.8 0 0 1-1.2.7L14 18.4l-2.8 1.5L8.4 18.4 5.2 19.9A.8.8 0 0 1 4 19.2V6A1.5 1.5 0 0 1 5.5 4.5H6Z" />
+                <path d="M8.2 8.2h7.2M8.2 11.2h7.2M8.2 14.2h4.4" stroke-linecap="round" />
+              </svg>
+            </span>
+            <div class="notebook-card-main">
+              <span class="notebook-label">{{ item.label }}</span>
+              <span class="notebook-text">{{ item.text }}</span>
+            </div>
+            <time
+              v-if="item.time"
+              class="notebook-time"
+              :datetime="item.iso"
+            >{{ item.time }}</time>
+          </div>
         </article>
         <article v-else-if="item.kind === 'compaction'" class="msg guard" :data-msg-id="item.id">
           <div class="guard-card compaction-card" :class="item.status">
@@ -1889,6 +1905,13 @@ function botmailPlainBody(m) {
   return raw.trim();
 }
 
+/** Drop a leading ATX heading marker so collapsed previews stay body-sized. */
+function botmailPreviewText(text) {
+  return String(text || "")
+    .replace(/^\s{0,3}#{1,6}\s+/, "")
+    .trim();
+}
+
 /** First sentence (period must be followed by space/end — keeps Vue.js / paths intact). */
 function botmailFirstSentence(text) {
   const flat = String(text || "").replace(/\s+/g, " ").trim();
@@ -1915,7 +1938,7 @@ function isBotmailExpanded(m) {
 
 function renderBotmail(m) {
   if (!botmailCollapsible(m) || isBotmailExpanded(m)) return render(m);
-  return render(botmailFirstSentence(botmailPlainBody(m)));
+  return render(botmailPreviewText(botmailFirstSentence(botmailPlainBody(m))));
 }
 
 function onBotmailBubbleClick(m, ev) {
@@ -2023,14 +2046,17 @@ function notebookItem(m) {
   const tier = String(meta.tier || "note");
   const action = String(meta.action || "set");
   const text = String(meta.text || meta.title || m.content || "");
-  let key = "chat.notebookNote";
-  if (action === "close") key = "chat.notebookRemoved";
-  else if (tier === "order") key = "chat.notebookOrder";
-  else if (tier === "open") key = "chat.notebookOpen";
+  let labelKey = "chat.notebookAddedNote";
+  if (action === "close") labelKey = "chat.notebookRemovedLabel";
+  else if (tier === "order") labelKey = "chat.notebookAddedOrder";
+  else if (tier === "open") labelKey = "chat.notebookAddedOpen";
   return {
     kind: "notebook",
     id: m.id,
-    text: t(key, { text }),
+    tier,
+    action,
+    label: t(labelKey),
+    text,
     time,
     iso: m.created_at || "",
   };

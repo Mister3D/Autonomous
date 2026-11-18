@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/notebook.py`, `autonomous/api/bots.py`, `autonomous/pi_extensions/notebook.ts`, `autonomous/migrations/026_bot_notebook.sql`, `frontend/src/components/DetailsPane.vue`, `frontend/src/components/ChatPane.vue`  
-**Last updated**: 2026-11-15
+**Last updated**: 2026-11-18 (centred notebook card in the thread)
 
 ## User behaviour
 
@@ -11,7 +11,7 @@
   - **Orders** — a lasting rule the human stated (« always verify the proxy is enabled »). One short sentence. The bot saves it immediately, no Confirm card.
   - **Open lines** — work left unfinished (« Server: the nginx update is still to do »). The bot writes the line before it leaves the subject, and removes it when the work is done.
   - **Notes** — a decision or a setup to keep (title + body). The title is listed every turn. The body is read with `notebook_get` when the subject comes back.
-- A short centred line appears in the thread: Remembered / Still to do / Note / Removed. The tool call itself stays hidden.
+- A small centred **notebook card** appears in the thread (same width band as guard / tools): label « Added to notebook · Order / Still to do / Note » or « Removed from notebook », plus the entry text and time. Soft paper/ink styling, book icon. The tool call itself stays hidden.
 - Details, just above Manager, has a one-line row **Bot notebook**. An eye in a round orb on the right (`UiOrb`, same control as MCP add) opens a dialog with the orders, open lines, and notes. An empty notebook still shows the short hint under the title. The bot writes and closes entries. The panel has no add or delete control.
 - Chat clear does not wipe the notebook. Deleting the bot does.
 

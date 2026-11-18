@@ -2653,22 +2653,74 @@ a:focus-visible {
   white-space: pre-wrap;
 }
 
-.notebook-line {
+/* Carnet : petite carte centrée (gabarit guard), teinte papier/encre. */
+.notebook-card {
+  width: 100%;
   display: flex;
+  align-items: flex-start;
   justify-content: center;
-  align-items: baseline;
-  gap: 0.45rem;
-  margin: 0.35rem auto;
-  max-width: 36rem;
-  color: var(--muted);
-  font-size: 0.82rem;
-  text-align: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.85rem;
+  border: 1.5px dashed #8a9a72;
+  border-radius: 14px;
+  background: #f4f6ef;
+  color: #2f3828;
+  box-shadow: 0 1px 2px rgba(70, 90, 40, 0.08);
+  text-align: left;
 }
 
-.notebook-line time {
+.notebook-card.removed {
+  border-color: #b0b4a6;
+  background: #f3f3f0;
+  color: #5a5e54;
+}
+
+.notebook-ico {
   flex: none;
-  font-variant-numeric: tabular-nums;
+  margin-top: 0.08rem;
+  color: #5f7348;
+  opacity: 0.9;
+}
+
+.notebook-card.removed .notebook-ico {
+  color: #7a7e72;
+}
+
+.notebook-card-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.notebook-label {
   font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #5f7348;
+}
+
+.notebook-card.removed .notebook-label {
+  color: #6e7268;
+}
+
+.notebook-text {
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.notebook-time {
+  flex: none;
+  margin-top: 0.12rem;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--muted, #8a8a90);
+  white-space: nowrap;
 }
 
 .package-usage {
@@ -3642,6 +3694,7 @@ label.muted {
 .msg.notice,
 .msg.tool,
 .msg.guard,
+.msg.notebook,
 .msg.secret-leak,
 .msg.agent-error,
 .msg.vault,
@@ -5230,6 +5283,28 @@ button.msg-queued-action:disabled {
   background: rgba(0, 0, 0, 0.04);
 }
 
+/* Folded tool group: last user-facing desk capture stays visible (not in the bubble). */
+.tool-group-shot-preview {
+  margin: 0;
+  padding: 0.35rem 0.75rem 0.75rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.tool-group-shot-preview img {
+  display: block;
+  width: 100%;
+  max-height: 16rem;
+  object-fit: contain;
+  border-radius: 0.45rem;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.tool-group-shot-preview figcaption {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .tool-group-live {
   margin: 0;
   padding: 0.55rem 0.75rem 0.7rem;
@@ -5672,6 +5747,27 @@ button.msg-queued-action:disabled {
 
 .bubble p {
   margin: 0.35em 0;
+}
+
+/* Peers often open mail with `# Title` — keep headings near body size, not browser H1. */
+.bubble :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.4em 0 0.25em;
+  font-weight: 700;
+  line-height: 1.35;
+  color: inherit;
+}
+.bubble h1 { font-size: 1.05em; }
+.bubble h2 { font-size: 1.02em; }
+.bubble h3,
+.bubble h4,
+.bubble h5,
+.bubble h6 { font-size: 1em; }
+
+.botmail-body.collapsed .botmail-body-html > :is(h1, h2, h3, h4, h5, h6) {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
 }
 
 .bubble.assistant {

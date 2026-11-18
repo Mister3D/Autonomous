@@ -64,18 +64,19 @@ My Fnac credentials are already saved. Retrieve the amount and the contents of m
 
 ## calc-screenshot
 
-**Area**: VM GUI launch hygiene, `vm_screenshot` pasted into chat  
+**Area**: VM GUI launch hygiene, `vm_screenshot` on the tool row  
+
 **Prerequisites**:
 - Desk running (or bot may request one)
 - Calculator package available or installable in the VM (`galculator` / similar)
 
 **Expect** — Pass when all of:
 - A calculator app is running on the desk (process + window), not a browser tab / blank screen
-- At least one screenshot is pasted **in the conversation** (assistant markdown from `vm_screenshot`)
+- At least one ``vm_screenshot`` (or equivalent) whose PNG is visible under the **tool-row detail** in the chat tool group (not required as assistant-bubble markdown)
 - The capture visibly shows the calculator UI
 - Known-arg shell steps (e.g. install then launch) may be grouped with `batch_sequential` — preferred, not required for Pass here
 
-**Fail if**: claims success with no image in chat; screenshot shows Chrome/about:blank/empty desktop; “success” inferred only from `exit_code=0` with no capture.
+**Fail if**: claims success with no capture on a tool row; screenshot shows Chrome/about:blank/empty desktop; “success” inferred only from `exit_code=0` with no capture.
 
 ### Prompt
 
@@ -94,7 +95,7 @@ Launch a calculator in your VM and show me a screenshot in this conversation.
 - Calculator driven via native GUI (`vm_ground` / `vm_click` / `vm_type` / `vm_key`) — not `xdotool` click chains or shell-only arithmetic
 - On-screen display shows the computation for **473 × 984**
 - Result visible on screen is **465 432** (spaces/separators OK)
-- Screenshot of that result pasted in the conversation
+- Screenshot of that result visible under the tool-row detail (assistant-bubble image markdown is not required)
 
 **Fail if**: bot only computes 465432 in chat without the calculator UI showing it; uses shell/`xdotool` as the primary input path; screenshot missing or does not show the result.
 
@@ -131,9 +132,10 @@ I want to run a test. Perform 250 distinct and successive calls to the command-e
 For each call:
 Run only the command echo x.
 Start with x = 1 and increment its value by 1 on each new call, until x = 250.
-Make exactly one tool call per command.
-Do not batch several commands in the same call.
+Make exactly one tool call per echo (one command string = one echo N).
+Do not pack several echoes into one shell command or one tool-call argument.
 Do not use a loop, a script, or any mechanism that simulates multiple calls in a single execution.
+You must emit many of those independent tool calls together in the same model turn using batch_sequential (large packs). One tool call per model turn is too slow and fails this test.
 The goal is to obtain exactly 250 real and independent calls to the command-execution tool, not 250 executions inside one call.
 When the test is finished, state the total number of calls performed.
 ```
@@ -171,10 +173,10 @@ Download an EPUB of Les Misérables (Victor Hugo). It is in the public domain. S
 **Expect** — Pass when all of:
 - A drawing application window is open on the desk (GIMP, Drawing, KolourPaint, etc.)
 - Canvas shows a **blue circle** (filled or stroke OK; clearly circular and blue)
-- Screenshot pasted in the conversation showing that canvas
+- Screenshot under the tool-row detail showing that canvas
 - Time budget target: **&lt; 4 min**
 
-**Fail if**: no image in chat; circle only described in text; wrong colour/shape; screenshot of unrelated UI; app never opened.
+**Fail if**: no capture on a tool row; circle only described in text; wrong colour/shape; screenshot of unrelated UI; app never opened.
 
 ### Prompt
 
@@ -192,10 +194,10 @@ Open a drawing application in your VM, draw a blue circle on the canvas, and sho
 **Expect** — Pass when all of:
 - A folder is created via the **graphical** desktop / file-manager UI (dialogs, not “success” from shell-only `mkdir`+`mv` as the sole method)
 - Folder renamed to **`TestAlpha`** through that GUI
-- Screenshot in chat shows the desktop (or file manager) with **TestAlpha** visible
+- Screenshot under the tool-row detail shows the desktop (or file manager) with **TestAlpha** visible
 - Time budget target: **&lt; 4 min**
 
-**Fail if**: rename done only in shell while claiming GUI; no screenshot; name wrong / folder not visible on the capture.
+**Fail if**: rename done only in shell while claiming GUI; no capture on a tool row; name wrong / folder not visible on the capture.
 
 ### Prompt
 
@@ -212,10 +214,10 @@ On your VM desktop, create a folder, rename it to TestAlpha using the graphical 
 
 **Expect** — Pass when all of:
 - English Wikipedia is open on a page whose subject is **« Autonomous system »** (article or the site’s disambiguation page for that title is acceptable if the **title** is clearly readable)
-- Screenshot pasted in chat shows that **page title** clearly (not a blank tab / wrong language / unrelated page)
+- Screenshot (tool-row detail and/or browser tool capture) shows that **page title** clearly (not a blank tab / wrong language / unrelated page)
 - Time budget target: **&lt; 3 min**
 
-**Fail if**: no screenshot; title not readable; wrong wiki language; navigated away before capture.
+**Fail if**: no capture; title not readable; wrong wiki language; navigated away before capture.
 
 ### Prompt
 
@@ -250,16 +252,17 @@ Generate a PDF that says Hello World, save it into my files, and tell me the exa
 
 **Area**: spreadsheet GUI (LibreOffice Calc or similar), grounding + typing  
 **Prerequisites**: desk running; spreadsheet app available or installable  
-**Pitfall** (2026-11-18): opening a hand-built/corrupt `.ods` triggers an LO error dialog; grounding often fails on the Name Box. Prefer launching Calc empty via the GUI, then navigate cells.
+**Pitfall** (2026-11-18): opening a hand-built/corrupt `.ods` triggers an LO error dialog; grounding grid cells often mis-clicks (same coords for B6/D5). Prefer empty Calc + **Name Box** navigation (address → Return → value). Tip of the Day / hidden columns: dismiss or ignore — do not thrash menus/`xdotool`.
 
 **Expect** — Pass when all of:
 - Work done in a **graphical** spreadsheet (LibreOffice Calc or similar) — not a shell-only CSV/`echo` claiming success
 - **B6** and **D5** each contain a numeric value entered via the UI
 - **F9** shows the **sum** of those two cells (formula like `=B6+D5` or the computed total visible)
-- Screenshot in chat makes **B6, D5, and F9** identifiable (values/headers readable enough to verify)
-- Time budget target: **&lt; 5 min**
+- Screenshot under the tool-row detail makes **B6, D5, and F9** identifiable (values/headers readable enough to verify)
+- Bot reaches **idle** with a **substantive assistant reply** in chat (not only `GUARD:CONTINUE` / empty)
+- Time budget target: **&lt; 5 min** (note `OVER_BUDGET` if exceeded; incomplete cut-off = Fail)
 
-**Fail if**: spreadsheet never used; cells filled only via file rewrite outside the GUI; screenshot missing or does not show the three cells; F9 not the sum.
+**Fail if**: spreadsheet never used; cells filled only via file rewrite outside the GUI; capture missing or does not show the three cells; F9 not the sum; run ends mid-guard with no task answer in chat.
 
 ### Prompt
 

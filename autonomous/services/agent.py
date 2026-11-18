@@ -572,6 +572,10 @@ class PiAgent:
             "guard_gate_count": None,  # action_count at which the gate opened
             "guard_gate_violation": False,  # tools attempted while gate open
             "guard_tools_blocked": False,  # gate-only follow-up run: block every tool
+            # Mid-lot review: milestone crossed → review_due_count; card/gate open
+            # only when tools_in_flight returns to 0 (lot finished).
+            "tools_in_flight": 0,
+            "review_due_count": None,
             "compaction_msg_id": None,
             # True once this LLM call has an open llm_turn card (extension or fallback).
             "llm_turn_ensured": False,
@@ -747,7 +751,7 @@ class PiAgent:
                         # same turn must not race message_end and get aborted.
                         if _wants_guard_continue(state["content"]):
                             _release_guard_gate(
-                                bot, state=state, from_continue=True
+                                bot, state=state, from_continue=True, home=home
                             )
                         # Never stream raw vault secrets to the UI.
                         try:
@@ -800,7 +804,9 @@ class PiAgent:
                     log.exception("llm_turn tool seal failed for %s", bot)
                 # CONTINUE may already be in the closed bubble content.
                 if _wants_guard_continue(state.get("content") or ""):
-                    _release_guard_gate(bot, state=state, from_continue=True)
+                    _release_guard_gate(
+                        bot, state=state, from_continue=True, home=home
+                    )
                 # Same-turn tools after CONTINUE — no separate resume run needed.
                 if state.get("guard_resume_task") and state.get("guard_gate") is None:
                     state["guard_resume_task"] = False
@@ -843,31 +849,80 @@ class PiAgent:
                 if state.get("guard_tools_blocked"):
                     _block_tools_for_guard_gate(bot, state=state, home=home)
                     return
-                # Periodic self-check: steer the LLM (not a full conversation reset).
+                # New tool wave after a pack that crossed review_every: open the
+                # deferred review now (lot already finished) and block this tool
+                # until GUARD:CONTINUE — never open mid-lot when in_flight dips
+                # to 0 while parallel siblings are still starting.
+                if (
+                    state.get("review_due_count") is not None
+                    and int(state.get("tools_in_flight") or 0) == 0
+                    and state.get("guard_gate") != "awaiting"
+                ):
+                    _open_deferred_review(bot, state=state, home=home)
+                    _block_tools_for_guard_gate(bot, state=state, home=home)
+                    return
+                call_id = str(record.get("toolCallId") or "")
+                tool_name = str(record.get("toolName") or "tool")
+                args = record.get("args") if isinstance(record.get("args"), dict) else {}
+                # Reject same-turn CONTINUE packs that jump over missing echoes
+                # (gap steer arrives too late if those tools are already queued).
+                if tool_name == "vm_terminal_exec":
+                    skip = _echo_cmd_skips_required(
+                        bot,
+                        str((args or {}).get("command") or ""),
+                        home=home,
+                        state=state,
+                    )
+                    if skip:
+                        try:
+                            state["action_count"] = max(
+                                0, int(state.get("action_count") or 1) - 1
+                            )
+                        except Exception:
+                            pass
+                        state["aborted"] = True
+                        # Resume with the gap list — do not ask for another CONTINUE.
+                        state["guard_resume_task"] = True
+                        mark_silent_abort(bot)
+                        try:
+                            MANAGER.abort(bot)
+                        except Exception:
+                            pass
+                        try:
+                            gap = _echo_gap_instruction(bot, home=home)
+                            MANAGER.steer(
+                                bot,
+                                "ECHO ORDER — aborted this pack: "
+                                f"{skip}.\n{gap}",
+                            )
+                        except Exception:
+                            log.exception("echo-skip steer failed for %s", bot)
+                        state["settled"].set()
+                        return
+                # Periodic self-check: if the milestone falls mid-pack, mark it
+                # due and let the current parallel/sequential lot finish — the
+                # review card + gate open when in-flight tools hit zero.
+                state["tools_in_flight"] = int(state.get("tools_in_flight") or 0) + 1
                 if (
                     review_every > 0
                     and count % review_every == 0
                     and count < limit
                 ):
                     steered = state.setdefault("reviews_steered", set())
-                    if count not in steered:
+                    # After a mid-batch gate abort, start_run rebuilds state with an
+                    # empty reviews_steered — without this chat check the same
+                    # milestone (e.g. 70) re-opens forever and the task stalls.
+                    already = count in steered or _review_milestone_already_posted(
+                        bot, count=count, home=home
+                    )
+                    if already:
                         steered.add(count)
-                        _steer_progress_review(
-                            bot,
-                            count=count,
-                            limit=limit,
-                            review_every=review_every,
-                            home=home,
-                        )
-                        state["guard_gate"] = "awaiting"
-                        state["guard_gate_count"] = count
-                        state["guard_gate_violation"] = False
-                call_id = str(record.get("toolCallId") or "")
-                tool_name = str(record.get("toolName") or "tool")
+                    else:
+                        steered.add(count)
+                        state["review_due_count"] = count
                 from autonomous.services import desk as desk_svc
 
                 desk_svc.prepare_vm_tool(bot, tool_name, home=home)
-                args = record.get("args") if isinstance(record.get("args"), dict) else {}
                 if call_id and args:
                     state["tool_args"][call_id] = args
                 if tool_name in _HIDDEN_TOOL_CARDS:
@@ -906,13 +961,22 @@ class PiAgent:
                 end_args = (
                     record.get("args") if isinstance(record.get("args"), dict) else {}
                 )
+                try:
+                    state["tools_in_flight"] = max(
+                        0, int(state.get("tools_in_flight") or 1) - 1
+                    )
+                except Exception:
+                    state["tools_in_flight"] = 0
                 # Pi often sends empty args on end — keep those from start.
                 args = end_args or dict(state["tool_args"].get(call_id) or {})
                 is_error = bool(record.get("isError"))
                 if not is_error:
                     pending = state.setdefault("pending_images_md", [])
                     found: list[str] = []
-                    if tool_name in ("files_share_image", "vm_screenshot"):
+                    # Desk captures stay on the tool row (ToolGroup). Only
+                    # files_share_image / MCP images are auto-embedded in the
+                    # assistant bubble — never vm_screenshot.
+                    if tool_name == "files_share_image":
                         md = _extract_share_image_markdown(record.get("result"))
                         if md:
                             found.append(md)
@@ -938,6 +1002,7 @@ class PiAgent:
                 # First steer early; re-steer if the model keeps going turn-by-turn.
                 if tool_name == "vm_terminal_exec" and not is_error:
                     cmd = str((args or {}).get("command") or "").strip()
+                    _remember_done_shell(bot, cmd)
                     simple = bool(
                         cmd
                         and "\n" not in cmd
@@ -1017,6 +1082,13 @@ class PiAgent:
                         )
             elif rtype == "agent_settled":
                 state["aborted"] = bool(record.get("aborted"))
+                # Pack ended the turn with a review still due (no next tool wave).
+                if state.get("review_due_count") and state.get("guard_gate") != "awaiting":
+                    incomplete = _echo_sequence_incomplete_reason(bot, home=home)
+                    if incomplete:
+                        _open_deferred_review(bot, state=state, home=home)
+                    else:
+                        state.pop("review_due_count", None)
                 state["settled"].set()
             elif rtype == "message_end":
                 message_obj = record.get("message") or {}
@@ -1030,10 +1102,35 @@ class PiAgent:
                     if state.get("guard_gate") == "awaiting" and text:
                         if _wants_guard_continue(text):
                             _release_guard_gate(
-                                bot, state=state, from_continue=True
+                                bot,
+                                state=state,
+                                from_continue=True,
+                                home=home,
                             )
                         elif _wants_guard_stop(text):
-                            _release_guard_gate(bot, state=state)
+                            incomplete = _echo_sequence_incomplete_reason(
+                                bot, home=home
+                            )
+                            if incomplete:
+                                # Premature STOP — rewrite bubble to CONTINUE so
+                                # the UI never shows « l’agent s’arrête » while
+                                # the run keeps going, then force the gap fill.
+                                _rewrite_refused_guard_stop(
+                                    bot,
+                                    state=state,
+                                    home=home,
+                                    reason=incomplete,
+                                )
+                                _release_guard_gate(
+                                    bot,
+                                    state=state,
+                                    from_continue=True,
+                                    home=home,
+                                )
+                            else:
+                                _release_guard_gate(
+                                    bot, state=state, home=home
+                                )
                         elif (text or "").strip() and not _wants_guard_token(text):
                             # Spoke without the mandatory token — re-steer, keep gate.
                             try:
@@ -1043,30 +1140,44 @@ class PiAgent:
                                     "guard gate retry steer failed for %s", bot
                                 )
                     if text and _wants_guard_stop(text):
-                        state["aborted"] = True
-                        state["error"] = (
-                            "L’agent a choisi de s’arrêter (GUARD:STOP) "
-                            "après la revue de progression."
+                        incomplete = _echo_sequence_incomplete_reason(
+                            bot, home=home
                         )
-                        try:
-                            chat_svc.create_message(
-                                bot,
-                                f"⏹ {state['error']}",
-                                role="system",
-                                meta={
-                                    "kind": "guard",
-                                    "guard_stop": True,
-                                    "action_count": state.get("action_count"),
-                                },
-                                home=home,
+                        if incomplete:
+                            # STOP without an open gate (or after rewrite above):
+                            # never post the stop system card / abort.
+                            if not state.get("guard_stop_rewritten"):
+                                _rewrite_refused_guard_stop(
+                                    bot,
+                                    state=state,
+                                    home=home,
+                                    reason=incomplete,
+                                )
+                        else:
+                            state["aborted"] = True
+                            state["error"] = (
+                                "L’agent a choisi de s’arrêter (GUARD:STOP) "
+                                "après la revue de progression."
                             )
-                        except Exception:
-                            pass
-                        try:
-                            MANAGER.abort(bot)
-                        except Exception:
-                            pass
-                        state["settled"].set()
+                            try:
+                                chat_svc.create_message(
+                                    bot,
+                                    f"⏹ {state['error']}",
+                                    role="system",
+                                    meta={
+                                        "kind": "guard",
+                                        "guard_stop": True,
+                                        "action_count": state.get("action_count"),
+                                    },
+                                    home=home,
+                                )
+                            except Exception:
+                                pass
+                            try:
+                                MANAGER.abort(bot)
+                            except Exception:
+                                pass
+                            state["settled"].set()
                     err = message_obj.get("errorMessage")
                     if err and message_obj.get("stopReason") == "error":
                         state["error"] = str(err)
@@ -1560,6 +1671,7 @@ def _release_guard_gate(
     *,
     state: dict[str, Any],
     from_continue: bool = False,
+    home: Path | None = None,
 ) -> None:
     """Allow tools again after GUARD:CONTINUE / STOP (STOP still aborts separately)."""
     # CONTINUE always arms a task resume. If more tools run in this same turn,
@@ -1567,11 +1679,82 @@ def _release_guard_gate(
     # tools (common after a mid-batch gate abort), settle kicks the resume run.
     if from_continue:
         state["guard_resume_task"] = True
+        # Same-turn CONTINUE never sees the separate resume prompt — steer the
+        # gap list once so the model does not skip tools aborted by the gate.
+        if not state.get("guard_continue_steered"):
+            state["guard_continue_steered"] = True
+            try:
+                suffix = _guard_resume_prompt_for(bot, home=home)
+                extra = suffix.replace(_GUARD_RESUME_PROMPT, "").strip()
+                if extra:
+                    MANAGER.steer(bot, "CONTINUE accepted.\n" + extra)
+                else:
+                    MANAGER.steer(
+                        bot,
+                        "CONTINUE accepted. Queued tools aborted by the gate DID "
+                        "NOT RUN. Resume from the first step without a successful "
+                        "result; do not skip; large batch_sequential packs sized "
+                        "to the next review boundary.",
+                    )
+            except Exception:
+                log.exception("guard continue gap steer failed for %s", bot)
     state["guard_gate"] = None
     state["guard_gate_count"] = None
     state["guard_tools_blocked"] = False
     state["guard_gate_violation"] = False
     _clear_pending_guard_gate(bot)
+
+
+def _queue_guard_gate_followup(bot: str, *, state: dict[str, Any]) -> None:
+    """Arm the CONTINUE/STOP follow-up so a settle race cannot drop it."""
+    try:
+        _queue_pending_guard_gate(
+            bot,
+            count=int(
+                state.get("guard_gate_count") or state.get("action_count") or 0
+            ),
+            limit=int(state.get("action_limit") or 1000),
+            review_every=int(state.get("review_every") or 0),
+        )
+    except Exception:
+        log.exception("queue pending guard gate failed for %s", bot)
+
+
+def _open_deferred_review(
+    bot: str,
+    *,
+    state: dict[str, Any],
+    home: Path | None,
+) -> None:
+    """Fire the review after the current tool pack has finished (or settled).
+
+    Crossing ``review_every`` mid-lot only sets ``review_due_count``; the card and
+    blocking gate open here so parallel siblings are not cut off, and so no tool
+    cards appear between the review card and ``GUARD:CONTINUE``.
+    """
+    due = state.pop("review_due_count", None)
+    if due is None:
+        return
+    if state.get("guard_gate") == "awaiting":
+        return
+    count = int(state.get("action_count") or due)
+    limit = int(state.get("action_limit") or 1000)
+    review_every = int(state.get("review_every") or 0)
+    if _review_milestone_already_posted(bot, count=count, home=home):
+        return
+    _steer_progress_review(
+        bot,
+        count=count,
+        limit=limit,
+        review_every=review_every,
+        home=home,
+    )
+    state["guard_gate"] = "awaiting"
+    state["guard_gate_count"] = count
+    state["guard_gate_violation"] = False
+    state["guard_continue_steered"] = False
+    state["guard_stop_rewritten"] = False
+    _queue_guard_gate_followup(bot, state=state)
 
 
 def _block_tools_for_guard_gate(
@@ -1592,18 +1775,7 @@ def _block_tools_for_guard_gate(
         pass
     state["guard_gate_violation"] = True
     state["aborted"] = True
-    # Arm the gate follow-up immediately so a settle race cannot drop it.
-    try:
-        _queue_pending_guard_gate(
-            bot,
-            count=int(
-                state.get("guard_gate_count") or state.get("action_count") or 0
-            ),
-            limit=int(state.get("action_limit") or 1000),
-            review_every=int(state.get("review_every") or 0),
-        )
-    except Exception:
-        log.exception("queue pending guard gate failed for %s", bot)
+    _queue_guard_gate_followup(bot, state=state)
     mark_silent_abort(bot)
     try:
         MANAGER.abort(bot)
@@ -1623,12 +1795,13 @@ _THROUGHPUT_BATCH_STEER = (
     "THROUGHPUT — you have been issuing many independent short shell tool "
     "calls one model turn at a time. That is too slow.\n"
     "For every remaining command whose arguments you already know, emit them "
-    "NOW in one response: each command is still its own tool call, and include "
-    "batch_sequential once so they run one after another without a model turn "
-    "between each. A large pack (tens of calls when safe) is expected — not "
-    "two or three. \"One command per tool call\" still means many tool calls "
-    "in this same response. Fill up to the next GUARD review (or the end of "
-    "the task). Do not narrate between them."
+    "NOW in one response: each command is still its own vm_terminal_exec "
+    "call (never invent a bash/shell tool), and include batch_sequential "
+    "once so they run one after another without a model turn between each. "
+    "A large pack (tens of calls when safe) is expected — not two or three. "
+    "\"One command per tool call\" still means many tool calls in this same "
+    "response. Fill up to the next GUARD review (or the end of the task). "
+    "Do not narrate between them."
 )
 
 
@@ -1643,7 +1816,9 @@ _GUARD_GATE_RUN_PROMPT = (
     "GUARD:STOP — you should stop now\n"
     "If you choose CONTINUE, put the token first, then immediately emit the next "
     "required tool calls in that same turn (large sequential batches with "
-    "batch_sequential are fine when arguments are already known)."
+    "batch_sequential are fine when arguments are already known). Queued tools "
+    "aborted by this gate DID NOT RUN — resume from the first missing successful "
+    "result; do not skip ahead; do not STOP until the user task is truly done."
 )
 
 
@@ -1812,11 +1987,15 @@ def _steer_progress_review(
         f"the last user message / webhook / cron (hard limit {limit}, "
         f"~{remaining} left). Reviews fire every {review_every} tools.\n"
         "Do NOT call any more tools until you answer.\n"
+        "Any further tools still queued in this turn will be aborted and will "
+        "NOT run — after CONTINUE, resume from the first step without a "
+        "successful result (do not skip).\n"
         "Reply with exactly one of:\n"
         "GUARD:CONTINUE — still progressing; then take the next useful step\n"
         "GUARD:STOP — stop now, no more tools\n"
         "Nothing else before that token. After CONTINUE, resume tools in the "
-        "same turn when you can (sequential batches OK if args are known)."
+        "same turn when you can (sequential batches OK if args are known; size "
+        "packs to the next review boundary)."
     )
     try:
         chat_svc.create_message(
@@ -1844,12 +2023,285 @@ def _steer_progress_review(
 
 
 _GUARD_RESUME_PROMPT = (
-    "GUARD:CONTINUE was accepted. An in-flight tool batch was interrupted by the "
-    "review gate. Resume your unfinished task immediately with the next useful "
-    "tool calls. Prefer a large batch_sequential for remaining independent "
-    "commands whose arguments you already know. Do not redo work that already "
-    "succeeded."
+    "GUARD:CONTINUE was accepted. The review gate aborted every tool that was "
+    "still queued in that turn after the milestone — those calls DID NOT RUN "
+    "(no successful result). Look only at tool results you actually received. "
+    "Resume from the first step that has no successful result; do not skip "
+    "ahead; do not invent completed work; do not GUARD:STOP until the user's "
+    "requested sequence is fully done with real tool results. Prefer a large "
+    "batch_sequential for remaining independent commands whose arguments you "
+    "already know, sized to finish just before the next review milestone (or "
+    "the end of the task)."
 )
+
+# bot → last successful shell command string (survives mid-batch gate abort).
+_last_done_shell: dict[str, str] = {}
+
+
+def _remember_done_shell(bot: str, command: str) -> None:
+    cmd = str(command or "").strip()
+    if cmd:
+        _last_done_shell[bot] = cmd
+
+
+def _echo_progress_from_chat(bot: str, *, home: Path | None) -> tuple[set[int], int]:
+    """Successful ``echo N`` tool calls in chat → (set of N, max N)."""
+    import re
+
+    nums: set[int] = set()
+    before: str | None = None
+    for _ in range(40):
+        batch = chat_svc.list_messages(bot, before=before, limit=200, home=home)
+        if not batch:
+            break
+        for m in batch:
+            meta = m.get("meta") or {}
+            if meta.get("kind") != "tool":
+                continue
+            if (meta.get("tool_name") or "") != "vm_terminal_exec":
+                continue
+            if (meta.get("status") or "") not in ("done", "success", ""):
+                # still count done; skip explicit errors
+                if meta.get("status") == "error":
+                    continue
+            args = meta.get("args") if isinstance(meta.get("args"), dict) else {}
+            cmd = str((args or {}).get("command") or "").strip()
+            m_echo = re.fullmatch(r"echo\s+(\d+)", cmd)
+            if m_echo:
+                nums.add(int(m_echo.group(1)))
+        oldest = min((m.get("created_at") or "") for m in batch)
+        if not oldest or len(batch) < 200 or oldest == before:
+            break
+        before = oldest
+    return nums, (max(nums) if nums else 0)
+
+
+def _echo_task_target(bot: str, *, home: Path | None) -> int | None:
+    """250 if the latest user turn asked for the echo-250 sequence."""
+    try:
+        recent = chat_svc.list_messages(bot, limit=30, home=home)
+        user_blob = " ".join(
+            (m.get("content") or "")
+            for m in recent
+            if m.get("role") == "user"
+        ).lower()
+        if "echo" in user_blob and "250" in user_blob:
+            return 250
+    except Exception:
+        log.exception("echo task target scan failed for %s", bot)
+    return None
+
+
+def _echo_missing_list(bot: str, *, home: Path | None) -> list[int]:
+    """Missing echo N values for an echo-250-style task (empty if not that task)."""
+    target = _echo_task_target(bot, home=home)
+    if not target:
+        return []
+    try:
+        nums, _mx = _echo_progress_from_chat(bot, home=home)
+    except Exception:
+        log.exception("echo missing scan failed for %s", bot)
+        return []
+    return [i for i in range(1, target + 1) if i not in nums]
+
+
+def _echo_gap_instruction(bot: str, *, home: Path | None, limit: int = 60) -> str:
+    """Text block listing the next required echo commands (for gate/resume prompts)."""
+    missing = _echo_missing_list(bot, home=home)
+    if not missing:
+        return ""
+    chunk = missing[: max(1, limit)]
+    lines = "\n".join(f"  vm_terminal_exec command=\"echo {n}\"" for n in chunk)
+    more = (
+        f"\n… then continue through echo {missing[-1]} "
+        f"({len(missing) - len(chunk)} more after this pack)."
+        if len(missing) > len(chunk)
+        else ""
+    )
+    return (
+        "ECHO SEQUENCE — required next tools (exact order, do not skip):\n"
+        f"{lines}{more}\n"
+        "Emit them NOW with batch_sequential (one vm_terminal_exec per echo). "
+        f"The next command MUST be exactly: echo {chunk[0]}. "
+        "Do not jump ahead to a higher N."
+    )
+
+
+def _echo_cmd_skips_required(
+    bot: str,
+    command: str,
+    *,
+    home: Path | None,
+    state: dict[str, Any] | None = None,
+) -> str | None:
+    """Reject echo packs that jump over the next required N.
+
+    The first echo of a wave (tools_in_flight == 0) must be exactly the lowest
+    missing N. Later parallel siblings may be the following contiguous missings.
+    """
+    import re
+
+    missing = _echo_missing_list(bot, home=home)
+    if not missing:
+        return None
+    m = re.fullmatch(r"echo\s+(\d+)", str(command or "").strip())
+    if not m:
+        return None
+    n = int(m.group(1))
+    need = missing[0]
+    in_flight = int((state or {}).get("tools_in_flight") or 0)
+    # Contiguous missing run from the lowest gap.
+    contiguous: list[int] = []
+    expect = need
+    for x in missing:
+        if x != expect:
+            break
+        contiguous.append(x)
+        expect += 1
+    window = set(contiguous[:80])
+    if in_flight <= 0:
+        if n != need:
+            return (
+                f"echo {n} starts a pack but the next required echo is {need} "
+                f"(missing {missing[:20]}{'…' if len(missing) > 20 else ''})"
+            )
+        return None
+    if n not in window:
+        return (
+            f"echo {n} is outside the required contiguous pack starting at "
+            f"{need} (allowed through {max(window) if window else need})"
+        )
+    return None
+
+
+def _review_milestone_already_posted(
+    bot: str, *, count: int, home: Path | None
+) -> bool:
+    """True if a guard review card for this action_count already exists since the last user turn."""
+    try:
+        msgs = chat_svc.list_messages(bot, limit=120, home=home)
+        last_user_at = ""
+        for m in msgs:
+            if m.get("role") == "user":
+                last_user_at = m.get("created_at") or last_user_at
+        for m in msgs:
+            if last_user_at and (m.get("created_at") or "") < last_user_at:
+                continue
+            meta = m.get("meta") or {}
+            if (
+                meta.get("kind") == "guard"
+                and meta.get("review")
+                and int(meta.get("action_count") or -1) == int(count)
+            ):
+                return True
+    except Exception:
+        log.exception("review milestone scan failed for %s", bot)
+    return False
+
+
+def _rewrite_refused_guard_stop(
+    bot: str,
+    *,
+    state: dict[str, Any],
+    home: Path | None,
+    reason: str,
+) -> None:
+    """Refuse a premature GUARD:STOP: rewrite the bubble so the chat card stays CONTINUE."""
+    import re
+
+    if state.get("guard_stop_rewritten"):
+        return
+    state["guard_stop_rewritten"] = True
+    raw = str(state.get("content") or "")
+    rewritten = re.sub(
+        r"GUARD:\s*STOP\b",
+        "GUARD:CONTINUE",
+        raw,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    if rewritten == raw:
+        rewritten = "GUARD:CONTINUE\n"
+    state["content"] = rewritten
+    msg_id = state.get("msg_id")
+    if msg_id:
+        try:
+            chat_svc.update_message(bot, msg_id, rewritten, home=home)
+        except Exception:
+            log.exception("rewrite refused GUARD:STOP bubble failed for %s", bot)
+    try:
+        MANAGER.steer(
+            bot,
+            "GUARD:STOP refused — the chat card was corrected to CONTINUE because "
+            f"the echo sequence is not finished ({reason}). Emit the missing/"
+            "remaining echo tool calls now (batch_sequential, sized to the next "
+            "review boundary). Do not claim the task is done.",
+        )
+    except Exception:
+        log.exception("steer after refused GUARD:STOP failed for %s", bot)
+
+
+def _echo_sequence_incomplete_reason(
+    bot: str, *, home: Path | None = None
+) -> str | None:
+    """If chat shows an unfinished echo-N task, return a short reason; else None."""
+    try:
+        nums, mx = _echo_progress_from_chat(bot, home=home)
+    except Exception:
+        log.exception("echo incomplete scan failed for %s", bot)
+        return None
+    target = None
+    user_blob = ""
+    try:
+        recent = chat_svc.list_messages(bot, limit=30, home=home)
+        user_blob = " ".join(
+            (m.get("content") or "")
+            for m in recent
+            if m.get("role") == "user"
+        ).lower()
+        if "echo" in user_blob and "250" in user_blob:
+            target = 250
+    except Exception:
+        pass
+    # User asked for 250 echoes but almost none succeeded (wrong tool, etc.).
+    if target and len(nums) < target:
+        if len(nums) == 0:
+            return (
+                f"0/{target} successful vm_terminal_exec echo calls — do not STOP; "
+                "use vm_terminal_exec (not bash) for each echo N"
+            )
+        missing = [i for i in range(1, max(mx, target) + 1) if i not in nums]
+        show = missing[:25]
+        more = (
+            f" (+{len(missing) - len(show)} more)" if len(missing) > len(show) else ""
+        )
+        return (
+            f"{len(nums)}/{target} successful unique echoes, highest={mx}, "
+            f"missing={show}{more}"
+        )
+    if len(nums) < 10:
+        return None
+    missing = [i for i in range(1, mx + 1) if i not in nums]
+    if len(missing) >= 3:
+        show = missing[:25]
+        more = f" (+{len(missing) - len(show)} more)" if len(missing) > len(show) else ""
+        return f"echo gaps missing={show}{more}"
+    return None
+
+
+def _guard_resume_prompt_for(bot: str, *, home: Path | None = None) -> str:
+    parts = [_GUARD_RESUME_PROMPT]
+    last = _last_done_shell.get(bot) or ""
+    if last:
+        parts.append(
+            f"Last successful shell command was: {last!r}. Continue with the next "
+            "required command after that (retry it only if it has no successful "
+            "result)."
+        )
+    gap = _echo_gap_instruction(bot, home=home)
+    if gap:
+        parts.append(gap)
+    return "\n".join(parts)
 
 
 def _kick_retryable_failure_run(bot: str, home: Path | None) -> None:
@@ -1898,10 +2350,9 @@ def _kick_guard_resume_run(bot: str, home: Path | None) -> None:
         get_agent(
             str(settings_svc.get("agent_backend", home=home, default="pi") or "pi"),
             home=home,
-        ).start_run(bot, _GUARD_RESUME_PROMPT, home=home)
+        ).start_run(bot, _guard_resume_prompt_for(bot, home=home), home=home)
     except Exception:
         log.exception("guard resume run failed for %s", bot)
-
 
 def _kick_guard_gate_run(bot: str, home: Path | None) -> None:
     """Follow-up run that only accepts GUARD:CONTINUE / STOP before tools resume."""
@@ -1935,6 +2386,9 @@ def _kick_guard_gate_run(bot: str, home: Path | None) -> None:
             limit=info["limit"],
             review_every=info["review_every"] or "?",
         )
+        gap = _echo_gap_instruction(bot, home=home)
+        if gap:
+            prompt = f"{prompt}\n\n{gap}"
         get_agent(
             str(settings_svc.get("agent_backend", home=home, default="pi") or "pi"),
             home=home,
