@@ -119,11 +119,9 @@ async function createAndWait(
     return textResult(redactResult(req), { request_id: req.id, state: req.state });
   }
 
-  const started = Date.now();
-  // User OTP / credential forms may sit longer than a 5‑minute agent run;
-  // the host pauses the runtime clock while status=waiting.
-  const timeoutMs = 60 * 60 * 1000;
-  while (Date.now() - started < timeoutMs) {
+  // Human credential forms stay pending until answered, declined, or aborted.
+  // The host pauses the runtime clock while status=waiting.
+  while (true) {
     if (signal?.aborted) {
       return textResult("Vault request aborted before the user responded.", {
         request_id: req.id,
@@ -141,10 +139,6 @@ async function createAndWait(
       });
     }
   }
-  return textResult(
-    `Vault request ${req.id} still pending after timeout. Ask the user to approve the form in chat, then retry.`,
-    { request_id: req.id, state: "pending" },
-  );
 }
 
 export default function (pi: ExtensionAPI) {
@@ -347,7 +341,8 @@ export default function (pi: ExtensionAPI) {
     label: "Report user secret",
     description:
       "Call SILENTLY (no chat text) as the first action when the user pastes a password, " +
-      "API key, token, or similar secret into the chat (not already handled by the vault form). " +
+      "API key, long-lived token, or similar secret into the chat (not already handled by the vault form). " +
+      "A one-time / 2FA / temporary authentication code (OTP) from a mail, SMS, or webhook is NOT this case: show those digits in the chat and do not report them. " +
       "Never announce this tool or narrate the call. Do NOT put the secret value in the arguments. " +
       "This scrubs the user message on Autonomous, shows a provider-leak warning, " +
       "and aborts the run. Then wait for the user — do not continue the task with that secret.",

@@ -43,7 +43,25 @@ def test_choice_and_text(home):
     assert answered["result"]["answer"] == "Nora"
 
 
-def test_chat_cancels(home):
+def test_language_choice_always_allows_text(home):
+    bots_svc.create_bot("ada", label="Ada", home=home)
+    req = clarify_svc.create_request(
+        "ada",
+        title="Language / Langue",
+        prompt="Which language should I use with you?",
+        choices=["Français", "English"],
+        home=home,
+    )
+    assert req["allow_text"] is True
+    # A card stored before the model remembered allow_text still accepts a typed language.
+    with clarify_svc.get_db(home) as conn:
+        conn.execute("UPDATE clarify_requests SET allow_text = 0 WHERE id = ?", (req["id"],))
+    typed = clarify_svc.resolve_request(req["id"], text="Deutsch", home=home)
+    assert typed["result"]["via"] == "text"
+    assert typed["result"]["answer"] == "Deutsch"
+
+
+def test_chat_queues_while_card_is_pending(home):
     bots_svc.create_bot("bob", label="Bob", home=home)
     req = clarify_svc.create_request(
         "bob",
@@ -53,11 +71,27 @@ def test_chat_cancels(home):
         home=home,
     )
     assert req["allow_text"] is True
-    chat_svc.send_message("bob", "fais les deux", home=home)
-    cancelled = clarify_svc.get_request(req["id"], home=home)
-    assert cancelled["state"] == "cancelled"
-    assert cancelled["result"]["human_redirect"] is True
-    assert "deux" in cancelled["result"]["message"]
+    msg = chat_svc.send_message("bob", "fais les deux", home=home)
+    assert (msg.get("meta") or {}).get("queued") is True
+    assert clarify_svc.get_request(req["id"], home=home)["state"] == "pending"
+    assert bots_svc.get_bot("bob", home=home)["status"] == "waiting"
+
+
+def test_cancel_pending_for_bot(home):
+    bots_svc.create_bot("dana", label="Dana", home=home)
+    req = clarify_svc.create_request(
+        "dana",
+        prompt="Toujours là ?",
+        choices=["Oui", "Non"],
+        home=home,
+    )
+    assert req["state"] == "pending"
+    closed = clarify_svc.cancel_pending_for_bot(
+        "dana", home=home, reason="Agent stopped."
+    )
+    assert closed == 1
+    assert clarify_svc.get_request(req["id"], home=home)["state"] == "cancelled"
+    assert clarify_svc.list_pending_for_bot("dana", home=home) == []
 
 
 def test_api_flow(auth_client, home):

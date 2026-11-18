@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomous.paths import ensure_home
-from autonomous.services.errors import ValidationError
+from autonomous.services.errors import NotFound, ValidationError
 
 PI_API = "openai-completions"
 DEFAULT_PROVIDER = "autonomous"
@@ -183,6 +183,57 @@ def models_json_path() -> Path:
     return pi_agent_dir() / "models.json"
 
 
+def settings_json_path() -> Path:
+    return pi_agent_dir() / "settings.json"
+
+
+# Forced on every serve / Pi spawn so all Autonomous installs share the same
+# long-idle + no-auto-retry behaviour (proxy queue / Relancer handle recovery).
+PI_HTTP_IDLE_TIMEOUT_MS = 600_000  # 10 min Undici idle (LLM turn + compaction)
+
+
+def ensure_pi_runtime_settings() -> bool:
+    """Merge Autonomous-owned keys into ``~/.pi/agent/settings.json``.
+
+    Always sets:
+
+    - ``httpIdleTimeoutMs`` = ``PI_HTTP_IDLE_TIMEOUT_MS`` (long streaming / compaction)
+    - ``retry.enabled`` = ``false`` (no Pi auto-retry; user uses Relancer)
+
+    Preserves unrelated keys (``packages``, ``compaction``, …). Creates the file
+    if missing. Returns ``True`` when the file was rewritten.
+    """
+    path = settings_json_path()
+    data: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                data = raw
+        except (OSError, json.JSONDecodeError):
+            data = {}
+
+    changed = False
+    if data.get("httpIdleTimeoutMs") != PI_HTTP_IDLE_TIMEOUT_MS:
+        data["httpIdleTimeoutMs"] = PI_HTTP_IDLE_TIMEOUT_MS
+        changed = True
+
+    retry = data.get("retry")
+    if not isinstance(retry, dict):
+        data["retry"] = {"enabled": False}
+        changed = True
+    elif retry.get("enabled") is not False:
+        retry = dict(retry)
+        retry["enabled"] = False
+        data["retry"] = retry
+        changed = True
+
+    if not changed:
+        return False
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return True
+
+
 def _read_models_json() -> dict[str, Any]:
     path = models_json_path()
     if not path.is_file():
@@ -235,6 +286,9 @@ def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
     max_images = _int_or_none(images_lim.get("maxPerRequest"), lo=1, hi=32)
     if max_images is None:
         max_images = _int_or_none(images_lim.get("maxPerMessage"), lo=1, hi=32)
+    from autonomous.services.llm_heavy_gate import concurrency_from_entry
+
+    conc = concurrency_from_entry(entry)
     return {
         "id": str(entry.get("id") or ""),
         "name": str(entry.get("name") or ""),
@@ -242,6 +296,11 @@ def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
         "max_images": max_images,
         "context_window": _int_or_none(entry.get("contextWindow"), lo=1024, hi=2_000_000),
         "max_tokens": _int_or_none(entry.get("maxTokens"), lo=256, hi=512_000),
+        "parallel_gate_enabled": conc["parallel_gate_enabled"],
+        "max_parallel": conc["max_parallel"],
+        "heavy_gate_enabled": conc["heavy_gate_enabled"],
+        "heavy_max_concurrent": conc["heavy_max_concurrent"],
+        "heavy_token_threshold": conc["heavy_token_threshold"],
     }
 
 
@@ -302,6 +361,86 @@ def _patch_model_entry(entry: dict[str, Any], patch: dict[str, Any]) -> None:
             entry.pop("maxTokens", None)
         else:
             entry["maxTokens"] = mt
+
+    _HEAVY_KEYS = (
+        "heavy_gate_enabled",
+        "heavy_max_concurrent",
+        "heavy_token_threshold",
+        "heavy_gate",
+    )
+    _PARALLEL_KEYS = (
+        "parallel_gate_enabled",
+        "max_parallel",
+        "parallel_gate",
+    )
+    if any(k in patch for k in _HEAVY_KEYS + _PARALLEL_KEYS):
+        auto = entry.get("autonomous")
+        auto = dict(auto) if isinstance(auto, dict) else {}
+
+        if any(k in patch for k in _HEAVY_KEYS):
+            raw_gate = patch.get("heavy_gate") if isinstance(patch.get("heavy_gate"), dict) else {}
+            enabled = bool(
+                patch["heavy_gate_enabled"]
+                if "heavy_gate_enabled" in patch
+                else raw_gate.get("enabled", False)
+            )
+            max_c = _int_or_none(
+                patch["heavy_max_concurrent"]
+                if "heavy_max_concurrent" in patch
+                else raw_gate.get("maxConcurrent", raw_gate.get("max_concurrent")),
+                lo=1,
+                hi=64,
+            )
+            thresh = _int_or_none(
+                patch["heavy_token_threshold"]
+                if "heavy_token_threshold" in patch
+                else raw_gate.get("tokenThreshold", raw_gate.get("token_threshold")),
+                lo=0,
+                hi=2_000_000,
+            )
+            if not enabled and max_c is None and thresh is None and "heavy_gate_enabled" in patch:
+                auto.pop("heavyGate", None)
+                auto.pop("heavy_gate", None)
+            else:
+                auto["heavyGate"] = {
+                    "enabled": enabled,
+                    "maxConcurrent": max_c if max_c is not None else 2,
+                    "tokenThreshold": thresh if thresh is not None else 10000,
+                }
+                auto.pop("heavy_gate", None)
+
+        if any(k in patch for k in _PARALLEL_KEYS):
+            raw_p = (
+                patch.get("parallel_gate")
+                if isinstance(patch.get("parallel_gate"), dict)
+                else {}
+            )
+            p_enabled = bool(
+                patch["parallel_gate_enabled"]
+                if "parallel_gate_enabled" in patch
+                else raw_p.get("enabled", False)
+            )
+            p_max = _int_or_none(
+                patch["max_parallel"]
+                if "max_parallel" in patch
+                else raw_p.get("maxConcurrent", raw_p.get("max_concurrent")),
+                lo=1,
+                hi=64,
+            )
+            if not p_enabled and p_max is None and "parallel_gate_enabled" in patch:
+                auto.pop("parallelGate", None)
+                auto.pop("parallel_gate", None)
+            else:
+                auto["parallelGate"] = {
+                    "enabled": p_enabled,
+                    "maxConcurrent": p_max if p_max is not None else 2,
+                }
+                auto.pop("parallel_gate", None)
+
+        if auto:
+            entry["autonomous"] = auto
+        else:
+            entry.pop("autonomous", None)
 
 
 def split_model_ref(ref: str | None) -> tuple[str, str]:
@@ -415,6 +554,14 @@ def llm_providers() -> list[dict[str, Any]]:
     return out
 
 
+def llm_catalog() -> list[dict[str, Any]]:
+    """Built-in Pi models that are usable now (signed-in or keyed), not the custom editor."""
+    from autonomous.services.pi_status import list_models
+
+    custom = {p["provider"] for p in llm_providers()}
+    return [m for m in list_models() if m.get("provider") not in custom]
+
+
 def llm_view() -> dict[str, Any]:
     provs = llm_providers()
     primary = provs[0] if provs else None
@@ -422,8 +569,10 @@ def llm_view() -> dict[str, Any]:
         "path": "~/.pi/agent/models.json",
         "providers": provs,
         "primary": primary,
+        "catalog": llm_catalog(),
         "docs": {
             "models": "https://pi.dev/docs/latest/models",
+            "providers": "https://pi.dev/docs/latest/providers",
             "configuration": "https://pi.dev/docs/latest/models-configuration",
         },
     }
@@ -465,7 +614,8 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
     by_id = {str(m["id"]): dict(m) for m in existing_models}
 
     raw_models = body.get("models")
-    if isinstance(raw_models, list):
+    if "models" in body and isinstance(raw_models, list):
+        # Full list replace for that provider (may be empty — credentials-only create).
         ordered: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in raw_models:
@@ -490,16 +640,23 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
                 patch["context_window"] = row.get("context_window")
             if "max_tokens" in row:
                 patch["max_tokens"] = row.get("max_tokens")
+            for hk in (
+                "heavy_gate_enabled",
+                "heavy_max_concurrent",
+                "heavy_token_threshold",
+                "heavy_gate",
+                "parallel_gate_enabled",
+                "max_parallel",
+                "parallel_gate",
+            ):
+                if hk in row:
+                    patch[hk] = row.get(hk)
             if patch:
                 _patch_model_entry(entry, patch)
             ordered.append(entry)
-        if not ordered:
-            raise ValidationError("at least one model is required", code="model_required")
         conf["models"] = ordered
-    else:
+    elif str(body.get("model") or "").strip():
         model_id = str(body.get("model") or "").strip()
-        if not model_id:
-            raise ValidationError("model is required", code="model_required")
         entry = by_id.get(model_id) or {"id": model_id}
         entry["id"] = model_id
         patch = {
@@ -513,12 +670,49 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
             patch["context_window"] = body.get("context_window")
         if "max_tokens" in body:
             patch["max_tokens"] = body.get("max_tokens")
+        for hk in (
+            "heavy_gate_enabled",
+            "heavy_max_concurrent",
+            "heavy_token_threshold",
+            "heavy_gate",
+            "parallel_gate_enabled",
+            "max_parallel",
+            "parallel_gate",
+        ):
+            if hk in body:
+                patch[hk] = body.get(hk)
         _patch_model_entry(entry, patch)
         rest = [m for m in existing_models if str(m.get("id")) != model_id]
         conf["models"] = [entry, *rest]
+    else:
+        # Provider credentials only — keep existing models (or start empty).
+        conf.setdefault("models", existing_models)
 
     rest = {k: v for k, v in providers.items() if k != provider}
     data["providers"] = {provider: conf, **rest}
+    atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return llm_view()
+
+
+def delete_llm_provider(provider: str) -> dict[str, Any]:
+    """Remove a provider that has no models. Refuses while a model still uses it."""
+    name = str(provider or "").strip()
+    if not _PROVIDER_RE.match(name):
+        raise ValidationError("invalid provider id", code="invalid_provider")
+    data = _read_models_json()
+    providers = data.get("providers")
+    if not isinstance(providers, dict) or name not in providers:
+        raise NotFound(f"unknown provider {name}", code="unknown_provider")
+    conf = providers.get(name)
+    models = []
+    if isinstance(conf, dict):
+        models = [m for m in (conf.get("models") or []) if isinstance(m, dict) and m.get("id")]
+    if models:
+        raise ValidationError(
+            "A model still uses this provider",
+            code="provider_in_use",
+        )
+    data["providers"] = {k: v for k, v in providers.items() if k != name}
     atomic_write(models_json_path(), json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return llm_view()
 

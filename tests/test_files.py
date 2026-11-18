@@ -1,5 +1,6 @@
-"""Path traversal + agent text read/write + share/attach under ~/shared."""
+"""Path traversal + agent text read/write + share/attach under ~/files."""
 
+import io
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,30 @@ def test_read_write_text(home):
     got = files_svc.read_text("fw", "notes/hello.txt", home=home)
     assert got["content"] == "bonjour\n"
     assert got["encoding"] == "utf-8"
+
+
+def test_write_publishes_files_changed(home):
+    from autonomous.services.events import BUS
+
+    bots_svc.create_bot("fev", slug="fev", home=home)
+    q = BUS.subscribe("*")
+    try:
+        files_svc.write_text("fev", "live.txt", "x", home=home)
+        files_svc.mkdir("fev", ".", "docs", home=home)
+        files_svc.delete_path("fev", "live.txt", home=home)
+        seen = []
+        while True:
+            try:
+                seen.append(q.get_nowait())
+            except Exception:
+                break
+    finally:
+        BUS.unsubscribe("*", q)
+    changed = [e for e in seen if e.name == "files.changed" and e.data.get("bot") == "fev"]
+    ops = [e.data.get("op") for e in changed]
+    assert "write" in ops
+    assert "mkdir" in ops
+    assert "delete" in ops
 
 
 def test_read_missing(home):
@@ -124,3 +149,83 @@ def test_write_refuses_overwrite_image(home):
     with pytest.raises(AutonomousError) as exc:
         files_svc.write_text("fow", "x.png", "oops", home=home)
     assert exc.value.code == "refuse_overwrite_binary"
+
+
+def test_list_dir_reports_folder_size(home):
+    bots_svc.create_bot("fsz", slug="fsz", home=home)
+    root = home / "bots" / "fsz" / "home"
+    folder = root / "docs"
+    folder.mkdir()
+    (folder / "a.txt").write_bytes(b"12345")
+    (folder / "b.txt").write_bytes(b"abc")
+    entries = files_svc.list_dir("fsz", ".", home=home)
+    docs = next(e for e in entries if e["name"] == "docs")
+    assert docs["is_dir"] is True
+    assert docs["size"] == 8
+
+
+def test_move_into_folder(home, auth_client):
+    bots_svc.create_bot("fmv", slug="fmv", home=home)
+    root = home / "bots" / "fmv" / "home"
+    (root / "CV").mkdir()
+    (root / "note.pdf").write_bytes(b"%PDF")
+    out = files_svc.move_path("fmv", "note.pdf", "CV", home=home)
+    assert out["path"] == "CV/note.pdf"
+    assert (root / "CV" / "note.pdf").is_file()
+    assert not (root / "note.pdf").exists()
+    r = auth_client.post(
+        "/api/v1/bots/fmv/files/move",
+        json={"src": "CV/note.pdf", "dest": "."},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["path"] == "note.pdf"
+    assert (root / "note.pdf").is_file()
+
+
+def test_files_and_legacy_shared_prefixes(home):
+    bots_svc.create_bot("alias", slug="alias", home=home)
+    root = home / "bots" / "alias" / "home"
+    written = files_svc.write_text(
+        "alias", "~/files/notes/a.txt", "a\n", home=home
+    )
+    assert written["path"] == "notes/a.txt"
+    assert files_svc.resolve("alias", "~/shared/notes/a.txt", home=home) == (
+        root / "notes" / "a.txt"
+    ).resolve()
+    assert files_svc.resolve("alias", "files/notes/a.txt", home=home) == (
+        root / "notes" / "a.txt"
+    ).resolve()
+    files_svc.write_text("alias", "files.txt", "b\n", home=home)
+    assert (root / "files.txt").read_text() == "b\n"
+    from autonomous.services.pi_rpc import _FILES_SYSTEM_HINT
+
+    assert "~/files" in _FILES_SYSTEM_HINT
+    assert "private to THIS bot" in _FILES_SYSTEM_HINT
+    assert "Never use the path ~/shared" in _FILES_SYSTEM_HINT
+
+
+def test_upload_cap_is_ten_gigabytes_and_rejects_the_overflow(home, monkeypatch):
+    assert files_svc.MAX_CHAT_FILE_BYTES == 10 * 1024 ** 3
+    assert files_svc.MAX_MAIL_ATTACHMENT_BYTES == 50 * 1024 * 1024
+    bots_svc.create_bot("big", slug="big", home=home)
+    monkeypatch.setattr(files_svc, "MAX_CHAT_FILE_BYTES", 4)
+    with pytest.raises(AutonomousError) as exc:
+        files_svc.save_chat_upload(
+            "big", filename="a.bin", stream=io.BytesIO(b"12345"), home=home
+        )
+    assert exc.value.code == "file_too_large"
+    upload_root = home / "bots" / "big" / "home" / "upload"
+    assert not list(upload_root.rglob("a.bin"))
+
+
+def test_share_and_attach_have_no_size_cap(home):
+    bots_svc.create_bot("fbig", slug="fbig", home=home)
+    root = home / "bots" / "fbig" / "home"
+    (root / "big.png").write_bytes(b"\x89PNG" + b"\x00" * (26 * 1024 * 1024))
+    out = files_svc.share_image("fbig", "big.png", home=home)
+    assert out["ok"] is True
+    assert out["bytes"] > 25 * 1024 * 1024
+    (root / "big.pdf").write_bytes(b"%PDF" + b"\x00" * (26 * 1024 * 1024))
+    attached = files_svc.attach_file("fbig", "big.pdf", home=home)
+    assert attached["ok"] is True
+    assert attached["bytes"] > 25 * 1024 * 1024

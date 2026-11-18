@@ -26,6 +26,7 @@ async function api(
   method: string,
   path: string,
   body?: Json,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; status: number; data: any }> {
   const cfg = apiConfig();
   if (!cfg) {
@@ -46,6 +47,7 @@ async function api(
       Accept: "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   let data: any = null;
   const ct = res.headers.get("content-type") || "";
@@ -116,9 +118,7 @@ async function requestAndWaitDesk(
     return textResult(errMessage(posted.data, posted.status), { error: true });
   }
 
-  const started = Date.now();
-  const maxMs = 60 * 60 * 1000;
-  while (!opts.signal?.aborted && Date.now() - started < maxMs) {
+  while (!opts.signal?.aborted) {
     await new Promise((r) => setTimeout(r, 2000));
     if (opts.signal?.aborted) break;
     const st = await api("GET", `/bots/${encodeURIComponent(cfg.bot)}/desk`);
@@ -143,15 +143,9 @@ async function requestAndWaitDesk(
     }
     // pending | creating | starting | sleeping → keep waiting
   }
-  if (opts.signal?.aborted) {
-    return textResult("Aborted while waiting for desk authorization.", {
-      error: true,
-      state: "aborted",
-    });
-  }
-  return textResult("Timed out waiting for desk authorization.", {
+  return textResult("Aborted while waiting for desk authorization.", {
     error: true,
-    state: "timeout",
+    state: "aborted",
   });
 }
 
@@ -226,18 +220,80 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  async function formatScreenshotResult(
+    cfg: { base: string; token: string; bot: string },
+    shot: Json,
+    showInChat: boolean,
+    extraNote = "",
+  ) {
+    const shotId = String(shot.id || "");
+    const url = String(shot.url || "");
+    const path = String(
+      shot.path || (shotId ? `.autonomous/screenshots/${shotId}.png` : ""),
+    );
+    const w = shot.width || "?";
+    const h = shot.height || "?";
+    const details: Json = {
+      screenshot_id: shotId,
+      url,
+      path,
+      width: shot.width,
+      height: shot.height,
+    };
+    let markdown = "";
+    if (showInChat && path) {
+      const share = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/files/share`,
+        {
+          path,
+          caption:
+            typeof w === "number" && typeof h === "number"
+              ? `Capture ${w}×${h}`
+              : "Capture d’écran",
+        },
+      );
+      markdown = String(share.data?.markdown || "").trim();
+      if (markdown) details.markdown = markdown;
+    }
+    let text =
+      `Screenshot captured ${w}×${h}.\n` +
+      `id: ${shotId}\n` +
+      `path: ${path}\n` +
+      `url: ${url}\n`;
+    if (showInChat) {
+      text +=
+        "The capture is on this tool card in the chat tool group — do NOT paste image " +
+        "markdown into your assistant bubble (duplicates the picture). Say in text what " +
+        "matters; the user opens the tool row to see the PNG.\n";
+      if (markdown) {
+        text += `(Internal share markdown kept for tooling only — do not paste):\n${markdown}\n`;
+      }
+    } else {
+      text += "Silent capture (show_in_chat=false) — no tool-row preview.\n";
+    }
+    text +=
+      "(PNG is never attached to the model — use vm_ground for pixel localization.)";
+    if (extraNote) text += `\n${extraNote}`;
+    return textResult(text, details);
+  }
+
   pi.registerTool({
     name: "vm_screenshot",
     label: "VM screenshot",
     description:
-      "Take a screenshot of this bot's desktop (server-side X11 capture). " +
-      "Returns the image for tool-chaining / vision, and can post it in the chat. " +
-      "Works without the user having the UI open. Requires a running desk.",
+      "Capture this bot's desktop (server-side X11). Requires a running desk. " +
+      "The image is shown under this tool's detail in the chat tool group — do NOT paste " +
+      "screenshot markdown into your assistant bubble (that duplicates the capture). " +
+      "Describe what matters in text if needed. show_in_chat=false: silent file for " +
+      "chaining / grounding prep (no tool-row preview).",
     parameters: Type.Object({
       show_in_chat: Type.Optional(
         Type.Boolean({
           description:
-            "If true (default), also show the screenshot in the conversation for the user. Set false for silent tool-chain use.",
+            "If true (default), the capture is attached to this tool card for the user to " +
+            "expand in the tool group. Do not also paste the markdown into the assistant " +
+            "bubble. Set false for silent tool-chain use.",
         }),
       ),
     }),
@@ -270,18 +326,11 @@ export default function (pi: ExtensionAPI) {
               { show_in_chat: showInChat },
             );
             if (retry.ok) {
-              const shot = retry.data || {};
-              return textResult(
-                `Screenshot captured ${shot.width || "?"}×${shot.height || "?"}.\n` +
-                  `id: ${shot.id || ""}\n` +
-                  `url: ${shot.url || ""}\n` +
-                  "(Desk was authorized during this call.)",
-                {
-                  screenshot_id: String(shot.id || ""),
-                  url: String(shot.url || ""),
-                  width: shot.width,
-                  height: shot.height,
-                },
+              return formatScreenshotResult(
+                cfg,
+                retry.data || {},
+                showInChat,
+                "(Desk was authorized during this call.)",
               );
             }
             hint = errMessage(retry.data, retry.status);
@@ -291,25 +340,7 @@ export default function (pi: ExtensionAPI) {
         }
         return textResult(hint, { error: true, code });
       }
-      const shot = res.data || {};
-      const shotId = String(shot.id || "");
-      const url = String(shot.url || "");
-      const w = shot.width || "?";
-      const h = shot.height || "?";
-      const text =
-        `Screenshot captured ${w}×${h}.\n` +
-        `id: ${shotId}\n` +
-        `url: ${url}\n` +
-        (showInChat
-          ? "Also posted in the chat for the user."
-          : "Not posted in chat (show_in_chat=false).") +
-        "\n(PNG never attached to the model — use vm_ground for pixel localization.)";
-      return textResult(text, {
-        screenshot_id: shotId,
-        url,
-        width: shot.width,
-        height: shot.height,
-      });
+      return formatScreenshotResult(cfg, res.data || {}, showInChat);
     },
   });
 
@@ -317,16 +348,17 @@ export default function (pi: ExtensionAPI) {
     name: "vm_look",
     label: "VM look (read the screen)",
     description:
-      "Your EYES. Fresh desktop screenshot → multimodal model → plain-text description: " +
-      "page/site, exact visible text (errors, banners, dialogs), blockers (consent layer, " +
-      "modal, verification widget, access-denied page, login wall), form state " +
-      "(empty / filled / validation errors) and key data shown. Use it whenever the DOM " +
-      "tools are empty or inconclusive, after a submit/login/click whose outcome you " +
-      "cannot read in browser_text, and BEFORE you tell the user what went wrong — " +
-      "never report an error message you did not read. Optional `question` is answered first. " +
-      "NEVER use it for pixel coordinates: any x/y it states is a guess in an unknown " +
-      "scale and will miss the target — get click positions from browser_snapshot / " +
-      "browser_frames_snapshot (screen=x,y) or vm_ground.",
+      "Your EYES (expensive). Fresh desktop screenshot → multimodal model → plain-text " +
+      "description: page/site, exact visible text (errors, banners, dialogs), blockers " +
+      "(consent layer, modal, verification widget, access-denied page, login wall), form " +
+      "state (empty / filled / validation errors) and key data shown. " +
+      "Not the first step when browser_snapshot already lists the control. Use it " +
+      "when that read was empty or inconclusive, after a gesture you cannot " +
+      "verify, and before you tell the user what went wrong. Do not call it " +
+      "twice in a row with no gesture between them. Optional `question` is " +
+      "answered first. NEVER click coordinates it states — they are guesses. " +
+      "Click screen= from browser_snapshot, or vm_ground when the control is not " +
+      "in the DOM.",
     parameters: Type.Object({
       question: Type.Optional(
         Type.String({
@@ -346,10 +378,19 @@ export default function (pi: ExtensionAPI) {
         `/bots/${encodeURIComponent(cfg.bot)}/screen/describe`,
         body,
       );
-      if (!res.ok || res.data?.ok === false) {
+      if (!res.ok) {
         return textResult(`vm_look failed: ${errMessage(res.data, res.status)}`, {
           error: true,
         });
+      }
+      if (res.data?.ok === false) {
+        const why = String(res.data?.text || errMessage(res.data, res.status) || "").trim();
+        return textResult(
+          why
+            ? `vm_look refused: ${why}`
+            : "vm_look refused.",
+          { error: true, code: res.data?.code || "dom_observe_required" },
+        );
       }
       return textResult(String(res.data?.text || "(no description)"), {
         ok: true,
@@ -363,9 +404,13 @@ export default function (pi: ExtensionAPI) {
     label: "GUI ground",
     description:
       "Locate a UI element on a FRESH desk screenshot via UI-TARS + optional judge. " +
-      "Returns geometry only — does NOT act. Call AFTER choosing the gesture " +
-      "(left_click / right_click / double / drag) from browser_snapshot / page text. " +
-      "Pass that choice as action_hint. Instruction in English. If ok=false, " +
+      "Returns geometry only — does NOT act. " +
+      "No browser_snapshot required for native desktop. Preferred for native desktop apps (calculator, dialogs, XFCE windows) where there " +
+      "is no browser DOM — then vm_click / vm_type. Also use when browser_snapshot / " +
+      "browser_frames_snapshot does NOT list the control (canvas, image, drawn widget). " +
+      "If the control already has screen=x,y from a snapshot, vm_click that instead. " +
+      "Do not replace this with xdotool or guessed clicks in the shell. " +
+      "Pass the gesture as action_hint. Instruction in English. If ok=false, " +
       "do not invent coordinates. Then: action=click → vm_click; action=drag → " +
       "vm_drag(x,y,x2,y2) press-drag-release (never click a slider).",
     parameters: Type.Object({
@@ -438,12 +483,25 @@ export default function (pi: ExtensionAPI) {
       if (d.x2 != null) lines.push(`x2: ${d.x2}`, `y2: ${d.y2}`);
       if (d.direction) lines.push(`direction: ${d.direction}`);
       if (d.verifier?.answer) lines.push(`verifier: ${d.verifier.answer}`);
+      if (d.source === "snapshot") {
+        lines.push(
+          "This point is the snapshot screen= point. vm_click it now. " +
+            "Do not vm_look or vm_ground again before that click.",
+        );
+      }
       if (action === "drag") {
         lines.push(
           "NEXT REQUIRED: call vm_drag with these x,y,x2,y2 (press–drag–release). Do NOT vm_click.",
         );
       } else if (action === "click" || action === "left_double" || action === "right_single") {
         lines.push("NEXT: call vm_click with these x,y (unless you need another ground).");
+      }
+      const instr = String(params.instruction || "");
+      if (/\b(digit|key|button)\b/i.test(instr) && /\b[0-9]\b/.test(instr)) {
+        lines.push(
+          "TIP: for a multi-digit number or formula, focus the display once then " +
+            "vm_type the whole string — do not ground every digit.",
+        );
       }
       return textResult(lines.join("\n"), {
         ok: true,
@@ -461,11 +519,15 @@ export default function (pi: ExtensionAPI) {
     name: "vm_click",
     label: "VM click",
     description:
-      "Click at desktop pixel coordinates (VNC). Coordinates come from browser_snapshot / " +
-      "browser_frames_snapshot (screen=x,y) or from vm_ground (ok=true) — never from vm_look, " +
-      "never a point vm_ground rejected. Do NOT use it on sliders — use vm_drag. " +
-      "button: left (default), right, middle, double, or move = HOVER only (no click: menus, " +
-      "tooltips and dropdowns that open on mouse-over; then browser_snapshot / vm_look again).",
+      "Click at desktop pixel coordinates with a real pointer (VNC): the mouse " +
+      "glides there. This is the only click. Coordinates come from " +
+      "browser_snapshot / browser_frames_snapshot (screen=x,y) or from vm_ground " +
+      "(ok=true). Never from vm_look, never a point vm_ground rejected, never " +
+      "browser_click_selector. Do NOT use it on sliders — use vm_drag. " +
+      "button: left (default), right, middle, double, or move = HOVER only " +
+      "(menus that open on mouse-over). The result includes the new page " +
+      "(controls and visible text). Do not call browser_snapshot, " +
+      "browser_wait_load, or browser_text again unless that read is empty.",
     parameters: Type.Object({
       x: Type.Number({ description: "X pixel on the original screenshot / desk" }),
       y: Type.Number({ description: "Y pixel on the original screenshot / desk" }),
@@ -494,12 +556,16 @@ export default function (pi: ExtensionAPI) {
         });
       }
       const d = res.data || {};
-      return textResult(
+      const head =
         d.button === "move"
           ? `Moved the pointer to (${d.x},${d.y}) (hover).`
-          : `Clicked ${d.button || "left"} at (${d.x},${d.y}).`,
-        { ok: true, x: d.x, y: d.y, button: d.button },
-      );
+          : `Clicked ${d.button || "left"} at (${d.x},${d.y}).`;
+      return textResult(head + (d.page ? "\n\n" + d.page : ""), {
+        ok: true,
+        x: d.x,
+        y: d.y,
+        button: d.button,
+      });
     },
   });
 
@@ -509,7 +575,8 @@ export default function (pi: ExtensionAPI) {
     description:
       "Type or paste text into the currently focused desk window via VNC keystrokes. " +
       "Click the field first (vm_click) — never use it for secrets (use vault_type). " +
-      "method=type (default) or paste.",
+      "The address bar is only for a Google search: click it, type the query, " +
+      "Enter. Never type a site URL there. method=type (default) or paste.",
     parameters: Type.Object({
       text: Type.String({ description: "Text to type into the focused control" }),
       method: Type.Optional(
@@ -549,7 +616,8 @@ export default function (pi: ExtensionAPI) {
     description:
       "Real mouse-wheel scroll on the desk via VNC. dy>0 scrolls content down " +
       "(read further); dy<0 up. Optional x,y = pointer position (defaults center-ish). " +
-      "Prefer this over browser_scroll when browsing visually.",
+      "Prefer this over browser_scroll when browsing visually. " +
+      "The result includes the new page. Do not snapshot again unless it is empty.",
     parameters: Type.Object({
       dy: Type.Number({
         description: "Vertical scroll delta in pixels (e.g. 400). Sign: >0 = down.",
@@ -576,10 +644,11 @@ export default function (pi: ExtensionAPI) {
         });
       }
       const d = res.data || {};
-      return textResult(`Scrolled dy=${d.dy} at (${d.x || 0},${d.y || 0}).`, {
-        ok: true,
-        dy: d.dy,
-      });
+      return textResult(
+        `Scrolled dy=${d.dy} at (${d.x || 0},${d.y || 0}).` +
+          (d.page ? "\n\n" + d.page : ""),
+        { ok: true, dy: d.dy },
+      );
     },
   });
 
@@ -588,7 +657,8 @@ export default function (pi: ExtensionAPI) {
     label: "VM key",
     description:
       "Press a named key via VNC: Return, Tab, Escape, BackSpace, Delete, " +
-      "Left/Up/Right/Down, Page_Up, Page_Down, Home, End, space. Optional repeats.",
+      "Left/Up/Right/Down, Page_Up, Page_Down, Home, End, space. Optional repeats. " +
+      "Return includes the new page. Do not snapshot again unless that read is empty.",
     parameters: Type.Object({
       key: Type.String({ description: "Key name, e.g. Return or Page_Down" }),
       repeats: Type.Optional(
@@ -614,11 +684,10 @@ export default function (pi: ExtensionAPI) {
         });
       }
       const d = res.data || {};
-      return textResult(`Key ${d.key} ×${d.repeats}.`, {
-        ok: true,
-        key: d.key,
-        repeats: d.repeats,
-      });
+      return textResult(
+        `Key ${d.key} ×${d.repeats}.` + (d.page ? "\n\n" + d.page : ""),
+        { ok: true, key: d.key, repeats: d.repeats },
+      );
     },
   });
 
@@ -628,7 +697,8 @@ export default function (pi: ExtensionAPI) {
     description:
       "Drag with the left mouse button from (x,y) to (x2,y2) via VNC. " +
       "Coordinates from browser_frames_snapshot (handle center → end of track) or vm_ground " +
-      "(action=drag). For slide-to-verify widgets: ONE drag. Do not invent coordinates.",
+      "(action=drag). For slide-to-verify widgets: ONE drag. Do not invent coordinates. " +
+      "The result includes the new page. Do not snapshot again unless it is empty.",
     parameters: Type.Object({
       x: Type.Number({ description: "Start X" }),
       y: Type.Number({ description: "Start Y" }),
@@ -658,7 +728,8 @@ export default function (pi: ExtensionAPI) {
       }
       const d = res.data || {};
       return textResult(
-        `Dragged (${d.x},${d.y}) → (${d.x2},${d.y2}).`,
+        `Dragged (${d.x},${d.y}) → (${d.x2},${d.y2}).` +
+          (d.page ? "\n\n" + d.page : ""),
         { ok: true, x: d.x, y: d.y, x2: d.x2, y2: d.y2 },
       );
     },
@@ -669,7 +740,12 @@ export default function (pi: ExtensionAPI) {
     label: "VM terminal",
     description:
       "Run a non-interactive shell command inside this bot's desktop VM (server-side docker exec). " +
-      "This is the shell for date, curl, ping, and any other command. " +
+      "This is the shell for date, curl, ping, apt/pip installs, and any other command. " +
+      "User autonomous has passwordless sudo — use `sudo apt-get install -y …` when a package is missing; " +
+      "do not invent a permission barrier or ask the user to authorize apt. " +
+      "Launching a GUI app: first `command -v` (install if missing); use DISPLAY=:1; " +
+      "on the first attempt do NOT redirect stderr to /dev/null — you need the real error; " +
+      "then confirm the process is alive before claiming success. " +
       "If there is no desk, this call asks the user for the VM and waits — do not invent the output. " +
       "There is no host bash on the Autonomous server. Works even when no user has the web UI open. " +
       "cwd is /home/autonomous/workspace. For reading/writing bot files prefer files_list/read/write (no desk needed). " +
@@ -677,7 +753,9 @@ export default function (pi: ExtensionAPI) {
       "Do NOT use for interactive TUIs (nano/vim/top) — those need the Terminal tab PTY.",
     parameters: Type.Object({
       command: Type.String({
-        description: "Shell command, e.g. 'uname -a' or 'ls -la'",
+        description:
+          "Shell command, e.g. 'uname -a' or 'ls -la'. " +
+          "Do not hide stderr with >/dev/null 2>&1 on a first GUI launch attempt.",
       }),
       timeout: Type.Optional(
         Type.Number({
@@ -697,10 +775,37 @@ export default function (pi: ExtensionAPI) {
         return textResult("command is required");
       }
       const timeout = Math.max(1, Math.min(Number(params.timeout) || 30, 600));
-      const res = await api("POST", `/bots/${encodeURIComponent(cfg.bot)}/terminal/exec`, {
-        command,
-        timeout,
-      });
+      const timedOut = () =>
+        textResult(
+          `[timeout after ${timeout}s] The timeout stopped this command.`,
+          { error: true, timed_out: true },
+        );
+      // The server kills the command at `timeout`. If that reply never comes,
+      // abort this fetch only — not a later desk approval — so the tool ends.
+      const execCall = async () => {
+        const ctrl = new AbortController();
+        const onAbort = () => ctrl.abort();
+        signal?.addEventListener("abort", onAbort);
+        const killer = setTimeout(() => ctrl.abort(), (timeout + 15) * 1000);
+        try {
+          return await api(
+            "POST",
+            `/bots/${encodeURIComponent(cfg.bot)}/terminal/exec`,
+            { command, timeout },
+            ctrl.signal,
+          );
+        } catch (err) {
+          if (ctrl.signal.aborted || (err as { name?: string })?.name === "AbortError") {
+            return null;
+          }
+          throw err;
+        } finally {
+          clearTimeout(killer);
+          signal?.removeEventListener("abort", onAbort);
+        }
+      };
+      const res = await execCall();
+      if (!res) return timedOut();
       if (!res.ok) {
         const code = String(res.data?.error_code || res.data?.code || "");
         let hint = errMessage(res.data, res.status);
@@ -710,11 +815,8 @@ export default function (pi: ExtensionAPI) {
             signal,
           });
           if (wait.details && (wait.details as Json).state === "running") {
-            const retry = await api(
-              "POST",
-              `/bots/${encodeURIComponent(cfg.bot)}/terminal/exec`,
-              { command, timeout },
-            );
+            const retry = await execCall();
+            if (!retry) return timedOut();
             if (retry.ok) {
               const entry = retry.data || {};
               const output = String(entry.output ?? "");

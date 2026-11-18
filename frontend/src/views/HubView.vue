@@ -1,8 +1,22 @@
 <template>
-  <div class="app-shell">
+  <div
+    class="app-shell"
+    :class="{
+      'is-mobile-list': mobileListMode,
+      'is-mobile-chat': mobileChatMode,
+      'is-mobile-setup': mobileSetupMode,
+      'is-mobile-home': mobileHomeMode,
+    }"
+  >
     <aside class="sidebar">
       <div class="rail-top">
-        <router-link class="rail-logo" to="/" :title="t('brand')" :aria-label="t('brand')">
+        <router-link
+          class="rail-logo"
+          to="/"
+          :title="t('brand')"
+          :aria-label="t('brand')"
+          @click="onRailLogoClick"
+        >
           <img src="/favicon-192.png" alt="" />
         </router-link>
         <button
@@ -12,12 +26,10 @@
           :aria-expanded="searchOpen"
           @click="toggleSearch"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="M16 16.5 20 20.5" />
-          </svg>
+          <UiIcon name="search" />
         </button>
         <button
+          v-if="state.bots.length"
           class="settings-orb"
           type="button"
           :aria-label="t('nav.create')"
@@ -26,9 +38,7 @@
           :aria-disabled="!canCreate"
           @click="openCreate"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <UiIcon name="plus" />
         </button>
       </div>
       <input
@@ -79,7 +89,10 @@
           :key="b.name"
           type="button"
           class="rail-manager"
-          :class="{ active: state.currentBot === b.name }"
+          :class="{
+            active: state.currentBot === b.name,
+            waiting: b.status === 'waiting',
+          }"
           :title="b.label || b.name"
           @click="selectBot(b.name)"
         >
@@ -88,12 +101,33 @@
         </button>
       </div>
 
-      <ul class="bot-list">
-        <li v-if="!railManagers.length && !railWorkers.length" class="rail-empty">
-          {{ t("nav.bots") }}
+      <div class="bot-list-clip" @mouseenter="syncBotThumb">
+      <ul ref="botListEl" class="bot-list" @scroll.passive="onBotListScroll">
+        <li v-if="!state.bots.length" class="rail-empty">
+          <p>{{ t("nav.emptyBotsGone") }}</p>
+          <p>{{ t("nav.emptyBotsNone") }}</p>
+          <p>{{ t("nav.emptyBotsNow") }}</p>
+          <button
+            class="settings-orb"
+            type="button"
+            :aria-label="t('nav.create')"
+            :title="canCreate ? t('nav.create') : t('setup.createBlocked')"
+            :disabled="!canCreate"
+            :aria-disabled="!canCreate"
+            @click="openCreate"
+          >
+            <UiIcon name="plus" />
+          </button>
         </li>
         <li v-for="b in railWorkers" :key="b.name">
-          <button type="button" :class="{ active: state.currentBot === b.name }" @click="selectBot(b.name)">
+          <button
+            type="button"
+            :class="{
+              active: state.currentBot === b.name,
+              waiting: b.status === 'waiting',
+            }"
+            @click="selectBot(b.name)"
+          >
             <BotAvatar :bot="b" size="sm" />
             <span class="bot-copy">
               <span class="bot-name">{{ b.label || b.name }}</span>
@@ -102,6 +136,12 @@
           </button>
         </li>
       </ul>
+      <div
+        v-show="botThumb.show"
+        class="bot-list-thumb"
+        :style="{ top: botThumb.top + 'px', height: botThumb.height + 'px' }"
+      ></div>
+      </div>
 
       <div class="rail-foot">
         <SettingsMenu />
@@ -119,6 +159,19 @@
         <template v-if="bot">
           <div class="stage-toolbar">
             <button
+              v-if="mobileLayout"
+              type="button"
+              class="icon-btn mobile-back"
+              :aria-label="t('nav.back')"
+              :title="t('nav.back')"
+              @click="backToBotList"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 6 9 12l6 6" />
+              </svg>
+            </button>
+            <button
+              v-if="!mobileLayout && deskOn"
               type="button"
               class="split-toggle"
               :class="{ active: splitWanted }"
@@ -256,6 +309,18 @@
           />
         </template>
         <div v-else class="empty brand-empty">
+          <button
+            v-if="mobileHomeMode"
+            type="button"
+            class="icon-btn mobile-back mobile-home-back"
+            :aria-label="t('nav.back')"
+            :title="t('nav.back')"
+            @click="backToBotList"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 6 9 12l6 6" />
+            </svg>
+          </button>
           <SetupPanel />
         </div>
       </section>
@@ -344,11 +409,11 @@ import { refreshFirstChatPrefsPending } from "../firstChatPrefs";
 import {
   state,
   currentBotObj,
-  isOptimisticMessageId,
   markBotRead,
   refreshSetup,
   setupReady,
 } from "../store";
+import { ensureMessageLoaded, loadLatestMessages } from "../threadPages";
 import { api } from "../api";
 import { botPath, normalizeTab } from "../router";
 import ChatPane from "../components/ChatPane.vue";
@@ -363,6 +428,7 @@ import SetupPanel from "../components/SetupPanel.vue";
 import AvatarEditModal from "../components/AvatarEditModal.vue";
 import CreateDeskModal from "../components/CreateDeskModal.vue";
 import SettingsMenu from "../components/SettingsMenu.vue";
+import UiIcon from "../components/ui/UiIcon.vue";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -480,9 +546,32 @@ const splitLayouts = ref(readSplitLayouts());
 const splitRatio = ref(readSplitRatio());
 const inspectorCollapsed = ref(readInspectorCollapsed());
 const narrowLayout = ref(false);
+const mobileLayout = ref(false);
 let narrowMq = null;
+let mobileMq = null;
 const piBanner = computed(() => state.piStatus);
 const canCreate = computed(() => setupReady());
+
+/** Mobile master–detail: list XOR conversation XOR home (logo) / setup. */
+const mobileShowHome = ref(false);
+const mobileChatMode = computed(() => mobileLayout.value && !!bot.value);
+const mobileSetupMode = computed(
+  () => mobileLayout.value && !bot.value && !canCreate.value
+);
+const mobileHomeMode = computed(
+  () =>
+    mobileLayout.value &&
+    !bot.value &&
+    canCreate.value &&
+    mobileShowHome.value
+);
+const mobileListMode = computed(
+  () =>
+    mobileLayout.value &&
+    !bot.value &&
+    canCreate.value &&
+    !mobileShowHome.value
+);
 
 /** Bot creation stays locked until the setup checklist on / is complete. */
 function openCreate() {
@@ -579,6 +668,12 @@ const screenReady = computed(() => {
   return !!desk.vnc_port;
 });
 
+/** A desktop exists — same rule as ManageMenu. No VM → no two-pane control. */
+const deskOn = computed(() => {
+  const st = bot.value?.desk?.state;
+  return st === "creating" || st === "running" || st === "sleeping" || st === "error";
+});
+
 function layoutOf(name) {
   if (!name) return { on: false, left: "discussion", right: "screen" };
   return splitLayouts.value[name] || { on: false, left: "discussion", right: "screen" };
@@ -586,8 +681,12 @@ function layoutOf(name) {
 
 const splitWanted = computed(() => layoutOf(bot.value?.name).on);
 
-/** Opt-in. Each side is chosen independently; single-pane tabs stay the default. */
-const splitActive = computed(() => splitWanted.value);
+/** Opt-in. Each side is chosen independently; single-pane tabs stay the default.
+ *  Split is desktop-only — on mobile we always show one pane. Without a VM the
+ *  control is hidden and any saved preference stays inert. */
+const splitActive = computed(
+  () => splitWanted.value && !mobileLayout.value && deskOn.value
+);
 
 const leftPane = computed(() => layoutOf(bot.value?.name).left);
 const rightPane = computed(() => layoutOf(bot.value?.name).right);
@@ -759,20 +858,74 @@ const railWorkers = computed(() => {
 /** Compat recherche / anciens usages. */
 const visibleBots = computed(() => [...railManagers.value, ...railWorkers.value]);
 
+const botListEl = ref(null);
+const botThumb = ref({ show: false, top: 0, height: 0 });
+let botThumbTimer = 0;
+let botListObserver = null;
+
+function syncBotThumb() {
+  const el = botListEl.value;
+  if (!el) return;
+  const overflow = el.scrollHeight - el.clientHeight;
+  if (overflow <= 1) {
+    botThumb.value = { show: false, top: 0, height: 0 };
+    return;
+  }
+  const track = el.clientHeight;
+  const height = Math.max(28, (el.clientHeight / el.scrollHeight) * track);
+  const maxTop = Math.max(0, track - height);
+  const top = (el.scrollTop / overflow) * maxTop;
+  botThumb.value = { show: true, top, height };
+}
+
+function onBotListScroll() {
+  syncBotThumb();
+  const el = botListEl.value;
+  if (!el) return;
+  el.classList.add("is-scrolling");
+  window.clearTimeout(botThumbTimer);
+  botThumbTimer = window.setTimeout(() => {
+    el.classList.remove("is-scrolling");
+  }, 2000);
+}
+
 function previewOf(b) {
   const msgs = state.messages[b.name] || [];
-  const last = [...msgs].reverse().find((m) => !m?.meta?.hidden_prompt);
-  const raw = last ? last.content : "";
+  const last = [...msgs].reverse().find((m) => !m?.meta?.hidden_prompt && !m?.meta?.hold);
+  const raw = last ? last.content : state.previews[b.name] || "";
   return String(raw || "").replace(/\s+/g, " ").trim();
 }
 
 function selectBot(name) {
+  mobileShowHome.value = false;
   state.currentBot = name;
   markBotRead(name);
   const layout = splitLayouts.value[name];
-  const tab = layout?.on ? layout.left : "discussion";
+  // Mobile: always open the conversation first (no split).
+  const tab =
+    mobileLayout.value || !layout?.on ? "discussion" : layout.left;
   state.tab = tab;
   goBot(name, tab);
+}
+
+function backToBotList() {
+  state.currentBot = null;
+  state.inspectorOpen = false;
+  mobileShowHome.value = false;
+  if (route.fullPath !== "/") router.push("/");
+}
+
+/** Mobile: logo opens the brand/home pane (updates, tagline) — unreachable via the list alone. */
+function onRailLogoClick(ev) {
+  if (!mobileLayout.value) {
+    mobileShowHome.value = false;
+    return;
+  }
+  ev.preventDefault();
+  state.currentBot = null;
+  state.inspectorOpen = false;
+  mobileShowHome.value = true;
+  if (route.fullPath !== "/") router.push("/");
 }
 
 function selectTab(tab) {
@@ -932,9 +1085,7 @@ async function openMessageHit(h) {
   markBotRead(name);
   state.tab = "discussion";
   try {
-    if (!state.messages[name]?.length) {
-      state.messages[name] = await api.listMessages(name);
-    }
+    await ensureMessageLoaded(name, h.message_id);
   } catch {
     /* ChatPane will retry */
   }
@@ -962,33 +1113,9 @@ async function loadMessages(name) {
   if (!state.bots.some((b) => b.name === name)) return;
   const seq = (loadMessagesSeq.get(name) || 0) + 1;
   loadMessagesSeq.set(name, seq);
-  try {
-    const remote = await api.listMessages(name);
-    // Ignore stale responses that would wipe a message just sent.
-    if (loadMessagesSeq.get(name) !== seq) return;
-    const local = state.messages[name] || [];
-    const byId = new Map(remote.map((m) => [m.id, m]));
-    for (const m of local) {
-      if (!m?.id || byId.has(m.id)) continue;
-      // Keep in-flight optimistic bubbles only if the server has not echoed them yet.
-      if (isOptimisticMessageId(m.id)) {
-        const echoed = remote.some(
-          (r) =>
-            r.role === m.role &&
-            String(r.content || "") === String(m.content || "")
-        );
-        if (echoed) continue;
-      }
-      byId.set(m.id, m);
-    }
-    state.messages[name] = [...byId.values()].sort((a, b) =>
-      String(a.created_at || "").localeCompare(String(b.created_at || ""))
-    );
-    previewLoaded.add(name);
-  } catch {
-    if (loadMessagesSeq.get(name) === seq) previewLoaded.delete(name);
-    return;
-  }
+  await loadLatestMessages(name);
+  if (loadMessagesSeq.get(name) !== seq) return;
+  previewLoaded.add(name);
   try {
     state.terminal[name] = await api.terminalLog(name);
   } catch {
@@ -997,20 +1124,28 @@ async function loadMessages(name) {
 }
 
 async function loadPreviews() {
-  await Promise.all(
-    state.bots.map(async (b) => {
-      if (previewLoaded.has(b.name) || state.messages[b.name]) {
-        previewLoaded.add(b.name);
-        return;
-      }
-      previewLoaded.add(b.name);
+  // Latest page of every bot, into the same reactive store the open thread reads.
+  // The bot on screen is loaded by loadMessages; the others warm up beside it.
+  const pending = [];
+  for (const bot of state.bots) {
+    const name = bot.name;
+    if (!name || name === state.currentBot || previewLoaded.has(name)) continue;
+    previewLoaded.add(name);
+    pending.push(name);
+  }
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pending.length) {
+      const name = pending[cursor++];
       try {
-        state.messages[b.name] = await api.listMessages(b.name);
+        await loadLatestMessages(name);
       } catch {
-        previewLoaded.delete(b.name);
+        previewLoaded.delete(name);
       }
-    })
-  );
+    }
+  }
+  const workers = Math.min(3, pending.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
 }
 
 watch(
@@ -1020,6 +1155,9 @@ watch(
       loadMessages(name);
       return;
     }
+    // The narrow inspector is a drawer. It unmounts on the home page, so a
+    // leftover open flag would pop it back over the next conversation.
+    state.inspectorOpen = false;
     if (route.name === "bot") router.replace("/");
   }
 );
@@ -1108,24 +1246,50 @@ function onCompanionFocus(ev) {
   }, 150);
 }
 
+function onSseCatchup() {
+  // After an SSE drop / tab wake, resync DB → store so the thread cannot stay
+  // frozen while the agent kept writing messages server-side.
+  if (state.currentBot) loadMessages(state.currentBot);
+}
+
+watch(railWorkers, () => nextTick(syncBotThumb));
+
 onMounted(() => {
   applyRoute();
+  if (botListEl.value && typeof ResizeObserver !== "undefined") {
+    botListObserver = new ResizeObserver(() => syncBotThumb());
+    botListObserver.observe(botListEl.value);
+  }
+  nextTick(syncBotThumb);
   if (state.currentBot) loadMessages(state.currentBot);
   loadPreviews();
   loadPiStatus();
   window.addEventListener("autonomous-focus", onCompanionFocus);
+  window.addEventListener("autonomous-sse-catchup", onSseCatchup);
   narrowMq = window.matchMedia("(max-width: 1080px)");
   narrowLayout.value = narrowMq.matches;
   narrowMq.addEventListener("change", onNarrowChange);
+  mobileMq = window.matchMedia("(max-width: 720px)");
+  mobileLayout.value = mobileMq.matches;
+  mobileMq.addEventListener("change", onMobileChange);
 });
 
 function onNarrowChange() {
   narrowLayout.value = !!(narrowMq && narrowMq.matches);
 }
 
+function onMobileChange() {
+  mobileLayout.value = !!(mobileMq && mobileMq.matches);
+  if (mobileLayout.value) state.inspectorOpen = false;
+}
+
 onUnmounted(() => {
+  botListObserver?.disconnect();
+  window.clearTimeout(botThumbTimer);
   window.removeEventListener("autonomous-focus", onCompanionFocus);
+  window.removeEventListener("autonomous-sse-catchup", onSseCatchup);
   window.clearTimeout(focusTimer);
   narrowMq?.removeEventListener("change", onNarrowChange);
+  mobileMq?.removeEventListener("change", onMobileChange);
 });
 </script>

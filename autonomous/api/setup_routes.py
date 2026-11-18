@@ -6,6 +6,7 @@ from flask import g, request
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 
+from autonomous.services import pi_packages as pi_packages_svc
 from autonomous.services import setup as setup_svc
 from autonomous.services import setup_config as cfg_svc
 from autonomous.services import updates as updates_svc
@@ -54,6 +55,16 @@ class SetupLlm(MethodView):
         """Save one provider (empty api_key = keep current)."""
         try:
             out = cfg_svc.save_llm(_body())
+        except AutonomousError as exc:
+            _handle(exc)
+        setup_svc.invalidate()
+        return out
+
+    def delete(self):
+        """Remove a provider that has no models."""
+        provider = request.args.get("provider") or _body().get("provider")
+        try:
+            out = cfg_svc.delete_llm_provider(provider)
         except AutonomousError as exc:
             _handle(exc)
         setup_svc.invalidate()
@@ -141,11 +152,40 @@ class SetupUpdateCheck(MethodView):
             _handle(exc)
 
 
+@blp.route("/pi-packages")
+class SetupPiPackages(MethodView):
+    def get(self):
+        """Pi and npm plugin versions. Cached 6 h unless ?force=1."""
+        force = request.args.get("force") in ("1", "true", "yes")
+        try:
+            return pi_packages_svc.check(home=g.home, force=force)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/pi-packages/apply")
+class SetupPiPackagesApply(MethodView):
+    def post(self):
+        """Update the checked ids (``pi`` and/or a configured package source)."""
+        body = _body()
+        items = body.get("items")
+        if not isinstance(items, list):
+            items = []
+        try:
+            return pi_packages_svc.start_apply([str(item) for item in items], home=g.home), 202
+        except AutonomousError as exc:
+            _handle(exc)
+
+
 @blp.route("/update/apply")
 class SetupUpdateApply(MethodView):
     def post(self):
-        """Pull channel tip, rebuild UI + package, restart systemd when possible."""
+        """Pull channel tip, rebuild UI + package, restart systemd when possible.
+
+        ``{force: true}`` discards local commits and edits and matches the remote branch.
+        """
         try:
-            return updates_svc.start_apply(home=g.home), 202
+            body = _body()
+            return updates_svc.start_apply(home=g.home, force=bool(body.get("force"))), 202
         except AutonomousError as exc:
             _handle(exc)

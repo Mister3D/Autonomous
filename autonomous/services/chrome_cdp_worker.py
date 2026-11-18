@@ -148,7 +148,10 @@ def cmd_navigate(ns: argparse.Namespace) -> int:
         deadline = time.time() + 20.0
         loaded = False
         while time.time() < deadline:
-            ev = sess.poll(timeout=0.5)
+            try:
+                ev = sess.poll(timeout=0.5)
+            except CdpError:
+                break
             if not ev:
                 continue
             method = ev.get("method") or ""
@@ -550,7 +553,8 @@ def cmd_snapshot(ns: argparse.Namespace) -> int:
             scrollHeight: document.documentElement.scrollHeight,
             count: out.length,
             overlays: overlays,
-            elements: out
+            elements: out,
+            text: clip((document.body && document.body.innerText) || '', 800)
           }};
         }}"""
         result = sess.call(
@@ -1005,6 +1009,12 @@ def main(argv: list[str]) -> int:
     except CdpError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
         print(json.dumps({"ok": False, "error": str(exc)}))
+        return 1
+    except Exception as exc:
+        # A raw traceback is cut off before the exception, so the bot invents
+        # a cause. Return the error and let the next call reconnect.
+        msg = f"{type(exc).__name__}: {exc}"
+        print(json.dumps({"ok": False, "error": msg}))
         return 1
 
 

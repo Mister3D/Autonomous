@@ -116,6 +116,22 @@ def require_memory_access(bot: str, *, home: Path | None = None) -> None:
         )
 
 
+def count_proposals(*, state: str = "pending", home: Path | None = None) -> int:
+    """How many memory proposals are in ``state`` (pending, approved, or denied)."""
+    st = (state or "").strip().lower()
+    if st not in ("pending", "approved", "denied"):
+        raise ValidationError(
+            "state must be pending|approved|denied",
+            code="memory_bad_state",
+        )
+    with get_db(home) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM memory_proposals WHERE state = ?",
+            (st,),
+        ).fetchone()
+    return int(row["n"] if row else 0)
+
+
 def list_entries(
     *,
     tier: str | None = None,

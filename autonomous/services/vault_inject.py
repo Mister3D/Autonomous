@@ -92,9 +92,10 @@ def _require_editable_focus(bot: str, *, home: Path | None) -> None:
         return
     raise ValidationError(
         "No editable field is focused in the browser (focused: "
-        f"{info.get('tag') or 'none'}). Nothing was typed. Click the target field "
-        "first using its screen=x,y from browser_snapshot / browser_frames_snapshot "
-        "(not coordinates guessed from vm_look), then retry."
+        f"{info.get('tag') or 'none'}). Nothing was typed. vm_click the field "
+        "at its screen= point from browser_snapshot (vm_ground only if the "
+        "snapshot does not list it), then retry. Do not click a coordinate "
+        "guessed from vm_look, and do not use a CDP click."
     )
 
 
@@ -120,12 +121,9 @@ def inject(
             "Bot has no desktop capability — create a desk first.",
             code="no_capability",
         )
-    desk = b.get("desk") or {}
-    if desk.get("state") != "running":
-        raise AutonomousError(
-            "Desktop is not running — start the bot desk before injecting.",
-            code="desk_not_running",
-        )
+    from autonomous.services import desk as desk_svc
+
+    desk_svc.ensure_awake_for_tool(bot, home=home)
     if not _WORKER.is_file():
         raise AutonomousError("VNC type worker missing on host", code="internal")
 
@@ -174,6 +172,10 @@ def inject(
         # Best-effort: avoid lingering cleartext in locals via overwrite intent.
         secret = ""  # noqa: F841
 
+    if completed.returncode == 0:
+        from autonomous.services.observe_gate import note_gesture
+
+        note_gesture(bot)
     if completed.returncode != 0:
         err = (completed.stderr or completed.stdout or b"unknown error").decode(
             "utf-8", errors="replace"

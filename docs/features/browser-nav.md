@@ -2,33 +2,36 @@
 
 **Status**: in place (generic — no site hacks)  
 **Key files**: `autonomous/services/browser.py`, `chrome_cdp_worker.py`, `cdp_client.py`, `desk_input.py` (scroll/key/drag), `pi_extensions/browser.ts` + `vm.ts`, `POST /bots/:name/browser/*`, `POST …/screen/scroll|key|drag|ground`  
-**Last updated**: 2026-10-30 (slider_hints, query_fallback, per-iframe offsets, switch/close_tab, hover, spoof of new tabs)
+**Last updated**: 2026-11-14 (a CDP frame is read whole, so a short timeout no longer kills the worker)
 
 ## Action loop (enforced order)
 
-The captcha is **not** a special case: it's the same pipeline.
+The DOM says **where**. The pointer does the **click**. A CDP click (`browser_click_selector`, `el.click()`) is a bot signal and is not the path.
 
 | Step | Tool | Role |
 |-------|--------|------|
-| 1. DOM context | **`browser_snapshot`** / **`browser_frames_snapshot`** | Page (+ cross-origin iframes) without any gesture; the snapshot **flags** `BLOCKING OVERLAY` (cookie banner, modal…) + its buttons and marks hidden controls `[COVERED by …]` |
-| 1bis. Eyes | **`vm_look`** | Fresh capture → multimodal model (host) → **text description** of the screen (exact text, errors, blockers, field state). Use when the DOM is empty / after a submit / **before** announcing an error |
-| 2. Gesture type | (agent reasoning) | `left_click` / `right_click` / `double` / `drag` |
-| 3. Localisation | **`screen=x,y`** from `browser_snapshot` / `center_screen` from frames_snapshot (fast, exact) **otherwise** `vm_ground` (slow ~10 s, for canvas / images / native dialogs) | Desktop screen pixels (= viewport + `chrome_h`) |
-| 4. Execution | **`vm_click`** / **`vm_drag`** | real VNC input; never invent coords if `ok=false` |
+| 1. Read | **`browser_snapshot`** / **`browser_frames_snapshot`** | Controls with `screen=x,y`, overlays, `[FOCUSED]`, `[filled N chars]`. No gesture |
+| 2. Locate the rest | **`vm_ground`** | Vision only when the control is absent from that read (canvas, image, native dialog, drawn widget). If the snapshot already lists it, the server returns that `screen=` point with no vision call. A read older than the last click is refused: snapshot again |
+| 3. Act | **`vm_click`** / **`vm_drag`** / **`vm_type`** / **`vm_scroll`** | Real VNC pointer and keys. The mouse glides to the point. A click, drag, scroll, or Return waits briefly and returns the new controls plus a visible-text excerpt — that is the next read |
+| 4. Eyes | **`vm_look`** | When the snapshot is empty. Refused while that read still lists controls. Its x/y are guesses |
 
-**Navigation discipline**: never type a URL that hasn't been seen (screen / `browser_links`) — guessed paths give 404s and certificate errors; start from the home page and follow visible links; never bypass a browser security warning.
+Do not steer the site with CDP scripts, in-page `fetch`, `curl`, or `wget`. Do not mash Backspace because `[filled N chars]` disagrees with the screen: one `vm_look`, then move on.
 
-**Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a decision about the **session** (cookies/state), not a puzzle: no reload loops, **no curl/wget** to the site from the VM, no home-made CDP/websocket scripts, no package installs. Recovery (only if `vm_look` confirms the page): `browser_reset_session` → home page → start over (log in again), **2 resets max** per site, otherwise report to the user (text seen + attempts). See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
+**Slider**: a `SLIDE-TO-VERIFY WIDGET` line is one `vm_drag` at the printed coordinates (still a real drag).
 
-**Typing secrets / fields**: `browser_snapshot` marks `[FOCUSED]` and `[filled N chars]` (never the value) to check that a field really contains the input. `vault_type` **refuses** to type if the Chrome window has focus and the active element is not an editable field (iframe / terminal / CDP unavailable: not blocked), and accepts `password` as an alias when the entry has only one secret. `vm_look` must **never** provide coordinates (estimates in an unknown scale): `screen=x,y` or `vm_ground`.
+**Navigation discipline** (enforced): `browser_navigate` is the **first open** only. If the tab is already an http(s) page, every URL change is refused (`code=url_change`) — including reload and a link that is on the page. The first URL must be one a **user** message wrote, an http(s) **vault origin** the user stored, or that site's homepage (`code=invented_url` otherwise). An assistant sentence that names a path does not make it allowed. After that, take the **shortest path** on screen: click the visible target, do not detour. A Google search is the address bar (query, then Enter), never a site URL. A reload is one click on the refresh icon. Never bypass a browser security warning.
 
-**Waiting for load**: `browser_wait_load` (`POST /bots/:name/browser/wait_load {timeout?}`, default 15 s, max 30 s) replaces `sleep N`: `readyState == complete` on 2 consecutive polls, CDP reconnection if Chrome starts / changes page, and **never blocking** — a page that loads forever returns `timed_out=true` (often already usable). `browser_navigate` already waits for `load` (20 s max).
+**Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a decision about the **session** (cookies/state), not a puzzle: no reload loops, **no curl/wget** to the site from the VM, no home-made CDP/websocket scripts, no package installs. A failed verification widget is one more try on that widget — do **not** `browser_reset_session` (wiping cookies throws the attempt away). Reset only when `vm_look` shows a page with nothing to click that says access is denied, then one click on the refresh icon, **once**, otherwise report to the user. Do not `browser_navigate` to a new URL. See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
 
-**Forms in an iframe**: if `browser_snapshot` returns 0 controls, it adds a hint → `browser_frames_snapshot` (`screen=` coords usable without `vm_ground`). A point **rejected** by `vm_ground` must never be clicked (real case: it was a "send a code by e-mail" button instead of the password field → false OTP block).
+**Typing secrets / fields**: `vm_look` says which field is filled. `vault_type` **refuses** to type if the Chrome window has focus and the active element is not an editable field (iframe / terminal / CDP unavailable: not blocked), and accepts `password` as an alias when the entry has only one secret. The retry is `vm_ground` + `vm_click` on the field you see. `vm_look` must **never** provide coordinates.
 
-**Verification widgets** (cross-origin iframe): if `browser_text` is empty but a widget is visible → `browser_frames_snapshot` (`center_screen` = screen coords = viewport + `chrome_h`). Handle → `vm_drag` from the handle centre to the end of the track; button/checkbox → `vm_click`. A single careful attempt then check; don't stretch a drag beyond ~320px. **No** instructions specific to a site or captcha vendor in the prompts.
+**Waiting for load**: a click, drag, or Return returns the new page. The load wait (at most 2.5 s) runs only when the URL, the title, or `readyState` changed. A click that only focuses a field does not wait. If the visible text already states what the user asked, the agent answers and stops. `browser_wait_load` (`POST /bots/:name/browser/wait_load {timeout?}`, default 15 s, max 30 s) remains for the first open when that result has no page: `readyState == complete` on 2 consecutive polls, and **never blocking** — a page that loads forever returns `timed_out=true`. `browser_navigate` already waits for `load` and returns the same page read. The visible-text excerpt is on that read, so `browser_text` is only for a fact the excerpt missed.
 
-**Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a reputation decision, not a puzzle: no reload loops, **no curl/wget** to the site from the VM (same IP), no home-made CDP/websocket scripts, no package installs; wait (sleep 60–120 s), retry **once** from the home page, then report to the user (text seen + what was tried). See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
+**Forms**: `browser_snapshot` `screen=` → `vm_click` (real mouse) → type. A point **rejected** by `vm_ground` must never be clicked (real case: it was a "send a code by e-mail" button instead of the password field → false OTP block). Do not reload the form or mash Backspace because a DOM counter disagreed with the screen.
+
+**Verification widgets** (cross-origin iframe): `browser_frames_snapshot` `screen=` when the control is readable, otherwise one `vm_ground`, then one `vm_drag` or `vm_click` (real pointer). A single careful attempt then check; don't stretch a drag beyond ~320px. **No** instructions specific to a site or captcha vendor in the prompts. The slider line printed by `browser_navigate` / `browser_wait_load` is one `vm_drag`.
+
+**Block page** ("access restricted / denied / unusual traffic", with no usable widget) = a reputation decision, not a puzzle: no reload loops, **no curl/wget** to the site from the VM (same IP), no home-made CDP/websocket scripts, no package installs; one click on the refresh icon, then report to the user if it is still blocked (text seen + what was tried). See `_VM_SYSTEM_HINT` in `pi_rpc.py`.
 
 If `in_viewport=false` on the target → **`vm_scroll`** (VNC wheel) until it is visible, **then** ground. Don't "teleport" the page.
 
@@ -39,17 +42,17 @@ If `in_viewport=false` on the target → **`vm_scroll`** (VNC wheel) until it is
 | `vm_scroll` (VNC wheel) | Low — real mouse events | **Prefer** to reveal content |
 | CDP `window.scrollBy` / `scrollTo` | Medium — no `wheel` | `browser_scroll`: avoid on protected pages |
 | CDP `scrollIntoView` + `el.click()` | High — classic bot | `browser_click_selector`: avoid on anti-bot |
-| Reading the DOM via CDP (`snapshot`) | Low *visually* (no movement); CDP can be fingerprinted | OK for planning — does not replace a VNC gesture |
+| Reading the DOM via CDP (`snapshot`) | Low *visually* (no movement); CDP can be fingerprinted | Not the navigation plan — the agent looks at the screen |
 
-Moving **directly** to an offset without the wheel (jump) is often a bot signal. We read the DOM silently, **wheel** to the target, ground, click/drag.
+Moving **directly** to an offset without the wheel (jump) is often a bot signal. Look, **wheel** if the target is off screen, ground, click/drag.
 
 ## Layers
 
 | Layer | Tools | Role |
 |--------|--------|------|
-| CDP | `browser_tabs`, `browser_navigate`, **`browser_snapshot`**, **`browser_frames_snapshot`**, `browser_text`, `browser_links`, `browser_html`, `browser_scroll`, `browser_click_selector` | Structure / plan |
-| VNC | `vm_scroll`, `vm_key`, `vm_click`, `vm_drag`, `vm_type` | Gestures |
-| Vision | `vm_ground` → click or drag depending on `action` | Pixel targets |
+| CDP read | `browser_snapshot`, `browser_frames_snapshot`, `browser_tabs`, `browser_wait_load` | Where the control is. `browser_navigate` is the first open only |
+| VNC | `vm_scroll`, `vm_key`, `vm_click`, `vm_drag`, `vm_type` | The gesture. Always a real pointer, including when the point came from the DOM |
+| Vision | `vm_look`, `vm_ground` | When the DOM does not list the control, or the read is inconclusive |
 
 ## API
 
@@ -102,12 +105,19 @@ Chrome CDP `:9222`; profile `$HOME/.autonomous-chrome` (see `chrome-desktop-imag
 
 10 consecutive runs, fresh bot + desk each time (image with extended fonts + `enumerateDevices` spoof), "get my latest order" scenario: **10/10 succeeded**, 140–248 s (average ≈ 195 s) after the screen was ready, 46–74 tools per run. No block page encountered → `browser_reset_session` **not exercised** in real conditions (only checked by hand).
 
+## Pitfalls / non-regressions
+
+- `vm_look` is not refused for lack of a DOM snapshot. `observe_gate.refuse_vm_look_message` always returns `None`. Do not put the DOM-first gate back: it made the agent debug focus and filled-char counts instead of looking at the screen.
+- A CDP worker crash must return the exception (`TimeoutError: …`), not the first lines of the traceback. Cutting those lines made the bot invent a cause and hand the debugging back to the user.
+- A short read timeout must not drop the middle of a Chrome message. The next read was then garbage and the worker process died. A frame is read whole; one larger than 16 MB closes the socket instead of being loaded.
+
 ## Quick check
 
 ```bash
 TOKEN=$(cat data/token)
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"max_elements":20}' http://127.0.0.1:8787/api/v1/bots/playmo/browser/snapshot | head -c 600
+python3 -m pytest tests/test_observe_gate.py tests/test_url_policy.py tests/test_browser_cdp_error.py -q
 ```
 
-Restart the Pi session after changing `browser.ts` / `vm.ts` (`DELETE …/messages` or stop_all).
+Restart the Pi session after changing `browser.ts` / `vm.ts` (`DELETE …/messages` or stop_all) so the new system hint / tool text loads.

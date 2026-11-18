@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,7 @@ def _chown_bot(path: Path) -> None:
 def _ensure_desk(bot: str, *, home: Path | None) -> None:
     from autonomous.services import desk as desk_svc
 
-    desk_svc.ensure_awake(bot, home=home)
+    desk_svc.ensure_awake_for_tool(bot, home=home)
 
 
 def _copy_workers(bot: str, *, home: Path | None) -> None:
@@ -45,10 +46,48 @@ def _copy_workers(bot: str, *, home: Path | None) -> None:
         _chown_bot(dst)
 
 
-def _run(bot: str, args: list[str], *, home: Path | None = None) -> dict[str, Any]:
+def _cdp_failure_text(err: str) -> str:
+    """The exception, not the start of the traceback.
+
+    The first lines are ``Traceback`` and ``File ...``. A 300-character cut
+    there hides the real error, and the bot invents a cause.
+    """
+    text = (err or "").strip()
+    if not text:
+        return "empty output"
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if line.startswith("Traceback") or line.startswith("File ") or line.startswith("return "):
+            continue
+        if line[:1].isspace():
+            continue
+        return line[:500]
+    return text[-500:]
+
+
+def _run(
+    bot: str,
+    args: list[str],
+    *,
+    home: Path | None = None,
+    ensure_chrome: bool = True,
+) -> dict[str, Any]:
     from autonomous.services import desk as desk_svc
 
     _ensure_desk(bot, home=home)
+    # Explicit browser_* tools start Chrome. Soft reads after a VNC gesture must
+    # NOT — otherwise a calculator click spawns about:blank over the desk.
+    if ensure_chrome:
+        if not desk_svc.ensure_bot_chrome(bot, home=home):
+            raise AutonomousError(
+                "Chrome did not start (CDP port 9222). Try again or restart the desk.",
+                code="browser_chrome_start_failed",
+            )
+    elif not desk_svc.chrome_cdp_ready(bot, home=home):
+        raise AutonomousError(
+            "Chrome CDP is not running",
+            code="browser_cdp_down",
+        )
     _copy_workers(bot, home=home)
     cmd = [
         "docker",
@@ -76,7 +115,7 @@ def _run(bot: str, args: list[str], *, home: Path | None = None) -> dict[str, An
     err = (completed.stderr or b"").decode("utf-8", errors="replace").strip()
     if not raw:
         raise AutonomousError(
-            f"Browser CDP failed: {err[:300] or 'empty output'}",
+            f"Browser CDP failed: {_cdp_failure_text(err)}",
             code="browser_cdp_failed",
         )
     # Worker prints one JSON object on stdout
@@ -104,21 +143,167 @@ def tabs(bot: str, *, home: Path | None = None) -> dict[str, Any]:
     return _run(bot, ["tabs"], home=home)
 
 
+def format_page_read(payload: dict[str, Any]) -> str:
+    """One text block: controls with screen= plus a short visible-text excerpt."""
+    if not isinstance(payload, dict):
+        return "(no page read)"
+    if payload.get("ok") is False and not payload.get("elements"):
+        return f"(page read failed: {payload.get('error') or 'error'})"
+    lines = [
+        "Page now. If the visible text already states what the user asked, "
+        "answer now and stop. Otherwise vm_click the next screen= point. "
+        "Do not call browser_snapshot, browser_wait_load, or browser_text "
+        "unless this list is empty.",
+        f"url: {payload.get('url') or '?'}",
+        f"title: {payload.get('title') or '?'}",
+    ]
+    overlays = payload.get("overlays") or []
+    if isinstance(overlays, list) and overlays:
+        lines.append("!! BLOCKING OVERLAY — vm_click its screen= point first:")
+        for overlay in overlays[:3]:
+            if not isinstance(overlay, dict):
+                continue
+            lines.append(
+                f"   [{overlay.get('kind') or 'overlay'}] "
+                f"\"{str(overlay.get('text') or '')[:160]}\""
+            )
+            for control in (overlay.get("controls") or [])[:8]:
+                if not isinstance(control, dict):
+                    continue
+                screen = control.get("screen") or {}
+                lines.append(
+                    f"   - {control.get('tag') or 'control'} "
+                    f"\"{str(control.get('text') or '')[:60]}\" "
+                    f"screen={screen.get('x')},{screen.get('y')}"
+                )
+    elements = payload.get("elements") or []
+    shown = 0
+    if isinstance(elements, list):
+        for el in elements:
+            if not isinstance(el, dict) or shown >= 40:
+                break
+            screen = el.get("screen") or {}
+            bits = [
+                "[offscreen]" if el.get("in_viewport") is False else "[in-view]",
+                f"[COVERED by {el.get('occluded_by')}]" if el.get("occluded_by") else "",
+                "[FOCUSED]" if el.get("focused") else "",
+                f"[filled {el.get('filled')} chars]" if isinstance(el.get("filled"), int) else "",
+                str(el.get("tag") or "?"),
+                f"\"{str(el.get('text') or '')[:80]}\"" if el.get("text") else "",
+                f"screen={screen.get('x')},{screen.get('y')}" if screen else "",
+            ]
+            lines.append("- " + " ".join(bit for bit in bits if bit))
+            shown += 1
+    if shown == 0:
+        lines.append("(no control in the top document)")
+    text = str(payload.get("text") or "").strip()
+    if text:
+        lines.append("")
+        lines.append("Visible text:")
+        lines.append(text[:800])
+    return "\n".join(lines)
+
+
+def page_did_change(before: dict[str, Any] | None, after: dict[str, Any] | None) -> bool:
+    """A load wait is needed when the document navigated or is still loading.
+
+    A click that only focuses a field keeps the same URL, title and
+    ``complete`` state: that one does not wait. Unknown markers wait.
+    """
+    if not before or not after:
+        return True
+    if after.get("ready") != "complete":
+        return True
+    return before.get("url") != after.get("url") or before.get("title") != after.get("title")
+
+
+def page_marker(bot: str, *, home: Path | None = None) -> dict[str, Any]:
+    """Cheap URL / title / readyState sample. Empty when Chrome is not answering.
+
+    Never starts Chrome — used from VNC gestures on native windows too.
+    """
+    try:
+        data = evaluate(
+            bot,
+            "({url:location.href,title:document.title,ready:document.readyState})",
+            home=home,
+            ensure_chrome=False,
+        )
+    except Exception:
+        return {}
+    value = data.get("value") if isinstance(data, dict) else None
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "url": str(value.get("url") or ""),
+        "title": str(value.get("title") or ""),
+        "ready": str(value.get("ready") or ""),
+    }
+
+
+def read_after_gesture(
+    bot: str,
+    *,
+    wait: bool = True,
+    before: dict[str, Any] | None = None,
+    home: Path | None = None,
+) -> str:
+    """Snapshot after a gesture. Wait for load only if the page changed.
+
+    Soft path: if Chrome is not already up, return empty (native GUI work).
+    """
+    from autonomous.services import desk as desk_svc
+
+    if not desk_svc.chrome_cdp_ready(bot, home=home):
+        return ""
+    if wait:
+        try:
+            time.sleep(0.15)
+            after = page_marker(bot, home=home)
+            if page_did_change(before, after):
+                wait_load(bot, timeout=2.5, home=home, ensure_chrome=False)
+        except Exception:
+            pass
+    try:
+        snap = snapshot(bot, home=home, ensure_chrome=False)
+    except Exception:
+        return ""
+    return format_page_read(snap)
+
+
 def navigate(bot: str, url: str, *, home: Path | None = None) -> dict[str, Any]:
     url = (url or "").strip()
     if not url:
         raise ValidationError("url required")
+    from autonomous.services.url_policy import assert_seen_url
+
+    url = assert_seen_url(bot, url, home=home)
     result = _run(bot, ["navigate", "--url", url], home=home)
     _wander_async(bot, home=home)
+    if isinstance(result, dict):
+        try:
+            result = dict(result)
+            result["page"] = read_after_gesture(bot, wait=False, home=home)
+        except Exception:
+            pass
     return result
 
 
 def wait_load(
-    bot: str, *, timeout: float = 15.0, home: Path | None = None
+    bot: str,
+    *,
+    timeout: float = 15.0,
+    home: Path | None = None,
+    ensure_chrome: bool = True,
 ) -> dict[str, Any]:
     """Wait (bounded) for the active page to finish loading — replaces ``sleep N``."""
     timeout = max(1.0, min(float(timeout), 30.0))
-    return _run(bot, ["wait_load", "--timeout", f"{timeout:g}"], home=home)
+    return _run(
+        bot,
+        ["wait_load", "--timeout", f"{timeout:g}"],
+        home=home,
+        ensure_chrome=ensure_chrome,
+    )
 
 
 def switch_tab(
@@ -177,11 +362,15 @@ def html(
 
 
 def text(bot: str, *, max_chars: int = 8000, home: Path | None = None) -> dict[str, Any]:
-    return _run(
+    out = _run(
         bot,
         ["text", "--max", str(max(500, min(int(max_chars), 100_000)))],
         home=home,
     )
+    from autonomous.services.observe_gate import mark_dom_observe
+
+    mark_dom_observe(bot)
+    return out
 
 
 def links(
@@ -213,12 +402,19 @@ def snapshot(
     max_elements: int = 60,
     query: str | None = None,
     home: Path | None = None,
+    ensure_chrome: bool = True,
 ) -> dict[str, Any]:
     """Read interactive DOM controls without scrolling or clicking."""
     args = ["snapshot", "--max", str(max(1, min(int(max_elements), 120)))]
     if query:
         args.extend(["--query", query])
-    return _run(bot, args, home=home)
+    out = _run(bot, args, home=home, ensure_chrome=ensure_chrome)
+    from autonomous.services.observe_gate import mark_dom_observe, remember_browser_read
+
+    mark_dom_observe(bot)
+    if not query and isinstance(out, dict):
+        remember_browser_read(bot, out)
+    return out
 
 
 def frames_snapshot(
@@ -232,7 +428,13 @@ def frames_snapshot(
     args = ["frames_snapshot", "--max", str(max(1, min(int(max_elements), 120)))]
     if query:
         args.extend(["--query", query])
-    return _run(bot, args, home=home)
+    out = _run(bot, args, home=home)
+    from autonomous.services.observe_gate import mark_dom_observe, remember_browser_read
+
+    mark_dom_observe(bot)
+    if not query and isinstance(out, dict):
+        remember_browser_read(bot, out)
+    return out
 
 
 def click_selector(
@@ -244,10 +446,16 @@ def click_selector(
     return _run(bot, ["click_selector", "--selector", selector], home=home)
 
 
-def evaluate(bot: str, js: str, *, home: Path | None = None) -> dict[str, Any]:
+def evaluate(
+    bot: str,
+    js: str,
+    *,
+    home: Path | None = None,
+    ensure_chrome: bool = True,
+) -> dict[str, Any]:
     js = (js or "").strip()
     if not js:
         raise ValidationError("js required")
     if len(js) > 8000:
         raise ValidationError("js too long")
-    return _run(bot, ["eval", "--js", js], home=home)
+    return _run(bot, ["eval", "--js", js], home=home, ensure_chrome=ensure_chrome)

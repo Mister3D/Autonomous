@@ -2,7 +2,9 @@
 //! The window and tray live behind the `gui` feature.
 
 mod api;
+mod autostart;
 mod config;
+mod update;
 mod mcp;
 mod proto;
 mod tunnel;

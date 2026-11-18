@@ -22,6 +22,9 @@ def test_desk_status_includes_pending_request(home):
     st2 = desk_svc.status("waitdesk", home=home)
     assert st2["pending_state"] == "pending"
     assert st2["pending_request_id"] == posted["message_id"]
+    queued = chat_svc.send_message("waitdesk", "continue sans VM", home=home)
+    assert (queued.get("meta") or {}).get("queued") is True
+    assert bots_svc.get_bot("waitdesk", home=home)["status"] == "waiting"
 
     desk_svc.resolve_desk_requests("waitdesk", state="denied", home=home)
     st3 = desk_svc.status("waitdesk", home=home)

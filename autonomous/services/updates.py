@@ -40,6 +40,11 @@ SERVICE_NAMES = (
 )
 
 _MIGRATION_RE = re.compile(r"^(\d+)_.*\.sql$")
+# 001_schema.sql replaced the old incremental files 1..22. A branch that
+# still has that squash already contains this schema; those version ints
+# must not look like the database is ahead of the branch.
+_SQUASH_THROUGH = 22
+_VERSION_RE = re.compile(r"^__version__\s*=\s*[\"']([^\"']+)[\"']", re.M)
 # Safe git branch / ref name (no shell metacharacters, no path escape).
 _BRANCH_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 # https / ssh only — http:// and git:// are rejected (cleartext / unauthenticated).
@@ -72,6 +77,25 @@ def _git(*args: str, timeout: float = 60.0, check: bool = False) -> subprocess.C
         timeout=timeout,
         check=check,
     )
+
+
+def version_in_source(text: str) -> str:
+    match = _VERSION_RE.search(text or "")
+    return match.group(1).strip() if match else ""
+
+
+def _version_at(rev: str) -> str:
+    """``__version__`` at a git revision, or empty when the file cannot be read."""
+    rev = str(rev or "").strip()
+    if not rev or not git_available():
+        return ""
+    try:
+        proc = _git("show", f"{rev}:autonomous/__init__.py", timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return version_in_source(proc.stdout or "")
 
 
 def git_available() -> bool:
@@ -271,7 +295,10 @@ def can_switch_to(target: str, *, home: Path | None = None) -> dict[str, Any]:
     # Also union working-tree files if we're already on that branch tip.
     if not target_migs:
         target_migs = _migration_versions_in_tree(None)
-    extra = sorted(applied - target_migs)
+    covered = set(target_migs)
+    if 1 in covered:
+        covered.update(v for v in applied if v <= _SQUASH_THROUGH)
+    extra = sorted(applied - covered)
     if extra:
         return {
             "ok": False,
@@ -342,6 +369,11 @@ def configure(
     out["remote_url"] = remote_url(home)
     out["origin_url"] = origin_url() if git_available() else None
     return out
+
+
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    """True when ``ancestor`` is contained in ``descendant`` (a fast-forward is possible)."""
+    return _git("merge-base", "--is-ancestor", ancestor, descendant).returncode == 0
 
 
 def _behind_count(local: str, remote: str) -> int:
@@ -415,7 +447,11 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
     try:
         fetch = _git("fetch", "--quiet", remote_name, ch, timeout=90.0)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        base.update(ok=False, code="fetch_failed", message=str(exc)[:300])
+        base.update(
+            ok=False,
+            code="fetch_failed",
+            message=(str(exc) or "Could not reach the remote.")[:300],
+        )
         _write_cache(home, base)
         return base
 
@@ -430,12 +466,16 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
     if local and remote_sha and local != remote_sha:
         behind = _behind_count(local, remote_sha)
         base["behind"] = behind
-        base["available"] = behind > 0
-        if behind == 0:
-            base["message"] = (
-                f"Local branch differs from {remote_name}; fast-forward update may not apply."
-            )
+        if _is_ancestor(local, remote_sha):
+            base["available"] = behind > 0
+        else:
+            # Remote history was rewritten (force-push). A fast-forward cannot apply.
+            # Commits on the remote still count as an update; apply resets to that tip.
             base["code"] = "diverged"
+            base["available"] = behind > 0
+            base["message"] = (
+                "Remote history was rewritten. Update will match the remote tip."
+            )
     elif local and remote_sha and local == remote_sha:
         base["available"] = False
         base["behind"] = 0
@@ -449,8 +489,15 @@ def check(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
 
 
 def status(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
+    from autonomous import __version__ as app_version
+
     st = check(home=home, force=force)
     st["channels"] = list(CHANNELS)
+    st["version"] = app_version
+    remote_version = ""
+    if st.get("git") is not False and st.get("remote_sha"):
+        remote_version = _version_at(str(st.get("remote_sha") or ""))
+    st["latest_version"] = remote_version or app_version
     st["remote_url"] = remote_url(home)
     st["origin_url"] = origin_url() if git_available() else None
     current = channel(home)
@@ -495,24 +542,29 @@ def _schedule_systemd_restart(unit: str, log) -> None:
             try:
                 p = subprocess.run(argv, capture_output=True, text=True, timeout=60)
             except (OSError, subprocess.TimeoutExpired) as exc:
-                log(f"restart attempt failed ({' '.join(argv)}): {exc}")
+                log("Restart attempt failed.")
                 continue
             if p.returncode == 0:
-                log(f"restarted via {' '.join(argv)}")
+                log("Service restarted.")
                 return
-            err = (p.stderr or p.stdout or "").strip()[:200]
-            log(f"restart refused ({' '.join(argv)}): {err or p.returncode}")
+            log("Restart was refused.")
         log("Could not restart automatically — restart autonomous serve / systemctl manually.")
 
     threading.Thread(target=worker, name="autonomous-restart", daemon=True).start()
 
 
-def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
+def _stream_argv(
+    job_id: str,
+    argv: list[str],
+    home: Path | None,
+    *,
+    cwd: str | None = None,
+) -> int:
     from autonomous.services import jobs as jobs_svc
 
     env = os.environ.copy()
     env.setdefault("DEBIAN_FRONTEND", "noninteractive")
-    jobs_svc.update_job(job_id, log_line="$ " + " ".join(argv), home=home)
+    jobs_svc.update_job(job_id, log_line=("$ " + " ".join(argv))[:500], home=home)
     proc = subprocess.Popen(
         argv,
         stdout=subprocess.PIPE,
@@ -520,13 +572,15 @@ def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
         text=True,
         bufsize=1,
         env=env,
-        cwd=str(_repo_root()),
+        cwd=cwd or str(_repo_root()),
     )
     assert proc.stdout is not None
     last = 0.0
     buf: list[str] = []
     for line in proc.stdout:
-        buf.append(line.rstrip()[:500])
+        shown = line.rstrip()[:500]
+        if shown:
+            buf.append(shown)
         if time.monotonic() - last > 0.4:
             for b in buf:
                 jobs_svc.update_job(job_id, log_line=b, home=home)
@@ -537,15 +591,53 @@ def _stream_argv(job_id: str, argv: list[str], home: Path | None) -> int:
     return proc.wait()
 
 
-def start_apply(*, home: Path | None = None) -> dict[str, Any]:
-    """Pull the configured channel, rebuild UI + package, restart when possible."""
+def sync_steps(
+    remote_name: str,
+    branch: str,
+    *,
+    force: bool,
+    match_remote: bool = False,
+) -> list[tuple[str, list[str]]]:
+    """Fixed git argv. Force discards local commits and tracked edits, then matches the remote tip.
+
+    ``match_remote`` is the rewritten-history path: same branch reset, without deleting
+    untracked files.
+    """
+    root = str(_repo_root())
+    tip = f"{remote_name}/{branch}"
+    steps: list[tuple[str, list[str]]] = [
+        ("fetch", ["git", "-C", root, "fetch", remote_name, branch]),
+    ]
+    if force or match_remote:
+        if force:
+            # Untracked files (not ignored ones: data/, .venv, node_modules stay).
+            steps.append(("clean", ["git", "-C", root, "clean", "-fd"]))
+        steps.append(("reset", ["git", "-C", root, "checkout", "-f", "-B", branch, tip]))
+        return steps
+    if _git("show-ref", "--verify", "--quiet", f"refs/heads/{branch}").returncode != 0:
+        steps.append(("branch", ["git", "-C", root, "branch", "--track", branch, tip]))
+    steps.extend(
+        [
+            ("checkout", ["git", "-C", root, "checkout", "-q", branch]),
+            ("ff-only", ["git", "-C", root, "merge", "-q", "--ff-only", tip]),
+        ]
+    )
+    return steps
+
+
+def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, Any]:
+    """Pull the configured channel, rebuild UI + package, restart when possible.
+
+    ``force`` replaces the local branch with the remote tip (dirty tree, amended
+    commit, or any other history that cannot fast-forward).
+    """
     global _apply_running
     from autonomous.services import jobs as jobs_svc
     from autonomous.services import setup as setup_svc
 
     if not git_available():
         raise ValidationError("Not a git install", code="no_git")
-    if _dirty():
+    if _dirty() and not force:
         raise ValidationError(
             "Working tree has local changes — commit, stash or discard them before updating.",
             code="dirty",
@@ -561,40 +653,44 @@ def start_apply(*, home: Path | None = None) -> dict[str, Any]:
     job = jobs_svc.create_job(setup_svc.SETUP_BOT, "setup.self_update", home=home)
 
     def log(line: str) -> None:
-        jobs_svc.update_job(job["id"], log_line=line[:500], home=home)
+        text = str(line or "").rstrip()
+        if text:
+            jobs_svc.update_job(job["id"], log_line=text[:500], home=home)
 
     def worker() -> None:
         global _apply_running
         root = _repo_root()
         try:
             jobs_svc.update_job(job["id"], state="running", progress=5, home=home)
-            log(f"Updating channel={ch} remote={remote_name}")
-            tip = f"{remote_name}/{ch}"
-            steps: list[tuple[str, list[str]]] = [
-                ("fetch", ["git", "-C", str(root), "fetch", remote_name, ch]),
-            ]
-            # Create a local branch from the remote tip when it does not exist yet.
-            if _git("show-ref", "--verify", "--quiet", f"refs/heads/{ch}").returncode != 0:
-                steps.append(
-                    (
-                        "branch",
-                        ["git", "-C", str(root), "branch", "--track", ch, tip],
-                    )
-                )
-            steps.extend(
-                [
-                    ("checkout", ["git", "-C", str(root), "checkout", "-q", ch]),
-                    (
-                        "ff-only",
-                        ["git", "-C", str(root), "merge", "-q", "--ff-only", tip],
-                    ),
-                ]
-            )
-            for label, argv in steps:
+            log(f"Updating channel={ch} remote={remote_name} force={force}")
+            planned = sync_steps(remote_name, ch, force=force)
+            index = 0
+            while index < len(planned):
+                label, argv = planned[index]
                 jobs_svc.update_job(job["id"], progress=15, home=home)
                 rc = _stream_argv(job["id"], argv, home)
                 if rc != 0:
                     raise RuntimeError(f"{label} failed (exit {rc})")
+                if label == "fetch" and not force:
+                    local = _rev_parse("HEAD")
+                    tip = _rev_parse(f"{remote_name}/{ch}")
+                    if (
+                        local
+                        and tip
+                        and local != tip
+                        and not _is_ancestor(local, tip)
+                    ):
+                        log("The remote branch was rewritten. Matching its tip.")
+                        planned = [
+                            step
+                            for step in sync_steps(
+                                remote_name, ch, force=False, match_remote=True
+                            )
+                            if step[0] != "fetch"
+                        ]
+                        index = 0
+                        continue
+                index += 1
 
             venv_python = root / ".venv" / "bin" / "python"
             npm = shutil.which("npm")
@@ -604,25 +700,12 @@ def start_apply(*, home: Path | None = None) -> dict[str, Any]:
                 raise RuntimeError(".venv missing — re-run install.sh")
 
             jobs_svc.update_job(job["id"], progress=40, home=home)
-            env = os.environ.copy()
             frontend = root / "frontend"
             for label, argv in (
                 ("npm ci", [npm, "ci", "--no-audit", "--no-fund", "--loglevel=error"]),
                 ("npm run build", [npm, "run", "build", "--silent"]),
             ):
-                log(f"$ cd frontend && {' '.join(argv)}")
-                proc = subprocess.Popen(
-                    argv,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    cwd=str(frontend),
-                    env=env,
-                )
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    log(line.rstrip()[:500])
-                rc = proc.wait()
+                rc = _stream_argv(job["id"], argv, home, cwd=str(frontend))
                 if rc != 0:
                     raise RuntimeError(f"{label} failed (exit {rc})")
 
@@ -645,7 +728,7 @@ def start_apply(*, home: Path | None = None) -> dict[str, Any]:
 
             unit = _systemd_unit_active()
             if unit:
-                log(f"Scheduling restart of {unit}…")
+                log("Restarting the service…")
                 _schedule_systemd_restart(unit, log)
                 jobs_svc.update_job(
                     job["id"],

@@ -25,6 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-inconsolata fonts-opensymbol fonts-cantarell fontconfig \
     procps net-tools psmisc \
     nano vim-tiny less \
+    galculator \
+    drawing \
+    libreoffice-calc libreoffice-math \
+    wmctrl \
     && sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
     && sed -i 's/^# *fr_FR.UTF-8 UTF-8/fr_FR.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
@@ -64,7 +68,7 @@ COPY webgl-spoof-cdp.py /usr/local/bin/webgl-spoof-cdp.py
 COPY webgl-spoof.js /usr/local/share/autonomous/webgl-spoof.js
 COPY chrome-policy.json /etc/opt/chrome/policies/managed/autonomous.json
 COPY google-chrome.desktop /usr/share/applications/google-chrome.desktop
-COPY chrome-autostart.desktop /home/autonomous/.config/autostart/chrome.desktop
+# No chrome XFCE autostart: host ensure_bot_chrome starts it on first browser tool.
 
 RUN chmod +x /home/autonomous/.vnc/xstartup \
              /usr/local/bin/entrypoint.sh \

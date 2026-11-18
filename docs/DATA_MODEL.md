@@ -52,6 +52,8 @@ $AUTONOMOUS_HOME/
 
 Desktop sleep columns: `auto_sleep` (default 1), `desk_last_active_at`. See [features/desk-screen.md](./features/desk-screen.md).
 
+Conversation counters `tokens_in` / `tokens_out` reset on chat clear. Durable daily history lives in `bot_token_usage_daily` (see [features/token-usage.md](./features/token-usage.md)) and is purged when the bot row is deleted.
+
 `desk` when present:
 ```json
 {
@@ -138,6 +140,11 @@ Memory **shared by bots** (facts, not secrets). `tier` = `core` (always in the p
 `bots.memory_access` (default 1) for opt-out. Agent proposals → non-blocking chat card.  
 `bots.is_manager` (default 0): orchestrator — **at most one** bot set to 1 (otherwise 409 `manager_exists`) — see [features/manager.md](./features/manager.md).  
 See `docs/features/memory.md`.
+
+### bot_notebook
+Private to one bot (`bot` = UUID). `kind` = `order` (standing rule) | `open` (unfinished line) | `note` (title listed every turn, body on demand).  
+Survives chat clear and Pi compaction. Deleted with the bot.  
+See [features/notebook.md](./features/notebook.md).
 
 ### approval_requests
 Generic approval requests (Accept / Decline). `bot` = UUID. State `pending` → `approved` \| `denied` \| `cancelled`.  

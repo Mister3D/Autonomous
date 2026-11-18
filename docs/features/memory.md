@@ -42,6 +42,6 @@ Bot creation: `memory_access` (bool, default true). Same for bot patch.
 - **Don't** re-inject the core block on every `session.prompt` — only at `PiRpcSession.start()` via `--append-system-prompt`.
 - Keys: `^[a-z][a-z0-9_]{0,63}$`.
 - Proposals stored with `bots.id` (UUID); chat messages stay on the slug.
-- Don't confuse with the **vault** (secrets + `waiting`) or with **Pi compaction** (local session context).
+- Don't confuse with the **vault** (secrets + `waiting`), with **Pi compaction** (local session context), or with the **per-bot notebook** (standing orders, unfinished work, setup notes — see [notebook.md](./notebook.md)).
 - No add form in Settings. The entry comes through the chat card (`memory_propose`). The list and the bin remain. `POST /memory/entries` remains for card approval.
 - Don’t show Confirm cards during setup onboarding (`first_chat_onboarding`).

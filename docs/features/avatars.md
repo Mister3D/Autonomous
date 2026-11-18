@@ -11,18 +11,19 @@
 - `autonomous/avatars.py` — ready catalogue
 - `autonomous/migrations/001_schema.sql` — columns `avatar`, `avatar_color`
 
-**Last updated**: 2026-11-04 (dropped `web/` + `vc/`; unfinished sources → `pending/`)
+**Last updated**: 2026-11-10 (rail waiting : cadre orange clignotant)
 
 ## User behaviour
 
 - Badge **without background or circle**; sizes `sm` 40 / `md` 64 (Manager rail) / `lg` 96.
 - **work** (`status=busy`): Work animation.
 - **await** (`status=waiting`): jumps — authorisation, credentials, etc.
+- **Rail** (worker list + Manager): when `status=waiting`, the bot button gets an **orange blinking frame** (`.waiting`, `prefers-reduced-motion` → solid frame, no blink).
 - **notify**: unread assistant messages (bot not selected).
 - **red dot** `.avatar-pip.unread` (rail sm): unread **or** `status=waiting`.
 - **idle**: still; on hover, the eyes follow the mouse.
 - **lg avatar (inspector)**: hover → **immediate custom tooltip** (no browser `title`) with the agent state; no more "State" line in Details.
-- **Creation**: character grid + 18 colour swatches in 3 rows of 6 (22 px), centred. Avatar editing (inspector) keeps the wide grid.
+- **Creation / edit picker**: character grid + colour swatches. Large preview plays **work**; the selected character tile plays **notify**; others stay **idle**. Cells keep `overflow: visible` (no hard clip) with a slight shrink (~92%) so limbs stay readable inside the tile.
 - **Inspector**: click on the lg avatar → same picker → `PATCH` `avatar` / `avatar_color`.
 
 ## Reusable package
@@ -39,6 +40,7 @@ Regenerate characters + `vue/catalog.js`: `python3 avatar/tools/sync_characters.
 - Not-ready characters: SVG + `meta.json` under `characters/`; Vectorcraft stays in `pending/` until animated.
 - No `border-radius: 50%` / background on `.bot-avatar` (the character is not in a disc).
 - **Original** swatch: badge split in two (medium grey | orange).
+- **Firefox Android**: inline SVG inside a `<button>` (the bot rail) disappears when the root `<svg>` has a CSS `transform` (`scale`) or only a percentage size. Keep an explicit px width/height on `.bot-avatar.is-*` and on `svg.avatar-svg`. Zoom by tightening `fitViewBox` (`fill` 0.94), not with CSS. If `getBBox()` is still 0×0 on the first frame, leave the authored `viewBox` and retry next frame — never write `viewBox="0 0 0 0"`.
 
 ## Quick check
 

@@ -190,6 +190,47 @@ def test_webhook_crud_and_public_fire(auth_client, home):
     assert hit[-1]["meta"].get("has_payload") is True
     assert hit[-1]["meta"].get("payload") == {"hello": "world"}
     assert "Traite" in hit[-1]["content"]
+    # Agent prompt must include the payload (UI bubble stays short).
+    agent_prompt = hit[-1]["meta"].get("agent_prompt") or ""
+    assert "Payload" in agent_prompt
+    assert "hello" in agent_prompt
+    assert "world" in agent_prompt
+
+    # Body that claims JSON but is not: keep the raw text for the chat modal.
+    raw = auth_client.post(
+        "/api/v1/hooks",
+        data="From: ada@example.com\nSubject: Bonjour\n\nCorps du mail",
+        headers={
+            "Authorization": f"Bearer {wh['token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    assert raw.status_code == 200, raw.data
+    msgs = chat_svc.list_messages("hookbot", home=home)
+    raw_hit = [
+        m
+        for m in msgs
+        if m["role"] == "user" and (m.get("meta") or {}).get("kind") == "webhook"
+    ]
+    assert "Corps du mail" in str(raw_hit[-1]["meta"].get("payload"))
+    assert raw_hit[-1]["meta"].get("has_payload") is True
+
+    plain = auth_client.post(
+        "/api/v1/hooks",
+        data="juste du texte",
+        headers={
+            "Authorization": f"Bearer {wh['token']}",
+            "Content-Type": "text/plain",
+        },
+    )
+    assert plain.status_code == 200, plain.data
+    msgs = chat_svc.list_messages("hookbot", home=home)
+    plain_hit = [
+        m
+        for m in msgs
+        if m["role"] == "user" and (m.get("meta") or {}).get("kind") == "webhook"
+    ]
+    assert plain_hit[-1]["meta"].get("payload") == "juste du texte"
 
     # Token-in-path is gone
     legacy = auth_client.post(f"/api/v1/hooks/{wh['token']}", json={"legacy": True})
@@ -328,3 +369,42 @@ def test_catchup_advances_next_run(home):
     after = events_svc.get_schedule("catchbot", sched["id"], home=home)
     assert after["next_run_at"] > past
     assert after.get("last_run_at")
+
+
+def test_prompt_can_batch_tools_parallel_or_sequential():
+    from autonomous.services.pi_rpc import (
+        _BATCH_SYSTEM_HINT,
+        _THROUGHPUT_SYSTEM_HINT,
+        _PI_EXTENSIONS,
+    )
+
+    hint = _BATCH_SYSTEM_HINT
+    assert "SAME response" in hint or "same response" in hint
+    assert "batch_sequential" in hint
+    assert "same time" in hint
+    assert "one after another" in hint
+    assert "Never call batch_sequential alone" in hint
+    assert "does NOT mean one tool call per model turn" in hint
+    assert "batch_sequential" in _THROUGHPUT_SYSTEM_HINT
+    assert any(path.name == "batch.ts" for path in _PI_EXTENSIONS)
+
+
+def test_prompt_changes_method_after_failure():
+    from autonomous.services.pi_rpc import _APPROACH_SYSTEM_HINT
+
+    hint = _APPROACH_SYSTEM_HINT
+    assert "standard method" in hint
+    assert "less conventional" in hint
+    assert "inventive approach" in hint
+    assert "Do not loop" in hint
+    assert "Two failed attempts" in hint
+
+
+def test_prompt_allows_self_relaunch_schedule(home):
+    from autonomous.services.pi_rpc import _events_system_hint
+
+    hint = _events_system_hint(home)
+    assert "Self-relaunch" in hint
+    assert "schedule_create" in hint
+    assert "Do not ask permission" in hint
+    assert "echo" in hint

@@ -1,21 +1,18 @@
 <template>
   <div class="mcp-grants">
     <div class="mcp-grants-head">
-      <span>
-        <strong>{{ t("details.mcp") }}</strong>
-        <small>{{ t("details.mcpHint") }}</small>
+      <span class="ui-toggle-main">
+        <UiIconBadge size="sm">
+          <UiIcon name="puzzle" :size="16" :stroke="1.9" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.mcp") }}</strong>
+          <small>{{ t("details.mcpHint") }}</small>
+        </span>
       </span>
-      <button
-        class="settings-orb mcp-add"
-        type="button"
-        :aria-label="t('details.mcpAdd')"
-        :title="t('details.mcpAdd')"
-        @click="startPick"
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
+      <UiOrb :label="t('details.mcpAdd')" @click="startPick">
+        <UiIcon name="plus" :size="14" />
+      </UiOrb>
     </div>
     <p v-if="error && !open" class="mcp-grants-error">{{ error }}</p>
     <ul v-if="grants.length" class="mcp-grant-list">
@@ -30,7 +27,6 @@
         </button>
       </li>
     </ul>
-    <p v-else-if="ready" class="hint">{{ t("details.mcpEmpty") }}</p>
 
     <Teleport to="body">
       <div v-if="open" class="modal-backdrop" @click.self="cancel">
@@ -89,13 +85,15 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiIcon from "./ui/UiIcon.vue";
+import UiIconBadge from "./ui/UiIconBadge.vue";
+import UiOrb from "./ui/UiOrb.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
 
 const grants = ref([]);
 const servers = ref([]);
-const ready = ref(false);
 const error = ref("");
 const open = ref(false);
 const chosenId = ref("");
@@ -131,15 +129,12 @@ function already(server) {
 
 async function load() {
   error.value = "";
-  ready.value = false;
   try {
     const data = await api.listBotMcp(props.bot.name);
     grants.value = data.grants || [];
     servers.value = data.servers || [];
   } catch (e) {
     error.value = e.message;
-  } finally {
-    ready.value = true;
   }
 }
 

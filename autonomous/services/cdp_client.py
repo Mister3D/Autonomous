@@ -51,6 +51,10 @@ def pick_page(targets: list[dict[str, Any]], *, url_contains: str | None = None)
     return pages[0]
 
 
+# A CDP event larger than this is dropped. Reading it would be the OOM kill.
+_MAX_FRAME = 16 * 1024 * 1024
+
+
 class _Ws:
     def __init__(self, url: str, timeout: float = 15.0):
         if not url.startswith("ws://"):
@@ -75,6 +79,7 @@ class _Ws:
         ).encode("ascii")
         self._sock = socket.create_connection((host, port), timeout=timeout)
         self._sock.settimeout(timeout)
+        self._timeout = timeout
         self._sock.sendall(req)
         buf = b""
         while b"\r\n\r\n" not in buf:
@@ -82,7 +87,7 @@ class _Ws:
             if not chunk:
                 raise CdpError("CDP WebSocket handshake closed")
             buf += chunk
-        header, _, _ = buf.partition(b"\r\n\r\n")
+        header, _, extra = buf.partition(b"\r\n\r\n")
         if b"101" not in header.split(b"\r\n", 1)[0]:
             raise CdpError(f"CDP WS handshake failed: {header[:200]!r}")
         expect = base64.b64encode(
@@ -92,6 +97,8 @@ class _Ws:
             # Some servers omit echoing; continue if 101.
             pass
         self._n = 0
+        # Bytes after the handshake are the start of the first frame.
+        self._buf = bytearray(extra)
 
     def send_json(self, obj: dict[str, Any]) -> None:
         raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -112,16 +119,22 @@ class _Ws:
 
     def recv_json(self) -> dict[str, Any]:
         while True:
-            hdr = self._recv_exact(2)
+            # The short poll timeout applies only while no byte of this frame
+            # has arrived. A timeout mid-frame used to drop the rest; the next
+            # read was garbage and the worker died.
+            hdr = self._take(2, in_frame=False)
             opcode = hdr[0] & 0x0F
             masked = bool(hdr[1] & 0x80)
             ln = hdr[1] & 0x7F
             if ln == 126:
-                ln = struct.unpack(">H", self._recv_exact(2))[0]
+                ln = struct.unpack(">H", self._take(2, in_frame=True))[0]
             elif ln == 127:
-                ln = struct.unpack(">Q", self._recv_exact(8))[0]
-            mask = self._recv_exact(4) if masked else b""
-            payload = self._recv_exact(ln)
+                ln = struct.unpack(">Q", self._take(8, in_frame=True))[0]
+            if ln > _MAX_FRAME:
+                self.close()
+                raise CdpError(f"CDP frame too large ({ln} bytes)")
+            mask = self._take(4, in_frame=True) if masked else b""
+            payload = self._take(ln, in_frame=True) if ln else b""
             if masked:
                 payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
             if opcode == 0x8:  # close
@@ -131,16 +144,28 @@ class _Ws:
                 continue
             if opcode not in (0x1, 0x2):
                 continue
-            return json.loads(payload.decode("utf-8"))
+            try:
+                return json.loads(payload.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise CdpError(f"CDP frame is not JSON: {exc}") from exc
 
-    def _recv_exact(self, n: int) -> bytes:
-        buf = bytearray()
-        while len(buf) < n:
-            chunk = self._sock.recv(n - len(buf))
+    def _take(self, n: int, *, in_frame: bool) -> bytes:
+        while len(self._buf) < n:
+            if in_frame or self._buf:
+                self._sock.settimeout(self._timeout)
+            try:
+                chunk = self._sock.recv(65536)
+            except (TimeoutError, socket.timeout):
+                if in_frame or self._buf:
+                    self._sock.settimeout(self._timeout)
+                    continue
+                raise
             if not chunk:
                 raise CdpError("CDP WebSocket EOF")
-            buf.extend(chunk)
-        return bytes(buf)
+            self._buf.extend(chunk)
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
 
     def close(self) -> None:
         try:

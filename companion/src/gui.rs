@@ -1,5 +1,7 @@
 use crate::api::{self, PairStart};
+use crate::autostart;
 use crate::config::{self, Config, McpServer};
+use crate::update;
 use crate::tunnel::{self, Command, Status};
 use eframe::egui;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -13,7 +15,6 @@ struct Texts {
     next: &'static str,
     code_hint: &'static str,
     waiting: &'static str,
-    options: &'static str,
     mcp: &'static str,
     add: &'static str,
     save: &'static str,
@@ -42,6 +43,8 @@ struct Texts {
     notify_off: &'static str,
     notify_persist: &'static str,
     notify_persist_help: &'static str,
+    launch_at_login: &'static str,
+    launch_at_login_help: &'static str,
     toast_open: &'static str,
     toast_dismiss: &'static str,
 }
@@ -56,7 +59,6 @@ fn texts() -> Texts {
             next: "Suivant",
             code_hint: "Dans Autonomous : Réglages → Compagnons → Autoriser ce code.",
             waiting: "En attente de l'autorisation…",
-            options: "Options",
             mcp: "MCP sur cet ordinateur (commande + arguments)",
             add: "Ajouter un MCP",
             save: "Enregistrer",
@@ -85,6 +87,8 @@ fn texts() -> Texts {
             notify_off: "Coche au moins une option de notification.",
             notify_persist: "Garder les notifications à l'écran",
             notify_persist_help: "Elles restent jusqu'à un clic : sur la notification pour l'ouvrir, ou sur X pour la fermer.",
+            launch_at_login: "Lancer à l'ouverture de session",
+            launch_at_login_help: "Démarre avec ta session Windows, Linux ou macOS. Le compagnon a besoin du bureau, donc pas avant la connexion.",
             toast_open: "Ouvrir",
             toast_dismiss: "Fermer",
         }
@@ -96,7 +100,6 @@ fn texts() -> Texts {
             next: "Next",
             code_hint: "In Autonomous: Settings → Companions → Approve this code.",
             waiting: "Waiting for approval…",
-            options: "Options",
             mcp: "MCP on this computer (command + arguments)",
             add: "Add an MCP",
             save: "Save",
@@ -125,6 +128,8 @@ fn texts() -> Texts {
             notify_off: "Turn on at least one notification option.",
             notify_persist: "Keep notifications on screen",
             notify_persist_help: "They stay until you click them to open, or click X to dismiss.",
+            launch_at_login: "Start when you sign in",
+            launch_at_login_help: "Starts with your Windows, Linux, or macOS session. The companion needs the desktop, so it does not run before you sign in.",
             toast_open: "Open",
             toast_dismiss: "Dismiss",
         }
@@ -173,6 +178,8 @@ pub struct CompanionApp {
     open_id: Option<tray_icon::menu::MenuId>,
     quit_id: Option<tray_icon::menu::MenuId>,
     quit: bool,
+    update_started: bool,
+    update_tx: Option<Sender<()>>,
     alert: bool,
     alert_url: String,
     click_tx: Sender<String>,
@@ -199,16 +206,46 @@ impl CompanionApp {
             open_id: None,
             quit_id: None,
             quit: false,
+            update_started: false,
+            update_tx: None,
             alert: false,
             alert_url: String::new(),
             click_tx,
             click_rx,
         };
         app.install_tray();
+        if app.config.launch_at_login {
+            app.apply_launch(true);
+        }
         if paired {
             app.start_tunnel();
         }
         app
+    }
+
+    fn apply_launch(&mut self, on: bool) {
+        self.config.launch_at_login = on;
+        match autostart::apply(on) {
+            Ok(()) => self.error.clear(),
+            Err(err) => {
+                self.error = err;
+                self.config.launch_at_login = false;
+            }
+        }
+        let _ = config::save(&self.config);
+    }
+
+    fn launch_row(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(12.0);
+        let mut on = self.config.launch_at_login;
+        if ui.checkbox(&mut on, self.texts.launch_at_login).changed() {
+            self.apply_launch(on);
+        }
+        ui.label(
+            egui::RichText::new(self.texts.launch_at_login_help)
+                .color(MUTED)
+                .size(13.0),
+        );
     }
 
     fn install_tray(&mut self) {
@@ -332,6 +369,18 @@ impl CompanionApp {
         thread::spawn(move || tunnel::serve(config, cmd_rx, status_tx));
         self.cmd_tx = Some(cmd_tx);
         self.status_rx = Some(status_rx);
+        self.spawn_update();
+    }
+
+    fn spawn_update(&mut self) {
+        if self.update_started || self.config.device_token.is_empty() {
+            return;
+        }
+        self.update_started = true;
+        let (tx, rx) = mpsc::channel();
+        self.update_tx = Some(tx);
+        let config = self.config.clone();
+        thread::spawn(move || update::watch(config, rx));
     }
 
     fn begin_pair(&mut self) {
@@ -446,6 +495,9 @@ impl CompanionApp {
                 Status::Connected => {
                     self.online = true;
                     self.note = self.texts.connected.into();
+                    if let Some(tx) = &self.update_tx {
+                        let _ = tx.send(());
+                    }
                 }
                 Status::Disconnected(message) => {
                     self.online = false;
@@ -1062,6 +1114,7 @@ impl CompanionApp {
                 self.test_notification();
             }
         });
+        self.launch_row(ui);
         ui.add_space(12.0);
         self.mcp_editor(ui);
         ui.add_space(16.0);
@@ -1124,6 +1177,7 @@ impl CompanionApp {
                 let _ = config::save(&self.config);
             }
         });
+        self.launch_row(ui);
         ui.add_space(12.0);
         self.mcp_editor(ui);
         ui.add_space(8.0);

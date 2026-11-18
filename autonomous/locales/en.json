@@ -11,7 +11,7 @@
   "auth.logout": "Logged out",
   "auth.rate_limited": "Too many login attempts — try again in a few minutes",
   "auth.password_too_short": "Password must be at least 8 characters",
-  "auth.password_unchanged": "Choose a password different from the generated one",
+  "auth.password_unchanged": "Choose a password different from the current one",
   "auth.password_changed": "Password updated",
   "bot.created": "Bot '{name}' created",
   "bot.deleted": "Bot '{name}' deleted",
@@ -20,7 +20,12 @@
   "bot.manager_exists": "Only one Manager is allowed (already: '{name}'). Turn it off before promoting another.",
   "bot.invalid_name": "Invalid technical id (slug: [a-z0-9][a-z0-9_-]{{0,31}})",
   "bot.invalid_display_name": "Invalid bot name (1–64 chars, no / or \\)",
+  "bot.model_required": "Pick a model.",
   "chat.sent": "Message sent",
+  "notebook.order": "Remembered: {text}",
+  "notebook.open": "Still to do: {text}",
+  "notebook.note": "Note: {text}",
+  "notebook.removed": "Removed: {text}",
   "chat.cleared": "Chat history cleared",
   "desk.creating": "Creating desktop…",
   "desk.destroying": "Destroying desktop…",
@@ -29,6 +34,7 @@
   "terminal.done": "Command finished (exit {code})",
   "files.not_found": "Path not found",
   "files.forbidden": "Path outside bot directory",
+  "files.exists": "A file with that name already exists",
   "job.not_found": "Job '{id}' not found",
   "health.ok": "Autonomous {version} OK",
   "serve.starting": "Serving on http://{host}:{port}",
@@ -41,5 +47,7 @@
   "serve.stopped": "Server stopped.",
   "serve.killed": "Server did not exit in time; killed pid {pid}.",
   "serve.not_running": "No running server (serve.pid missing or stale).",
-  "serve.already_running": "Server already running (pid {pid}). Use: autonomous serve stop"
+  "serve.already_running": "Server already running (pid {pid}). Use: autonomous serve stop",
+  "notify.botWaitingTitle": "Action needed",
+  "notify.botWaitingBody": "{bot} is waiting for your reply."
 }

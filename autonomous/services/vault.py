@@ -728,35 +728,6 @@ def _finalize_request(
     return out
 
 
-def cancel_pending_for_human_message(
-    bot: str,
-    content: str,
-    *,
-    home: Path | None = None,
-) -> list[dict[str, Any]]:
-    """Cancel pending vault forms when the user writes in chat instead.
-
-    The polling vault tool receives ``human_redirect`` guidance (not a hard deny).
-    Returns the cancelled request payloads.
-    """
-    pending = list_pending_for_bot(bot, home=home)
-    if not pending:
-        return []
-    result = _human_redirect_result(content)
-    out: list[dict[str, Any]] = []
-    for req in pending:
-        out.append(
-            _finalize_request(
-                req,
-                state="cancelled",
-                result=result,
-                new_entry_id=req.get("entry_id"),
-                home=home,
-            )
-        )
-    return out
-
-
 def resolve_request(
     req_id: str,
     *,

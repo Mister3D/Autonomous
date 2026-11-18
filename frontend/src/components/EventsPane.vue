@@ -1,7 +1,6 @@
 <template>
   <div class="events-pane">
     <p class="events-tz">{{ tzLabel }}</p>
-    <p class="hint events-who">{{ t("events.piOnly") }}</p>
 
     <section class="events-section">
       <h3>{{ t("events.schedules") }}</h3>
@@ -18,7 +17,14 @@
                 @change="toggleSchedule(s, $event)"
               />
             </label>
-            <strong class="events-name">{{ s.name }}</strong>
+            <button
+              type="button"
+              class="events-name"
+              :title="t('events.showInstruction')"
+              @click="openInstruction(s.name, s.instruction, 'schedule')"
+            >
+              {{ s.name }}
+            </button>
             <code class="events-cron" :title="s.cron_utc ? `UTC ${s.cron_utc}` : ''">{{ s.cron }}</code>
             <span class="events-badge">{{ s.timezone || t("events.local") }}</span>
             <span v-if="!s.recurring" class="events-badge once">{{ t("events.oneShot") }}</span>
@@ -58,7 +64,14 @@
                 @change="toggleWebhook(w, $event)"
               />
             </label>
-            <strong class="events-name">{{ w.name }}</strong>
+            <button
+              type="button"
+              class="events-name"
+              :title="t('events.showInstruction')"
+              @click="openInstruction(w.name, w.instruction, 'webhook')"
+            >
+              {{ w.name }}
+            </button>
             <div class="events-item-actions">
               <button
                 type="button"
@@ -106,6 +119,14 @@
         </li>
       </ul>
     </section>
+
+    <EventInstructionModal
+      :open="!!instructionModal"
+      :name="instructionModal?.name || ''"
+      :instruction="instructionModal?.instruction || ''"
+      :kind="instructionModal?.kind || 'webhook'"
+      @close="closeInstruction"
+    />
   </div>
 </template>
 
@@ -114,6 +135,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import EventInstructionModal from "./EventInstructionModal.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();
@@ -124,7 +146,20 @@ const loading = ref(false);
 const copiedId = ref("");
 const confirmWebhookId = ref("");
 const deletingWebhookId = ref("");
+const instructionModal = ref(null);
 const clock = ref({ timezone: "", utc_offset: "" });
+
+function openInstruction(name, instruction, kind) {
+  instructionModal.value = {
+    name: String(name || "").trim() || "—",
+    instruction: String(instruction || ""),
+    kind,
+  };
+}
+
+function closeInstruction() {
+  instructionModal.value = null;
+}
 
 const tzLabel = computed(() =>
   t("events.timezone", {
@@ -234,8 +269,13 @@ async function removeWebhook(w) {
 }
 
 async function copyUrl(w) {
-  // Prefer Bearer header invoke — token stays out of the URL / proxy access logs.
-  const endpoint = w.url || `${location.origin}${w.url_path || "/api/v1/hooks"}`;
+  // Always use the browser origin (same host/scheme as the UI). Server-built
+  // ``w.url`` often is ``http://127.0.0.1:…`` and yields a 301 (e.g. to HTTPS)
+  // that strips the Bearer / turns POST into GET — fire then looks like it "worked"
+  // for the agent while the caller only saw a redirect.
+  const path = (w.url_path || "/api/v1/hooks").replace(/\/+$/, "") || "/api/v1/hooks";
+  const origin = String(location.origin || "").replace(/\/+$/, "");
+  const endpoint = `${origin}${path.startsWith("/") ? path : `/${path}`}`;
   const token = w.token || "";
   const text = token
     ? `curl -sS -X POST '${endpoint}' -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' -d '{}'`

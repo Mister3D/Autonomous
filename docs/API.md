@@ -26,35 +26,50 @@ PUT    /settings                    # incl. timezone (IANA); not update.channel 
 GET    /pi/status                   # Pi install + readiness
 GET    /pi/models                   # models listed by `pi --list-models`
 GET    /events                      # SSE global (multi-tab)
-GET|PUT /setup/update               # self-update status; PUT {channel?, remote_url?, confirm_dev?}
+GET|PUT /setup/update               # status includes version + latest_version; PUT {channel?, remote_url?, confirm_dev?}
 POST   /setup/update/check
 POST   /setup/update/apply
+GET    /setup/pi-packages           # Pi + npm plugins; ?force=1 skips the 6 h cache
+POST   /setup/pi-packages/apply     # {items: ["pi", "npm:…"]} — one row or several
 
 GET    /auth/status                 # + must_change_password
 POST   /auth/login                  # may return must_change_password
-POST   /auth/password               # {current_password, new_password} — unlocks after generated install
+POST   /auth/password               # {current_password, new_password} — forced install unlock + voluntary change from Settings
 POST   /auth/logout
 
 GET    /bots
 POST   /bots                        # free-form {name} (spaces/CAPS OK) → label + auto slug; slug?; is_manager? (only one → 409 manager_exists)
+GET    /bots/token-usage            # daily cumulative token series per living bot (Settings chart)
 GET    /bots/:name                  # :name = technical slug
+GET    /bots/:name/package          # disk footprint (VM layer + ~/files + chat + Pi)
 PATCH  /bots/:name                  # incl. companion_id, companion_egress, companion_killswitch
 DELETE /bots/:name
 POST   /bots/:name/capability
 GET    /bots/:name/mail/peers          # Manager only — other bots for orchestration
-POST   /bots/:name/mail/delegate       # Manager only — async task + relaunch instructions
+POST   /bots/:name/mail/delegate       # Manager only — text-only sugar {to, task, expect_reply?}
+GET    /bots/:name/household/models    # Manager — Pi models + bots.default_model
+POST   /bots/:name/household/bots      # Manager — create bots [{name}, …]; model is always bots.default_model
+POST   /bots/:name/household/delete-requests           # Manager — checkbox delete card
+GET|POST /bots/:name/household/delete-requests/:id     # poll / confirm|deny (+ bots[])
 
 GET    /bots/:name/messages        # page `limit`≤200, `before`; the client pages back up to the user message
 POST   /bots/:name/messages         # {content?, attachments?, prompt?} → run Pi (prompt = agent text if set)
 POST   /bots/:name/reactions        # {emoji, message_id?} — emoji on the turn's user bubble; does not cut the reply
+POST   /bots/:name/llm-turns        # Pi llm_trace: open reflection row ({request_file, request_kind=provider})
+GET    /bots/:name/llm-turns/:id/request|response  # Full provider / assistant JSON for that turn
+POST   /bots/:name/llm-heavy-gate/acquire  # Per-model slot ({tokens, model?, wait_sec?}); parallelGate and/or heavyGate
+POST   /bots/:name/llm-heavy-gate/release  # Free lease ({lease_id})
 GET    /bots/:name/chat/attachments/:file  # pasted image
-POST   /bots/:name/chat/files       # multipart → ~/shared/upload/<uuid>/<name>
+POST   /bots/:name/chat/files       # multipart → ~/files/upload/<uuid>/<name>
 DELETE /bots/:name/messages         # + Pi session rotation
+DELETE /bots/:name/messages/:id     # cancel a still-queued bubble (meta.queued)
 GET    /bots/:name/messages/export.pdf  # discussion PDF (tool names, no args/results)
-POST   /bots/:name/stop             # abort run Pi
+POST   /bots/:name/stop             # abort run Pi (UI Stop next to the in-thread orb)
+POST   /bots/:name/tools/cancel     # kill the in-flight VM command; Pi keeps running
 POST   /bots/:name/resume           # resume after session died during approval
-POST   /bots/:name/mail/tell        # {to, content} → one-way message to another bot
-POST   /bots/:name/mail/ask         # {to, content} → question; the reply relaunches the asker
+POST   /bots/:name/retry            # relaunch queued / unfinished work (LLM outage); keeps chat + Pi session
+POST   /bots/:name/mail/tell        # {to, content?, attachments?, expect_reply?} → one-way (+ files; Manager expect_reply = async footer)
+POST   /bots/:name/mail/ask         # {to, content?, attachments?} → question; the reply relaunches the asker
 GET    /bots/:name/mail/asks/:id    # poll ask state (open|answered)
 GET|POST /bots/:name/schedules      # cron entered in host local time; cron_utc + next_run_at in UTC
 PATCH|DELETE /bots/:name/schedules/:id
@@ -76,19 +91,22 @@ PATCH  /devices/me                   # device token — {egress, killswitch} ign
 PUT    /devices/me/mcp               # MCP catalogue
 POST   /devices/notify               # {title, body, bot?} — ticked, online companions
 POST   /devices/me/focus             # device token — {bot} wakes the already open tab
+GET    /devices/me/update            # device token — {state, version, platform, sha256?, size?}; state=building while compiling (no sha, do not install the previous file)
+GET    /devices/me/update/binary     # device token — that companion binary, once state is ready (409 while compiling)
 GET    /devices/mcp/tools?bot=       # tools allowed for this bot
 POST   /devices/mcp/call             # {bot, server, tool, arguments, companion?}
 GET    /bots/:name/mcp               # grants + published servers
 POST   /bots/:name/mcp               # {device_id, server}
 DELETE /bots/:name/mcp/:grant_id
 WS     /ws/companion                 # tunnel, Authorization: Bearer adc_…
+POST   /bots/:name/desk/activity         # reset auto-sleep clock; does not wake
 POST   /bots/:name/desk/wake             # wake (sleeping → running); no-op if already running
 POST   /bots/:name/desk/request          # agent → card + authorisation modal
 POST   /bots/:name/desk/request/resolve  # deny from the card
 POST   /bots/:name/desk/destroy
 POST   /bots/:name/desk/restart
 POST   /bots/:name/desk/reset
-GET    /bots/:name/desk/novnc            # also wakes if sleeping
+GET    /bots/:name/desk/novnc            # connection info; does not wake or reset auto-sleep
 POST   /bots/:name/screen/screenshot     # X11 capture → PNG (+ chat card)
 GET    /bots/:name/screen/screenshots/:id.png
 POST   /bots/:name/screen/ground         # UI-TARS locate → {ok,x,y,loops[]} + chat cards
@@ -119,12 +137,14 @@ POST   /bots/:name/vault/inject          # type|paste granted secret → VNC (no
 GET    /bots/:name/files?path=
 POST   /bots/:name/files/upload?path=    # multipart field "file"
 POST   /bots/:name/files/mkdir           # JSON {path, name}
+POST   /bots/:name/files/move            # JSON {src, dest} — move into directory
 GET    /bots/:name/files/download?path=
 GET    /bots/:name/files/content?path=   # UTF-8 text (agent)
 PUT    /bots/:name/files/content         # JSON {path, content}
 GET    /bots/:name/files/raw?path=       # inline bytes (chat images)
 POST   /bots/:name/files/share           # JSON {path, caption?} → markdown image
 POST   /bots/:name/files/attach          # JSON {path} → bubble attachment (PDF/zip, not images)
+POST   /bots/:name/files/claim-mail      # JSON {path, dest} → move mail-inbox staging file into ~/files
 DELETE /bots/:name/files?path=
 
 GET    /jobs/:id
@@ -147,8 +167,14 @@ GET    /memory/entries/:key
 DELETE /memory/entries/:key
 GET    /memory/search?q=
 POST   /memory/proposals              # agent → chat card (non-blocking)
+GET    /memory/proposals/count         # {count} of proposals still pending
 GET    /memory/proposals/:id
 POST   /memory/proposals/:id/resolve  # approve|deny
+
+GET    /bots/:name/notebook            # orders, open lines, notes (this bot only)
+POST   /bots/:name/notebook            # {kind, body, title?, id?} save immediately
+GET    /bots/:name/notebook/:id
+DELETE /bots/:name/notebook/:id
 
 POST   /approvals/requests            # {bot, prompt, title?} → Accept/Decline card
 GET    /approvals/requests/:id        # poll
@@ -179,12 +205,13 @@ Details: `docs/features/terminal-pty.md`, `docs/features/desk-screen.md`.
 ```
 event: ping
 event: bot.created | bot.updated | bot.deleted
-event: message.created | message.delta | message.updated | message.cleared
+event: message.created | message.delta | message.updated | message.deleted | message.cleared
 event: desk.updated
 event: job.updated
 event: terminal.created
 event: notification
 event: vault.updated | vault.deleted | vault.grant | vault.revoke | vault.request
+event: files.changed                 # ~/files write/mkdir/upload/delete → Files tab refresh
 ```
 
 Global `/events` is what every open browser tab should subscribe to so creations, runs and toasts stay in sync.

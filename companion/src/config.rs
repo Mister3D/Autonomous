@@ -29,6 +29,9 @@ pub struct Config {
     /// Toasts stay on screen until clicked or dismissed (Windows reminder scenario).
     #[serde(default)]
     pub persistent_notifications: bool,
+    /// Start the companion when the user signs in (desktop session, not pre-login boot).
+    #[serde(default)]
+    pub launch_at_login: bool,
     #[serde(default)]
     pub mcp: Vec<McpServer>,
 }
@@ -45,6 +48,7 @@ impl Default for Config {
             notify_toast: true,
             notify_sound: true,
             persistent_notifications: false,
+            launch_at_login: false,
             mcp: Vec::new(),
         }
     }

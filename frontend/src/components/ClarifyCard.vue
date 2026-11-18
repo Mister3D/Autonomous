@@ -65,9 +65,18 @@ const choices = computed(() =>
   Array.isArray(meta.value.choices) ? meta.value.choices.filter(Boolean) : []
 );
 const allowText = computed(() => {
+  if (isLanguageChoice(meta.value.title, meta.value.prompt, choices.value)) return true;
   if (typeof meta.value.allow_text === "boolean") return meta.value.allow_text;
   return choices.value.length === 0;
 });
+
+function isLanguageChoice(title, prompt, labels) {
+  const blob = `${title || ""}\n${prompt || ""}\n${(labels || []).join("\n")}`.toLowerCase();
+  const asks = blob.includes("langue") || blob.includes("language");
+  const hasFr = blob.includes("français") || blob.includes("francais");
+  const hasEn = blob.includes("english") || blob.includes("anglais");
+  return asks && hasFr && hasEn;
+}
 
 const stateLabel = computed(() => {
   if (state.value === "answered") return t("clarify.answered");

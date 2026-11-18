@@ -40,6 +40,7 @@ def _all_ok(monkeypatch, ready=True):
     monkeypatch.setattr(setup_svc, "check_desk_image", lambda home, ok: setup_svc._check("desk_image", required=True, status="ok"))
     monkeypatch.setattr(setup_svc, "check_grounding", lambda home: [setup_svc._check("grounding", required=False, status="optional")])
     monkeypatch.setattr(setup_svc, "check_companion", lambda home: setup_svc._check("companion", required=False, status="error"))
+    monkeypatch.setattr(setup_svc, "check_web_access", lambda: setup_svc._check("web_access", required=False, status="optional"))
 
 
 def test_status_shape_and_ready(auth_client, monkeypatch):
@@ -160,6 +161,28 @@ def test_grounding_save_masks_and_env_readonly(auth_client, home, monkeypatch):
     assert v["grounder_token"]["set"] and v["grounder_token"]["hint"] == "…1234"
     auth_client.put("/api/v1/setup/grounding", json={"grounder_model": "ignored"})
     assert "ignored" not in f.read_text()
+
+
+def test_web_access_installed_from_settings(fake_home, monkeypatch):
+    agent = fake_home / ".pi" / "agent"
+    agent.mkdir(parents=True)
+    (agent / "settings.json").write_text(
+        json.dumps({"packages": ["npm:pi-web-access"]}),
+        encoding="utf-8",
+    )
+    assert setup_svc.web_access_installed() is True
+    monkeypatch.setattr("autonomous.services.pi_status.resolve_pi_bin", lambda: "/usr/bin/pi")
+    row = setup_svc.check_web_access()
+    assert row["id"] == "web_access"
+    assert row["required"] is False
+    assert row["status"] == "ok"
+
+
+def test_web_access_missing_when_pi_absent(fake_home, monkeypatch):
+    monkeypatch.setattr("autonomous.services.pi_status.resolve_pi_bin", lambda: None)
+    row = setup_svc.check_web_access()
+    assert row["status"] == "optional"
+    assert "Pi agent" in row["details"] or "pi install" in row["details"]
 
 
 def test_job_runner_fake_command(home, monkeypatch):

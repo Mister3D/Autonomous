@@ -1,4 +1,4 @@
-"""Inter-bot messaging — Dit / Demande à @bot, queue, reply relaunch."""
+"""Inter-bot messaging — Tell / Ask @bot, queue, reply relaunch."""
 
 from __future__ import annotations
 
@@ -19,23 +19,90 @@ from autonomous.services.errors import AutonomousError, Forbidden, NotFound, Val
 
 log = logging.getLogger("autonomous.botmail")
 
+# Instructions stay English. The mail body and the reply to the user must not.
+_LANG_RULE = (
+    "LANGUAGE: write the peer message (the tool content) and your reply to "
+    "the user entirely in the language of this conversation — the language "
+    "the user is writing in. One language only. Do not mix French and English. "
+    "Do not switch to English because these instructions are in English. "
+    "Tool results may be English; do not paste them. Keep names unchanged."
+)
+_INBOUND_LANG_RULE = (
+    "Answer in the same language as the message below. One language only. "
+    "Do not mix languages. Do not switch to English because this note is in English."
+)
+
+# English primary; French Dit/Demande kept as composer aliases.
 _TELL_RE = re.compile(
-    r"^\s*(?:dis|dit|dites)\s+à\s+@([a-zA-Z0-9_-]+)\s*[:\-]?\s*(.+?)\s*$",
+    r"^\s*(?:"
+    r"tell|"
+    r"dis|dit|dites)\s+(?:à\s+)?@([a-zA-Z0-9_-]+)\s*[:\-]?\s*(.+?)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _ASK_RE = re.compile(
-    r"^\s*(?:demande|demandez)\s+à\s+@([a-zA-Z0-9_-]+)\s*[:\-]?\s*(.+?)\s*$",
+    r"^\s*(?:"
+    r"ask|"
+    r"demande|demandez)\s+(?:à\s+)?@([a-zA-Z0-9_-]+)\s*[:\-]?\s*(.+?)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
-# Ancien préambule de bulle. Le bandeau « Reçu de @… » le remplace.
+# Legacy FR received preamble (UI banner replaced it).
 _RECEIVED_PREAMBLE_RE = re.compile(
     r"^@[a-zA-Z0-9_-]+\s+m['\u2019]a envoyé un message\s*:\s*",
     re.IGNORECASE,
 )
+
+# Mentions in assistant text (same charset as composer / bots.name).
+_MENTION_RE = re.compile(r"@([a-zA-Z0-9_-]+)")
+
+# Assistant claims it will wait for / forward a peer reply → must have been Ask.
+_AWAIT_REPLY_RE = re.compile(
+    r"(?i)("
+    r"d[eè]s\s+que\s+je\s+(re[cç]ois|aurai)|"
+    r"je\s+te\s+(?:fais|ferai)\s+suivre|"
+    r"je\s+t['\u2019]informe|"
+    r"je\s+reviens\s+(vers\s+toi|avec)|"
+    r"en\s+attendant\s+(sa|leur|la)\s+r[eé]ponse|"
+    r"j['\u2019]attends\s+(sa|leur|la|une)\s+r[eé]ponse|"
+    r"waiting\s+for\s+(a\s+)?(reply|answer|response)|"
+    r"as\s+soon\s+as\s+i\s+(get|hear|receive)"
+    r")"
+)
+
+# 3rd-person verb → tutoiement for a self-contained peer message.
+_TU_VERB = {
+    "fait": "fais",
+    "font": "fais",
+    "a": "as",
+    "ont": "as",
+    "est": "es",
+    "sont": "es",
+    "peut": "peux",
+    "peuvent": "peux",
+    "veut": "veux",
+    "veulent": "veux",
+    "doit": "dois",
+    "doivent": "dois",
+    "va": "vas",
+    "vont": "vas",
+    "sait": "sais",
+    "savent": "sais",
+    "aime": "aimes",
+    "aiment": "aimes",
+    "habite": "habites",
+    "habitent": "habites",
+    "travaille": "travailles",
+    "travaillent": "travailles",
+    "pense": "penses",
+    "pensent": "penses",
+    "prefère": "préfères",
+    "préfère": "préfères",
+    "preferent": "préfères",
+    "préfèrent": "préfères",
+}
 
 
 def _now() -> str:
@@ -56,7 +123,7 @@ def list_peers(manager: str, *, home: Path | None = None) -> list[dict[str, Any]
     me = bots_svc.get_bot(manager, home=home)
     if not me.get("is_manager"):
         raise Forbidden(
-            "Seul un bot Manager peut lister les autres bots.",
+            "Only a Manager bot can list other bots.",
             code="manager_required",
         )
     out: list[dict[str, Any]] = []
@@ -80,22 +147,34 @@ def format_delegate_content(
     manager_slug: str,
     task: str,
     expect_reply: str | None = None,
+    has_attachments: bool = False,
 ) -> str:
     """Build a one-way task message that asks the peer to relaunch the manager."""
     body = (task or "").strip()
     if not body:
-        raise ValidationError("Tâche vide", code="botmail_empty")
+        if has_attachments:
+            body = "(files attached)"
+        else:
+            raise ValidationError("Empty task", code="botmail_empty")
     me = (manager_slug or "").strip().lstrip("@")
     expect = (expect_reply or "").strip() or (
-        "un résumé court du résultat (succès ou échec)"
+        "a short summary of the result (success or failure)"
     )
+    files_note = ""
+    if has_attachments:
+        files_note = (
+            " Files for this task were copied into your private ~/files staging "
+            "(.autonomous/mail-inbox/…). Place them with files_claim_mail "
+            "(or files_list/read) wherever you need before you start."
+        )
     return (
         f"{body}\n\n"
         f"—\n"
-        f"Consignes Manager @{me} : je ne reste PAS en attente. "
-        f"Quand tu as terminé (succès ou échec), relance-moi avec un message "
-        f"« Dit à @{me} … » contenant {expect}. "
-        f"N’attends pas d’autres instructions de ma part sur ce fil."
+        f"Manager @{me} instructions: I am NOT waiting. "
+        f"When you are done (success or failure), relaunch me with "
+        f"« Tell @{me} … » containing {expect}. "
+        f"Do not wait for further instructions from me on this thread."
+        f"{files_note}"
     )
 
 
@@ -113,11 +192,138 @@ def parse_route(text: str) -> dict[str, str] | None:
     return None
 
 
+def reformulate_peer_message(
+    body: str,
+    *,
+    mode: str = "ask",
+    continuation: bool = False,
+) -> str:
+    """Rewrite a Tell/Ask fragment into a self-contained peer message.
+
+    Composer text after ``@name`` is often a relative clause meant for the human
+    ("if she rides horses"). The peer has no that context — address them as
+    ``you`` (EN) / ``tu`` (FR alias) unless ``continuation``.
+    """
+    text = (body or "").strip()
+    if not text or continuation:
+        return text
+
+    # EN: "if she/he …" / "if you …"
+    m = re.match(r"(?i)^if\s+(she|he)\s+(.+)$", text)
+    if m:
+        return _en_address_peer(m.group(2).strip(), mode=mode)
+
+    m = re.match(r"(?i)^if\s+you\s+(.+)$", text)
+    if m:
+        rest = m.group(1).strip()
+        if mode == "ask":
+            return _ensure_question(f"Do you {rest}")
+        return _cap_first(f"You {rest}")
+
+    m = re.match(r"(?i)^that\s+(she|he)\s+(.+)$", text)
+    if m:
+        return _en_address_peer(m.group(2).strip(), mode="tell")
+
+    m = re.match(r"(?i)^(she|he)\s+(.+)$", text)
+    if m:
+        return _en_address_peer(m.group(2).strip(), mode=mode)
+
+    # FR aliases (composer still accepts Dit/Demande).
+    m = re.match(r"(?i)^si\s+(elle|il)\s+(.+)$", text)
+    if m:
+        rest = _tu_ify_clause(m.group(2).strip())
+        if mode == "ask":
+            return _ensure_question(f"Est-ce que tu {rest}")
+        return _cap_first(f"Tu {rest}")
+
+    m = re.match(r"(?i)^si\s+tu\s+(.+)$", text)
+    if m:
+        rest = m.group(1).strip()
+        if mode == "ask":
+            return _ensure_question(f"Est-ce que tu {rest}")
+        return _cap_first(f"Tu {rest}")
+
+    # Apostrophe required so "quelle" is not eaten as qu+elle.
+    m = re.match(r"(?i)^qu['\u2019](elle|il)\s+(.+)$", text)
+    if m:
+        rest = _tu_ify_clause(m.group(2).strip())
+        return _cap_first(f"Tu {rest}")
+
+    m = re.match(r"(?i)^(elle|il)\s+(.+)$", text)
+    if m:
+        rest = _tu_ify_clause(m.group(2).strip())
+        if mode == "ask":
+            return _ensure_question(f"Est-ce que tu {rest}")
+        return _cap_first(f"Tu {rest}")
+
+    if mode == "ask" and "?" not in text:
+        if re.match(
+            r"(?i)^(when|why|how|where|how\s+many|what|which|"
+            r"quand|pourquoi|comment|où|combien|quel|quelle|quels|quelles)\b",
+            text,
+        ):
+            return _ensure_question(text)
+        if not re.match(
+            r"(?i)^(do\s+you|are\s+you|can\s+you|could\s+you|would\s+you|"
+            r"est-ce|peux-tu|pouvez-vous|puis-je|tu\b|vous\b|you\b)",
+            text,
+        ):
+            return _ensure_question(f"Can you tell me: {text}")
+
+    return text
+
+
+def _en_address_peer(clause: str, *, mode: str) -> str:
+    """Address a 3rd-person EN clause to the peer as you."""
+    parts = (clause or "").strip().split(None, 1)
+    if not parts:
+        return clause
+    first = parts[0].lower()
+    rest = parts[1] if len(parts) > 1 else ""
+    if first in ("is", "are", "was", "were"):
+        be = {"is": "are", "are": "are", "was": "were", "were": "were"}[first]
+        body = f"{be} {rest}".strip() if rest else be
+        if mode == "ask":
+            return _ensure_question(f"Are you {rest}" if rest else "Are you")
+        return _cap_first(f"You {body}")
+    if mode == "ask":
+        return _ensure_question(f"Do you {clause}".strip())
+    return _cap_first(f"You {clause}".strip())
+
+
+def _tu_ify_clause(clause: str) -> str:
+    """Map the start of a FR 3rd-person clause to tutoiement (fait → fais…)."""
+    parts = (clause or "").strip().split(None, 1)
+    if not parts:
+        return clause
+    first = parts[0]
+    key = first.lower()
+    mapped = _TU_VERB.get(key)
+    if not mapped:
+        return clause
+    rest = parts[1] if len(parts) > 1 else ""
+    return f"{mapped} {rest}".strip() if rest else mapped
+
+
+def _ensure_question(text: str) -> str:
+    t = (text or "").strip().rstrip("?.! ")
+    if not t:
+        return text
+    return t + " ?"
+
+
+def _cap_first(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return t
+    return t[0].upper() + t[1:]
+
+
 def resolve_bot(ref: str, *, home: Path | None = None, exclude: str | None = None) -> str:
     """Resolve @name or label to a bot name (case-insensitive)."""
     needle = (ref or "").strip().lstrip("@")
     if not needle:
-        raise ValidationError("Destinataire manquant", code="botmail_target")
+        raise ValidationError("Missing recipient", code="botmail_target")
     bots = bots_svc.list_bots(home=home)
     lower = needle.lower()
     for b in bots:
@@ -130,10 +336,10 @@ def resolve_bot(ref: str, *, home: Path | None = None, exclude: str | None = Non
                 name = b["name"]
                 break
         else:
-            raise NotFound(f"Bot @{needle} introuvable", code="botmail_unknown")
+            raise NotFound(f"Bot @{needle} not found", code="botmail_unknown")
     if exclude and name == exclude:
         raise ValidationError(
-            "Un bot ne peut pas s’écrire à lui-même",
+            "A bot cannot message itself",
             code="botmail_self",
         )
     return name
@@ -145,14 +351,19 @@ def maybe_route_from_composer(
     *,
     message_id: str,
     home: Path | None = None,
-) -> bool:
-    """
-    If the user message is Dit/Demande à @x, route it and skip local agent start.
-    Returns True when handled (caller must not start_run on this bot).
+) -> dict[str, Any] | None:
+    """Annotate Tell/Ask lines; the local agent must author the peer message.
+
+    Returns:
+      None — not a Tell/Ask line (caller continues normally).
+      ``{"skip_agent": True}`` — unknown target / error (caller must not start_run).
+      ``{"skip_agent": False, "agent_prompt": str, "mode", "to_bot"}`` — mark
+      route_intent and start the local agent with the enriched prompt (no
+      automatic tell/ask; the agent calls the mail tools).
     """
     route = parse_route(content)
     if not route:
-        return False
+        return None
     try:
         target = resolve_bot(route["target"], home=home, exclude=bot)
     except AutonomousError as exc:
@@ -173,62 +384,54 @@ def maybe_route_from_composer(
             },
             home=home,
         )
-        return True
+        return {"skip_agent": True}
 
-    body = route["body"]
+    raw_body = route["body"]
     mode = route["mode"]
+    tool = "bot_ask" if mode == "ask" else "bot_tell"
+    mode_label = (
+        "a question (Ask)" if mode == "ask" else "a one-way message (Tell)"
+    )
+    agent_prompt = (
+        f"[Inter-bot — explicit instruction]\n"
+        f"The user wants you to send {mode_label} to @{target}.\n\n"
+        f"User text (do NOT forward it verbatim to the peer):\n"
+        f"« {content.strip()} »\n\n"
+        f"You MUST:\n"
+        f"1. Write a self-contained, coherent message for @{target} "
+        f"(they have NOT read this chat): objective, useful facts from this "
+        f"thread, constraints, expected result. Address them as « you » / « tu ». "
+        f"Never forward a relative clause about a third person "
+        f"(structure only — keep the conversation language: "
+        f"« if she rides horses » → « Do you ride horses? », "
+        f"« si elle fait du poney » → « Est-ce que tu fais du poney ? »).\n"
+        f"2. Call {tool}(to=\"{target}\", content=<your authored message>).\n"
+        f"3. Briefly confirm transmission to the user "
+        f"(this is NOT the end of the task). If they asked you to bring the "
+        f"reply back here, prefer bot_ask (or ensure follow-up).\n"
+        f"Do not merely cite @{target}.\n"
+        f"{_LANG_RULE}"
+    )
     _patch_message_meta(
         bot,
         message_id,
         {
             "kind": "botmail",
-            "mail_kind": mode,
+            "mail_kind": "route_intent",
+            "mode": mode,
             "to_bot": target,
+            "link_bot": target,
+            "body_raw": raw_body,
+            "agent_prompt": agent_prompt,
         },
         home=home,
     )
-    # Pas d’accusé « J’ai envoyé… » : seuls les messages reçus côté bots.
-    # origin_message_id = bulle user (Dit/Demande) pour le deep-link retour.
-    if mode == "ask":
-        ask_row = ask(
-            bot,
-            target,
-            body,
-            home=home,
-            origin="composer",
-            origin_message_id=message_id,
-        )
-        _patch_message_meta(
-            bot,
-            message_id,
-            {
-                "ask_id": ask_row["id"],
-                "to_bot": target,
-                "link_bot": target,
-                "body": body,
-            },
-            home=home,
-        )
-    else:
-        tell(
-            bot,
-            target,
-            body,
-            home=home,
-            origin="composer",
-            origin_message_id=message_id,
-        )
-        _patch_message_meta(
-            bot,
-            message_id,
-            {
-                "to_bot": target,
-                "link_bot": target,
-                "body": body,
-            },
-            home=home,
-        )
-    return True
+    return {
+        "skip_agent": False,
+        "agent_prompt": agent_prompt,
+        "mode": mode,
+        "to_bot": target,
+    }
 
 
 def _patch_message_meta(
@@ -321,7 +524,7 @@ def strip_received_preamble(
     *,
     home: Path | None = None,
 ) -> None:
-    """Drop « @x m'a envoyé un message : » from received cards.
+    """Drop legacy « @x m'a envoyé un message : » from received cards.
 
     The direction line already names the sender. Rewrites stored bubbles once.
     """
@@ -341,6 +544,128 @@ def strip_received_preamble(
         chat_svc.update_message(bot, msg["id"], body, home=home, meta=dict(meta))
 
 
+def _resolve_origin_message_id(
+    from_bot: str,
+    *,
+    origin_message_id: str | None,
+    home: Path | None,
+) -> str | None:
+    """Prefer explicit id; else latest composer Dit/Demande route_intent bubble."""
+    if origin_message_id:
+        return origin_message_id
+    for msg in reversed(chat_svc.list_messages(from_bot, limit=30, home=home)):
+        if msg.get("role") != "user":
+            continue
+        meta = dict(msg.get("meta") or {})
+        if meta.get("mail_kind") == "route_intent" and msg.get("id"):
+            return str(msg["id"])
+        # Stop at the first real user turn that is not route_intent.
+        if not meta.get("hidden_prompt") and meta.get("kind") != "botmail":
+            break
+    return None
+
+
+def _record_outgoing(
+    from_bot: str,
+    to_bot: str,
+    content: str,
+    *,
+    mode: str,
+    home: Path | None,
+    ask_id: str | None = None,
+    origin_message_id: str | None = None,
+    attachments: list[dict[str, Any]] | None = None,
+) -> str | None:
+    """Visible « Sent to @peer » card on the sender (peer-facing body)."""
+    body = (content or "").strip()
+    if not body and not attachments:
+        return None
+    if not body:
+        body = "(files attached)"
+    meta: dict[str, Any] = {
+        "kind": "botmail",
+        "mail_kind": "outgoing",
+        "direction": "sent",
+        "mode": mode,
+        "to_bot": to_bot,
+        "link_bot": to_bot,
+        "body": body,
+    }
+    if ask_id:
+        meta["ask_id"] = ask_id
+    if origin_message_id:
+        meta["origin_message_id"] = origin_message_id
+    if attachments:
+        # Sender card links download to *their* original paths when possible.
+        meta["attachments"] = [
+            {
+                **a,
+                "path": a.get("source_path") or a.get("path"),
+                "url": (
+                    f"/api/v1/bots/{from_bot}/files/download"
+                    f"?path={_quote_path(a.get('source_path') or a.get('path') or '')}"
+                ),
+            }
+            for a in attachments
+        ]
+    msg = chat_svc.create_message(
+        from_bot,
+        body,
+        role="system",
+        meta=meta,
+        home=home,
+    )
+    return str(msg.get("id") or "") or None
+
+
+def _quote_path(path: str) -> str:
+    from urllib.parse import quote
+
+    return quote(str(path or ""), safe="/")
+
+
+def _stage_attachments(
+    from_bot: str,
+    to_bot: str,
+    paths: list[str] | None,
+    *,
+    inbox_id: str,
+    home: Path | None,
+) -> list[dict[str, Any]]:
+    if not paths:
+        return []
+    from autonomous.services import files as files_svc
+
+    cleaned = [str(p).strip() for p in paths if str(p or "").strip()]
+    if not cleaned:
+        return []
+    return files_svc.stage_mail_attachments(
+        from_bot,
+        to_bot,
+        cleaned,
+        inbox_id=inbox_id,
+        home=home,
+    )
+
+
+def _attachments_prompt_block(attachments: list[dict[str, Any]] | None) -> str:
+    """English agent note listing staged files (recipient places them freely)."""
+    if not attachments:
+        return ""
+    lines = [
+        "Attached files were copied into your private ~/files staging area. "
+        "Place each where you want with files_claim_mail(path, dest) "
+        "(or files_list/read + write). Staging paths:"
+    ]
+    for a in attachments:
+        name = a.get("name") or "?"
+        size = a.get("size")
+        path = a.get("path") or "?"
+        size_s = f"{int(size)} bytes" if isinstance(size, int) else "?"
+        lines.append(f"- {name} ({size_s}) → {path}")
+    return "\n".join(lines)
+
+
 def tell(
     from_bot: str,
     to_bot: str,
@@ -349,14 +674,38 @@ def tell(
     home: Path | None = None,
     origin: str = "api",
     origin_message_id: str | None = None,
+    attachments: list[str] | None = None,
 ) -> dict[str, Any]:
     to_bot = resolve_bot(to_bot, home=home, exclude=from_bot)
     content = (content or "").strip()
+    attach_paths = [str(p).strip() for p in (attachments or []) if str(p or "").strip()]
+    if not content and not attach_paths:
+        raise ValidationError("Empty message", code="botmail_empty")
     if not content:
-        raise ValidationError("Message vide", code="botmail_empty")
+        content = "(files attached)"
+    origin_message_id = _resolve_origin_message_id(
+        from_bot, origin_message_id=origin_message_id, home=home
+    )
+    item_id = str(uuid.uuid4())
+    staged = _stage_attachments(
+        from_bot, to_bot, attach_paths, inbox_id=item_id, home=home
+    )
+    outgoing_id = _record_outgoing(
+        from_bot,
+        to_bot,
+        content,
+        mode="tell",
+        home=home,
+        origin_message_id=origin_message_id,
+        attachments=staged or None,
+    )
     meta: dict[str, Any] = {"origin": origin}
     if origin_message_id:
         meta["origin_message_id"] = origin_message_id
+    if outgoing_id:
+        meta["outgoing_message_id"] = outgoing_id
+    if staged:
+        meta["attachments"] = staged
     return _enqueue(
         to_bot,
         from_bot=from_bot,
@@ -365,6 +714,7 @@ def tell(
         correlation_id=None,
         home=home,
         meta=meta,
+        item_id=item_id,
     )
 
 
@@ -376,16 +726,41 @@ def ask(
     home: Path | None = None,
     origin: str = "api",
     origin_message_id: str | None = None,
+    attachments: list[str] | None = None,
 ) -> dict[str, Any]:
     to_bot = resolve_bot(to_bot, home=home, exclude=from_bot)
     content = (content or "").strip()
+    attach_paths = [str(p).strip() for p in (attachments or []) if str(p or "").strip()]
+    if not content and not attach_paths:
+        raise ValidationError("Empty question", code="botmail_empty")
     if not content:
-        raise ValidationError("Question vide", code="botmail_empty")
+        content = "(files attached)"
     ask_id = str(uuid.uuid4())
     now = _now()
+    origin_message_id = _resolve_origin_message_id(
+        from_bot, origin_message_id=origin_message_id, home=home
+    )
+    item_id = str(uuid.uuid4())
+    staged = _stage_attachments(
+        from_bot, to_bot, attach_paths, inbox_id=item_id, home=home
+    )
+    outgoing_id = _record_outgoing(
+        from_bot,
+        to_bot,
+        content,
+        mode="ask",
+        home=home,
+        ask_id=ask_id,
+        origin_message_id=origin_message_id,
+        attachments=staged or None,
+    )
     meta: dict[str, Any] = {"origin": origin}
     if origin_message_id:
         meta["origin_message_id"] = origin_message_id
+    if outgoing_id:
+        meta["outgoing_message_id"] = outgoing_id
+    if staged:
+        meta["attachments"] = staged
     inbox = _enqueue(
         to_bot,
         from_bot=from_bot,
@@ -395,6 +770,7 @@ def ask(
         home=home,
         meta=meta,
         defer_deliver=True,
+        item_id=item_id,
     )
     from_id = bots_svc.bot_uuid(from_bot, home=home)
     to_id = bots_svc.bot_uuid(to_bot, home=home)
@@ -419,7 +795,7 @@ def get_ask(ask_id: str, *, home: Path | None = None) -> dict[str, Any]:
             "SELECT * FROM bot_asks WHERE id = ?", (ask_id,)
         ).fetchone()
     if not row:
-        raise NotFound(f"Ask {ask_id} introuvable", code="botmail_ask_missing")
+        raise NotFound(f"Ask {ask_id} not found", code="botmail_ask_missing")
     ask_row = _decode_ask(row, home=home)
     # Pi tool poll: pause asker's runtime while the peer answers.
     try:
@@ -462,9 +838,15 @@ def on_run_finished(
     bot: str,
     *,
     assistant_content: str = "",
+    mail_sent: list[dict[str, Any]] | None = None,
     home: Path | None = None,
 ) -> None:
-    """Called when a bot's agent run settles to idle — complete ask + drain queue."""
+    """Called when a bot's agent run settles to idle — complete ask + drain queue.
+
+    ``mail_sent``: successful ``bot_tell`` / ``bot_ask`` / ``bot_delegate`` calls
+    during this run (``{tool, to}``). Used by the invisible post-response net so
+    we don't re-mail a peer the agent already contacted.
+    """
     reply_inbox_id: str | None = None
     with _lock_for(bot):
         try:
@@ -483,6 +865,27 @@ def on_run_finished(
             _try_deliver_inbox_item(reply_inbox_id, home=home)
         except Exception:
             log.exception("botmail reply deliver failed for inbox %s", reply_inbox_id)
+    # Invisible net: @mention without a mail tool → deterministic Tell/Ask.
+    # Skip when this run is answering inbound mail (ask reply / tell answer).
+    if reply_inbox_id is None and not _run_looks_mail_triggered(
+        bot, home=home
+    ):
+        try:
+            maybe_rescue_mentions(
+                bot,
+                assistant_content or "",
+                mail_sent or [],
+                home=home,
+            )
+        except Exception:
+            log.exception("botmail rescue_mentions failed for %s", bot)
+    # Tell used but asker promised a reply → mirror our answer back.
+    try:
+        maybe_relay_orphaned_tell_reply(
+            bot, assistant_content or "", home=home
+        )
+    except Exception:
+        log.exception("botmail orphan tell relay failed for %s", bot)
 
 
 def _decode_ask(row, *, home: Path | None = None) -> dict[str, Any]:
@@ -594,9 +997,10 @@ def _enqueue(
     home: Path | None,
     meta: dict[str, Any] | None = None,
     defer_deliver: bool = False,
+    item_id: str | None = None,
 ) -> dict[str, Any]:
     """Enqueue mail. ``bot`` / ``from_bot`` may be slug or UUID; stored as UUID."""
-    item_id = str(uuid.uuid4())
+    item_id = (item_id or "").strip() or str(uuid.uuid4())
     now = _now()
     meta = dict(meta or {})
     bot_id = bots_svc.bot_uuid(bot, home=home)
@@ -651,7 +1055,7 @@ def _try_deliver_inbox_item(item_id: str, *, home: Path | None) -> bool:
     bot = item["bot"]
     with _lock_for(bot):
         status = (bots_svc.get_bot(bot, home=home).get("status") or "idle")
-        if status in ("busy", "waiting"):
+        if status == "waiting":
             return False
         return _deliver_locked(item, home=home)
 
@@ -663,7 +1067,8 @@ def _drain_one(bot: str, *, home: Path | None) -> bool:
         bot_id = bots_svc.bot_uuid(bot, home=home)
     except NotFound:
         return False
-    if status in ("busy", "waiting"):
+    # Waiting on a human form — keep mail queued. Busy recipients get a mid-run steer.
+    if status == "waiting":
         return False
     while True:
         with get_db(home) as conn:
@@ -709,8 +1114,10 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
                 (_now(), item["id"]),
             )
         return False
-    if status in ("busy", "waiting"):
+    # Waiting on a human form — keep mail queued. Busy is OK: we steer mid-run.
+    if status == "waiting":
         return False
+    mid_run = status == "busy"
 
     from_bot = item.get("from_bot") or "?"
     from_id = item.get("from_bot_id")
@@ -746,107 +1153,141 @@ def _deliver_locked(item: dict[str, Any], *, home: Path | None) -> bool:
         if cur.rowcount != 1:
             return False
 
-    origin_message_id = (item.get("meta") or {}).get("origin_message_id")
-    link_answer_id = (item.get("meta") or {}).get("link_message_id")
+    item_meta = dict(item.get("meta") or {})
+    origin_message_id = item_meta.get("origin_message_id")
+    outgoing_message_id = item_meta.get("outgoing_message_id")
+    link_answer_id = item_meta.get("link_message_id")
+
+    def _link_sender_cards(peer_msg_id: str, *, extra: dict[str, Any] | None = None) -> None:
+        """Deep-link route_intent + outgoing card back to the received bubble."""
+        if not from_bot or not peer_msg_id:
+            return
+        patch = {
+            "peer_message_id": peer_msg_id,
+            "link_bot": bot,
+            "link_message_id": peer_msg_id,
+        }
+        if extra:
+            patch.update(extra)
+        if origin_message_id:
+            _patch_message_meta(from_bot, origin_message_id, patch, home=home)
+        if outgoing_message_id:
+            _patch_message_meta(from_bot, outgoing_message_id, patch, home=home)
+
+    attachments = list(item_meta.get("attachments") or [])
 
     if kind == "ask":
         visible = body
+        recv_meta: dict[str, Any] = {
+            "kind": "botmail",
+            "mail_kind": "ask",
+            "direction": "received",
+            "from_bot": from_bot,
+            "ask_id": ask_id,
+            "body": body,
+            "link_bot": from_bot,
+            "link_message_id": outgoing_message_id or origin_message_id,
+        }
+        if attachments:
+            recv_meta["attachments"] = attachments
         msg = chat_svc.create_message(
             bot,
             visible,
             role="system",
-            meta={
-                "kind": "botmail",
-                "mail_kind": "ask",
-                "direction": "received",
-                "from_bot": from_bot,
-                "ask_id": ask_id,
-                "body": body,
-                "link_bot": from_bot,
-                "link_message_id": origin_message_id,
-            },
+            meta=recv_meta,
             home=home,
         )
-        if origin_message_id and from_bot:
-            _patch_message_meta(
-                from_bot,
-                origin_message_id,
-                {
-                    "peer_message_id": msg["id"],
-                    "link_bot": bot,
-                    "link_message_id": msg["id"],
-                    "ask_id": ask_id,
-                },
-                home=home,
-            )
+        _link_sender_cards(msg["id"], extra={"ask_id": ask_id})
+        attach_note = _attachments_prompt_block(attachments)
         prompt = (
-            f"@{from_bot} te pose une question. Réponds clairement dans ton prochain "
-            f"message texte (pas seulement via des outils) — ta réponse lui sera renvoyée.\n\n"
-            f"Question : {body}"
+            f"@{from_bot} is asking you a question (inter-bot message). "
+            f"You do NOT have @{from_bot}'s conversation thread — act only on "
+            f"what follows, under your own instructions. Answer clearly in your "
+            f"next text message (not only via tools) — your reply will be "
+            f"forwarded to them.\n"
+            f"{_INBOUND_LANG_RULE}\n\n"
+            f"Question:\n{body}"
+            + (f"\n\n{attach_note}" if attach_note else "")
         )
-        _start_agent(bot, prompt, home=home)
+        _start_agent(bot, prompt, home=home, mid_run=mid_run)
         return True
 
     if kind == "reply":
         answer = body
         visible = answer
+        recv_meta = {
+            "kind": "botmail",
+            "mail_kind": "ask_answered",
+            "direction": "received",
+            "from_bot": from_bot,
+            "ask_id": ask_id,
+            "answer": answer,
+            "link_bot": from_bot,
+            "link_message_id": link_answer_id,
+        }
+        if attachments:
+            recv_meta["attachments"] = attachments
         chat_svc.create_message(
             bot,
             visible,
             role="system",
-            meta={
-                "kind": "botmail",
-                "mail_kind": "ask_answered",
-                "direction": "received",
-                "from_bot": from_bot,
-                "ask_id": ask_id,
-                "answer": answer,
-                "link_bot": from_bot,
-                "link_message_id": link_answer_id,
-            },
+            meta=recv_meta,
             home=home,
         )
+        attach_note = _attachments_prompt_block(attachments)
         prompt = (
-            f"@{from_bot} t’a répondu :\n{answer}\n\n"
-            "Continue avec cette information (ne redemande pas la même chose)."
+            f"@{from_bot} replied (async Ask return):\n{answer}\n\n"
+            "Continue with this information for the user if you promised to "
+            "bring the result back here. Do not ask the same thing again. "
+            "Tell the user in the language of your conversation with them "
+            "(one language only; do not mix French and English)."
+            + (f"\n\n{attach_note}" if attach_note else "")
         )
-        _start_agent(bot, prompt, home=home)
+        _start_agent(bot, prompt, home=home, mid_run=mid_run)
         return True
 
     # tell
     visible = body
+    recv_meta = {
+        "kind": "botmail",
+        "mail_kind": "tell",
+        "direction": "received",
+        "from_bot": from_bot,
+        "body": body,
+        "link_bot": from_bot,
+        "link_message_id": outgoing_message_id or origin_message_id,
+    }
+    if attachments:
+        recv_meta["attachments"] = attachments
     msg = chat_svc.create_message(
         bot,
         visible,
         role="system",
-        meta={
-            "kind": "botmail",
-            "mail_kind": "tell",
-            "direction": "received",
-            "from_bot": from_bot,
-            "body": body,
-            "link_bot": from_bot,
-            "link_message_id": origin_message_id,
-        },
+        meta=recv_meta,
         home=home,
     )
-    if origin_message_id and from_bot:
-        _patch_message_meta(
-            from_bot,
-            origin_message_id,
-            {
-                "peer_message_id": msg["id"],
-                "link_bot": bot,
-                "link_message_id": msg["id"],
-            },
-            home=home,
-        )
-    prompt = f"@{from_bot} t’a écrit :\n{body}"
-    _start_agent(bot, prompt, home=home)
+    _link_sender_cards(msg["id"])
+    attach_note = _attachments_prompt_block(attachments)
+    prompt = (
+        f"@{from_bot} wrote to you (inter-bot, one-way). "
+        f"You do NOT have @{from_bot}'s conversation thread — act only on "
+        f"what follows, under your own instructions "
+        f"(standing rules, memory, etc.).\n"
+        f"{_INBOUND_LANG_RULE}\n\n"
+        f"{body}"
+        + (f"\n\n{attach_note}" if attach_note else "")
+    )
+    _start_agent(bot, prompt, home=home, mid_run=mid_run)
     return True
 
 
-def _start_agent(bot: str, prompt: str, *, home: Path | None) -> None:
+def _start_agent(
+    bot: str,
+    prompt: str,
+    *,
+    home: Path | None,
+    mid_run: bool = False,
+) -> None:
     from autonomous.services import reactions as reactions_svc
 
     # Mail is not the user's bubble — don't react on a stale turn.
@@ -854,9 +1295,232 @@ def _start_agent(bot: str, prompt: str, *, home: Path | None) -> None:
     backend = str(settings_svc.get("agent_backend", home=home, default="pi") or "pi")
     if backend == "null":
         return
+    if mid_run:
+        from autonomous.services.agent import steer_mid_run
+
+        if steer_mid_run(bot, prompt, home=home):
+            return
+        # Steer unavailable — leave the received card; a later idle drain won't
+        # re-fire this item (already delivered). Best-effort only.
+        log.warning("botmail mid-run steer missed for %s — card delivered without agent nudge", bot)
+        return
     from autonomous.services.agent import get_agent
 
     get_agent(backend, home=home).start_run(bot, prompt, home=home)
+
+
+def maybe_rescue_mentions(
+    bot: str,
+    assistant_content: str,
+    mail_sent: list[dict[str, Any]],
+    *,
+    home: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Post-response net — disabled.
+
+    A bare ``@name`` (or an assistant claim without ``bot_tell``/``bot_ask``)
+    must NOT invent a peer message from the user text. Only the local agent
+    authors inter-bot mail via the tools. Kept as a no-op hook for
+    ``on_run_finished`` compatibility.
+    """
+    del bot, assistant_content, mail_sent, home
+    return []
+
+
+def maybe_relay_orphaned_tell_reply(
+    bot: str,
+    assistant_content: str,
+    *,
+    home: Path | None = None,
+) -> str | None:
+    """If we answered a Tell and the asker promised to wait, mirror the answer.
+
+    Covers the common LLM mix-up: ``bot_tell`` used while the assistant text
+    says it will forward the peer's reply (should have been ``bot_ask``).
+    Returns the reply inbox id when a relay was queued, else None.
+    """
+    answer = (assistant_content or "").strip()
+    if not answer:
+        return None
+    delivered = _last_delivered_tell_inbox(bot, home=home)
+    if not delivered:
+        return None
+    asker = (delivered.get("from_bot") or "").strip()
+    if not asker or asker == bot:
+        return None
+    # Don't steal an in-flight real ask for this pair.
+    if _has_open_ask_between(asker, bot, home=home):
+        return None
+    asker_assistant = _last_assistant_text(asker, home=home)
+    if not asker_assistant or not _AWAIT_REPLY_RE.search(asker_assistant):
+        return None
+    # Asker's bubble should name us (slug or label).
+    if not _text_mentions_bot(asker_assistant, bot, home=home):
+        return None
+    after = delivered.get("delivered_at") or delivered.get("created_at")
+    if _has_relay_from_since(bot, asker, after, home=home):
+        return None
+
+    _, answer_msg_id = _last_assistant_after(bot, after, home=home)
+    if answer_msg_id:
+        _patch_message_meta(
+            bot,
+            answer_msg_id,
+            {
+                "kind": "botmail",
+                "mail_kind": "outgoing",
+                "direction": "sent",
+                "to_bot": asker,
+                "link_bot": asker,
+                "origin": "orphan_tell_relay",
+            },
+            home=home,
+        )
+    item = _enqueue(
+        asker,
+        from_bot=bot,
+        kind="reply",
+        content=answer,
+        correlation_id=None,
+        home=home,
+        meta={
+            "origin": "orphan_tell_relay",
+            "link_message_id": answer_msg_id,
+        },
+        defer_deliver=True,
+    )
+    try:
+        _try_deliver_inbox_item(item["id"], home=home)
+    except Exception:
+        log.exception(
+            "botmail orphan tell relay deliver failed for inbox %s",
+            item["id"],
+        )
+    log.info(
+        "botmail orphan tell relay %s → %s (inbox=%s)",
+        bot,
+        asker,
+        item["id"],
+    )
+    return item["id"]
+
+
+def _text_mentions_bot(
+    text: str, bot: str, *, home: Path | None
+) -> bool:
+    needle = (bot or "").strip().lstrip("@").lower()
+    if not needle:
+        return False
+    for match in _MENTION_RE.finditer(text or ""):
+        raw = match.group(1)
+        try:
+            name = resolve_bot(raw, home=home)
+        except AutonomousError:
+            if raw.lower() == needle:
+                return True
+            continue
+        if name.lower() == needle:
+            return True
+    # Label without @ still counts if resolve would match — keep strict on @.
+    return False
+
+
+def _last_assistant_text(bot: str, *, home: Path | None) -> str:
+    text, _ = _last_assistant_after(bot, None, home=home)
+    return text
+
+
+def _last_delivered_tell_inbox(
+    bot: str, *, home: Path | None
+) -> dict[str, Any] | None:
+    bot_id = bots_svc.bot_uuid(bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM bot_inbox
+            WHERE bot = ? AND kind = 'tell' AND state = 'delivered'
+            ORDER BY COALESCE(delivered_at, created_at) DESC
+            LIMIT 1
+            """,
+            (bot_id,),
+        ).fetchone()
+    return _decode_inbox(row, home=home) if row else None
+
+
+def _last_delivered_inbox(
+    bot: str, *, home: Path | None
+) -> dict[str, Any] | None:
+    bot_id = bots_svc.bot_uuid(bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM bot_inbox
+            WHERE bot = ? AND state = 'delivered'
+            ORDER BY COALESCE(delivered_at, created_at) DESC
+            LIMIT 1
+            """,
+            (bot_id,),
+        ).fetchone()
+    return _decode_inbox(row, home=home) if row else None
+
+
+def _run_looks_mail_triggered(bot: str, *, home: Path | None) -> bool:
+    """True when this settle is answering inbound mail (no newer user bubble)."""
+    delivered = _last_delivered_inbox(bot, home=home)
+    if not delivered:
+        return False
+    after = delivered.get("delivered_at") or delivered.get("created_at") or ""
+    for msg in reversed(chat_svc.list_messages(bot, limit=40, home=home)):
+        created = msg.get("created_at") or ""
+        if after and created < after:
+            break
+        if msg.get("role") != "user":
+            continue
+        meta = dict(msg.get("meta") or {})
+        if meta.get("hidden_prompt") or meta.get("kind") == "botmail":
+            continue
+        return False
+    return True
+
+
+def _has_open_ask_between(
+    from_bot: str, to_bot: str, *, home: Path | None
+) -> bool:
+    from_id = bots_svc.bot_uuid(from_bot, home=home)
+    to_id = bots_svc.bot_uuid(to_bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            """
+            SELECT 1 FROM bot_asks
+            WHERE from_bot = ? AND to_bot = ? AND state = 'open'
+            LIMIT 1
+            """,
+            (from_id, to_id),
+        ).fetchone()
+    return bool(row)
+
+
+def _has_relay_from_since(
+    from_bot: str,
+    to_bot: str,
+    after_iso: str | None,
+    *,
+    home: Path | None,
+) -> bool:
+    """Avoid double-relaying the same orphan tell answer."""
+    for msg in reversed(chat_svc.list_messages(to_bot, limit=30, home=home)):
+        created = msg.get("created_at") or ""
+        if after_iso and created < after_iso:
+            continue
+        meta = dict(msg.get("meta") or {})
+        if meta.get("kind") != "botmail":
+            continue
+        if meta.get("mail_kind") != "ask_answered":
+            continue
+        if (meta.get("from_bot") or "").lower() != from_bot.lower():
+            continue
+        return True
+    return False
 
 
 def _complete_ask_if_needed(

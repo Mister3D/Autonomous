@@ -26,6 +26,13 @@ def _clear_rate_limits():
 
 
 @pytest.fixture()
+def pairing_on(home):
+    """Pairing is off unless a test turns it on."""
+    settings_svc.set_value("companions.enabled", True, home=home)
+    return home
+
+
+@pytest.fixture()
 def home(tmp_path):
     h = ensure_home(tmp_path / "data")
     migrate(h)
@@ -54,6 +61,19 @@ def client(app):
 def auth_client(client):
     r = client.post("/api/v1/auth/login", json={"password": "secret"})
     assert r.status_code == 200
+    # Creating a bot via API requires a model; inject a fixture default when omitted
+    # so existing tests keep working. Explicit "" / whitespace still rejected.
+    orig_post = client.post
+
+    def post(url, *args, **kwargs):
+        path = str(url or "").split("?", 1)[0].rstrip("/")
+        body = kwargs.get("json")
+        # Only the create-bot collection (not …/household/bots).
+        if path.rstrip("/").endswith("/api/v1/bots") and isinstance(body, dict) and "model" not in body:
+            kwargs = {**kwargs, "json": {**body, "model": "test/provider:fixture"}}
+        return orig_post(url, *args, **kwargs)
+
+    client.post = post  # type: ignore[method-assign]
     return client
 
 

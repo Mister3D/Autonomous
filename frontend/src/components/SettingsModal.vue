@@ -1,71 +1,40 @@
 <template>
   <div class="settings-page">
-    <header class="settings-page-head">
-      <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M15 6 9 12l6 6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <h1>{{ t("settings.title") }}</h1>
-    </header>
     <div class="settings-layout">
-      <nav class="settings-nav" :aria-label="t('settings.title')">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          type="button"
-          :class="{ active: section === tab.id }"
-          :aria-current="section === tab.id ? 'page' : undefined"
-          @click="openSection(tab.id)"
-        >
-          <svg v-if="tab.id === 'agent'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4.5" y="5" width="15" height="14" rx="2" />
-            <path d="M8 10.2 10.2 12 8 13.8M12.2 14.2h3.6" />
-          </svg>
-          <svg v-else-if="tab.id === 'vault'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="6" y="10.2" width="12" height="8.3" rx="1.6" />
-            <path d="M9 10.2V8.2a3 3 0 0 1 6 0v2" />
-          </svg>
-          <svg v-else-if="tab.id === 'llm'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-          </svg>
-          <svg v-else-if="tab.id === 'grounding'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="6" />
-            <path d="M12 3v5M12 16v5M3 12h5M16 12h5" />
-          </svg>
-          <svg v-else-if="tab.id === 'memory'" class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6.5 7h11M6.5 12h11M6.5 17h7" />
-          </svg>
-          <svg v-else class="settings-nav-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4" y="5" width="16" height="11" rx="1.8" />
-            <path d="M9 19.5h6M12 16v3.5" />
-          </svg>
-          <span>{{ t(tab.label) }}</span>
-        </button>
-      </nav>
-      <div class="settings-main">
+      <aside class="settings-side">
+        <header class="settings-side-head">
+          <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
+            <UiIcon name="chevron-left" />
+          </button>
+          <h1>{{ t("settings.title") }}</h1>
+        </header>
+        <nav class="settings-nav" :aria-label="t('settings.title')">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            type="button"
+            :class="{ active: section === tab.id }"
+            :aria-current="section === tab.id ? 'page' : undefined"
+            @click="openSection(tab.id)"
+          >
+            <UiIcon class="settings-nav-ico" :name="tab.icon" />
+            <span>{{ t(tab.label) }}</span>
+          </button>
+        </nav>
+      </aside>
+      <div class="settings-main" :class="{ 'settings-main-flush': section === 'tokens' }">
+      <TokenUsageChart v-if="section === 'tokens'" />
       <LlmSettings v-if="section === 'llm'" />
       <GroundingSettings v-if="section === 'grounding'" />
-      <section v-if="section === 'grounding'" class="settings-block">
-        <h3>{{ t("guard.limitsTitle") }}</h3>
-        <label class="settings-field">
-          <span>{{ t("guard.groundingLoops") }}</span>
-          <input
-            v-model.number="guard.groundingLoops"
-            type="number"
-            min="1"
-            max="8"
-            step="1"
-            @change="flushGuard"
-          />
-          <small>{{ t("guard.groundingLoopsHint") }}</small>
-        </label>
-        <p v-if="guardError" class="vault-error">{{ guardError }}</p>
-      </section>
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("lang.choose") }}</h3>
-        <p class="hint">{{ t("settings.languageHint") }}</p>
+
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('lang.choose')"
+        :hint="t('settings.languageHint')"
+      >
+        <template #icon>
+          <UiIcon name="lang" :size="18" />
+        </template>
         <div class="settings-field">
           <div
             class="lang-seg"
@@ -87,17 +56,16 @@
             </button>
           </div>
         </div>
-        <div class="info-row settings-version-row">
-          <span>
-            <strong>{{ t("pi.version") }}</strong>
-            <small>{{ loading ? "…" : status?.version || "—" }}</small>
-          </span>
-        </div>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("settings.timezone") }}</h3>
-        <p class="hint">{{ t("settings.timezoneHint") }}</p>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('settings.timezone')"
+        :hint="t('settings.timezoneHint')"
+      >
+        <template #icon>
+          <UiIcon name="clock" :size="18" />
+        </template>
         <div class="settings-field">
           <div class="settings-tz">
             <input
@@ -128,118 +96,247 @@
           </div>
         </div>
         <p v-if="tzError" class="vault-error">{{ tzError }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("update.channelTitle") }}</h3>
-        <p class="hint">{{ t("update.channelHint") }}</p>
-        <div class="settings-field">
-          <span>{{ t("update.remoteUrl") }}</span>
-          <input
-            v-model="updateRemoteDraft"
-            type="url"
-            :placeholder="t('update.remoteUrlPlaceholder')"
-            :disabled="updateChannelBusy || !updateGit"
-            autocomplete="off"
-            spellcheck="false"
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('settings.passwordTitle')"
+        :hint="t('settings.passwordHint')"
+      >
+        <template #icon>
+          <UiIcon name="key" :size="18" />
+        </template>
+        <label class="settings-field">
+          <span>{{ t("settings.passwordCurrent") }}</span>
+          <SecretInput
+            v-model="pwCurrent"
+            autocomplete="current-password"
+            :disabled="pwBusy"
+            required
           />
-          <small>{{ t("update.remoteUrlHint") }}</small>
-          <small v-if="updateRemoteSaved">{{ t("update.remoteUsingCustom") }}</small>
-          <small v-else-if="updateOriginUrl">
-            {{ t("update.remoteUsingOrigin", { url: updateOriginUrl }) }}
-          </small>
-          <button
-            class="btn"
-            type="button"
-            :disabled="updateChannelBusy || !updateGit || updateRemoteDraft.trim() === updateRemoteSaved"
-            @click="saveUpdateRemote"
+        </label>
+        <label class="settings-field">
+          <span>{{ t("settings.passwordNew") }}</span>
+          <SecretInput
+            v-model="pwNew"
+            autocomplete="new-password"
+            :disabled="pwBusy"
+            required
+          />
+          <small>{{ t("settings.passwordTooShort") }}</small>
+        </label>
+        <label class="settings-field">
+          <span>{{ t("settings.passwordConfirm") }}</span>
+          <SecretInput
+            v-model="pwConfirm"
+            autocomplete="new-password"
+            :disabled="pwBusy"
+            required
+          />
+        </label>
+        <div class="setup-toolbar">
+          <UiButton
+            variant="primary"
+            :disabled="pwBusy || !pwCanSubmit"
+            @click="submitPasswordChange"
           >
-            {{ t("update.remoteUrlSave") }}
-          </button>
+            {{ pwBusy ? t("settings.passwordBusy") : t("settings.passwordSubmit") }}
+          </UiButton>
+          <span v-if="pwOk" class="setup-ok">{{ pwOk }}</span>
+          <span v-if="pwError" class="vault-error">{{ pwError }}</span>
         </div>
-        <div class="settings-field">
-          <span>{{ t("update.channel") }}</span>
-          <div
-            class="update-channel-seg update-channel-seg-3"
-            role="radiogroup"
-            :aria-label="t('update.channel')"
-            :aria-disabled="updateChannelBusy || !updateGit ? 'true' : undefined"
-          >
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('settings.deleteAllBots')"
+        :hint="t('settings.deleteAllBotsHint')"
+      >
+        <template #icon>
+          <UiIcon name="trash" :size="18" />
+        </template>
+        <div class="action-list settings-danger-actions">
+          <div class="action-row">
             <button
+              class="danger"
               type="button"
-              role="radio"
-              class="update-channel-opt"
-              :class="{ active: updatePreset === 'main' }"
-              :aria-checked="updatePreset === 'main'"
-              :disabled="updateChannelBusy || !updateGit"
-              @click="pickUpdateChannel('main')"
+              :disabled="deleteAllBusy || !state.bots.length"
+              @click="toggleDeleteAll"
             >
-              <strong>{{ t("update.channelMain") }}</strong>
-              <small>{{ t("update.channelMainHint") }}</small>
+              {{
+                deleteAllBusy
+                  ? t("settings.deletingAllBots")
+                  : t("settings.deleteAllBots")
+              }}
             </button>
-            <button
-              type="button"
-              role="radio"
-              class="update-channel-opt"
-              :class="{ active: updatePreset === 'dev' }"
-              :aria-checked="updatePreset === 'dev'"
-              :disabled="updateChannelBusy || !updateGit"
-              @click="pickUpdateChannel('dev')"
+            <span
+              v-if="deleteAllArmed"
+              class="action-confirm-wrap"
+              @pointerenter="deleteAllTip = true"
+              @pointerleave="deleteAllTip = false"
+              @focusin="deleteAllTip = true"
+              @focusout="deleteAllTip = false"
             >
-              <strong>{{ t("update.channelDev") }}</strong>
-              <small>{{ t("update.channelDevHint") }}</small>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              class="update-channel-opt"
-              :class="{ active: updatePreset === 'custom' }"
-              :aria-checked="updatePreset === 'custom'"
-              :disabled="updateChannelBusy || !updateGit"
-              @click="pickUpdateChannel('custom')"
-            >
-              <strong>{{ t("update.channelCustom") }}</strong>
-              <small>{{ t("update.channelCustomHint") }}</small>
-            </button>
+              <button
+                class="action-confirm"
+                type="button"
+                :disabled="deleteAllBusy || !state.bots.length"
+                :aria-label="t('confirm.confirmAction')"
+                @click="deleteAllBots"
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                  <path
+                    d="M3.2 8.2 6.4 11.4 12.8 4.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <span v-if="deleteAllTip" class="action-confirm-tip" role="tooltip">{{
+                t("confirm.confirmAction")
+              }}</span>
+            </span>
           </div>
-          <div v-if="updatePreset === 'custom'" class="update-custom-branch">
-            <label>
-              <span>{{ t("update.customBranch") }}</span>
+        </div>
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('update.channelTitle')"
+        :hint="t('update.channelHint')"
+      >
+        <template #icon>
+          <UiIcon name="update" :size="18" />
+        </template>
+        <div class="update-panel">
+          <div class="settings-field">
+            <span>{{ t("update.remoteUrl") }}</span>
+            <div class="settings-field-row">
+              <input
+                v-model="updateRemoteDraft"
+                type="url"
+                :placeholder="t('update.remoteUrlPlaceholder')"
+                :disabled="updateChannelBusy || !updateGit"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button
+                class="btn"
+                type="button"
+                :disabled="updateChannelBusy || !updateGit || updateRemoteDraft.trim() === updateRemoteSaved"
+                @click="saveUpdateRemote"
+              >
+                {{ t("update.remoteUrlSave") }}
+              </button>
+            </div>
+            <small>{{ t("update.remoteUrlHint") }}</small>
+          </div>
+          <div class="settings-field">
+            <span>{{ t("update.channel") }}</span>
+            <div
+              class="update-channel-seg update-channel-seg-3"
+              role="radiogroup"
+              :aria-label="t('update.channel')"
+              :aria-disabled="updateChannelBusy || !updateGit ? 'true' : undefined"
+            >
+              <button
+                type="button"
+                role="radio"
+                class="update-channel-opt"
+                :class="{ active: updatePreset === 'main' }"
+                :aria-checked="updatePreset === 'main'"
+                :disabled="updateChannelBusy || !updateGit"
+                @click="pickUpdateChannel('main')"
+              >
+                <strong>{{ t("update.channelMain") }}</strong>
+                <small>{{ t("update.channelMainHint") }}</small>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                class="update-channel-opt"
+                :class="{ active: updatePreset === 'dev' }"
+                :aria-checked="updatePreset === 'dev'"
+                :disabled="updateChannelBusy || !updateGit"
+                @click="pickUpdateChannel('dev')"
+              >
+                <strong>{{ t("update.channelDev") }}</strong>
+                <small>{{ t("update.channelDevHint") }}</small>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                class="update-channel-opt"
+                :class="{ active: updatePreset === 'custom' }"
+                :aria-checked="updatePreset === 'custom'"
+                :disabled="updateChannelBusy || !updateGit"
+                @click="pickUpdateChannel('custom')"
+              >
+                <strong>{{ t("update.channelCustom") }}</strong>
+                <small>{{ t("update.channelCustomHint") }}</small>
+              </button>
+            </div>
+            <div v-if="updatePreset === 'custom'" class="settings-field-row update-custom-branch">
               <input
                 v-model="updateCustomBranch"
                 type="text"
                 :placeholder="t('update.customBranchPlaceholder')"
                 :disabled="updateChannelBusy || !updateGit"
+                :aria-label="t('update.customBranch')"
                 autocomplete="off"
                 spellcheck="false"
                 @keydown.enter.prevent="saveCustomBranch"
               />
-            </label>
+              <button
+                class="btn primary"
+                type="button"
+                :disabled="
+                  updateChannelBusy ||
+                  !updateGit ||
+                  !updateCustomBranch.trim() ||
+                  updateCustomBranch.trim() === updateChannelSaved
+                "
+                @click="saveCustomBranch"
+              >
+                {{ t("update.customBranchSave") }}
+              </button>
+            </div>
+            <small>{{ t("update.channelHelp") }}</small>
+          </div>
+          <div class="settings-field">
             <button
               class="btn"
               type="button"
-              :disabled="
-                updateChannelBusy ||
-                !updateGit ||
-                !updateCustomBranch.trim() ||
-                updateCustomBranch.trim() === updateChannelSaved
-              "
-              @click="saveCustomBranch"
+              :disabled="updateChannelBusy || updateForcing || !updateGit"
+              @click="forceUpdate"
             >
-              {{ t("update.customBranchSave") }}
+              {{ updateForcing ? t("update.applying") : t("update.forceApply") }}
             </button>
+            <small>{{ t("update.forceHint") }}</small>
           </div>
-          <small>{{ t("update.channelHelp") }}</small>
         </div>
+        <pre v-if="updateForceLog.length" class="setup-log">{{ updateForceLog.join("\n") }}</pre>
         <p v-if="!updateGit" class="hint">{{ t("update.noGit") }}</p>
         <p v-if="updateChannelError" class="vault-error">{{ updateChannelError }}</p>
-      </section>
+        <p v-if="updateForceError" class="vault-error">{{ updateForceError }}</p>
+      </UiCard>
 
-      <section v-if="section === 'agent'" class="settings-block">
-        <h3>{{ t("guard.title") }}</h3>
-        <p class="hint">{{ t("guard.hint") }}</p>
-        <label class="settings-field">
-          <span>{{ t("guard.reviewEvery") }}</span>
+      <UiCard
+        v-if="section === 'agent'"
+        :title="t('guard.title')"
+        :hint="t('guard.hint')"
+      >
+        <template #icon>
+          <UiIcon name="crosshair" :size="18" />
+        </template>
+        <label class="settings-field settings-inline">
+          <span class="settings-inline-copy">
+            <span>{{ t("guard.reviewEvery") }}</span>
+            <small>{{ t("guard.reviewEveryHint") }}</small>
+          </span>
           <input
             v-model.number="guard.reviewEvery"
             type="number"
@@ -248,10 +345,12 @@
             step="1"
             @change="flushGuard"
           />
-          <small>{{ t("guard.reviewEveryHint") }}</small>
         </label>
-        <label class="settings-field">
-          <span>{{ t("guard.maxActions") }}</span>
+        <label class="settings-field settings-inline">
+          <span class="settings-inline-copy">
+            <span>{{ t("guard.maxActions") }}</span>
+            <small>{{ t("guard.maxActionsHint") }}</small>
+          </span>
           <input
             v-model.number="guard.maxActions"
             type="number"
@@ -260,14 +359,18 @@
             step="1"
             @change="flushGuard"
           />
-          <small>{{ t("guard.maxActionsHint") }}</small>
         </label>
         <p v-if="guardError" class="vault-error">{{ guardError }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'vault'" class="settings-block">
-        <h3>{{ t("vault.title") }}</h3>
-        <p class="hint">{{ t("vault.settingsHint") }}</p>
+      <UiCard
+        v-if="section === 'vault'"
+        :title="t('settings.tabVault')"
+        :hint="t('vault.settingsHint')"
+      >
+        <template #icon>
+          <UiIcon name="vault" :size="18" />
+        </template>
         <p v-if="vaultError" class="vault-error">{{ vaultError }}</p>
         <ul v-if="entries.length" class="settings-list">
           <li v-for="e in entries" :key="e.id">
@@ -275,27 +378,62 @@
               <strong>{{ e.label }}</strong>
               <small>{{ e.kind }}<template v-if="e.origin"> · {{ e.origin }}</template></small>
             </div>
-            <button
-              class="vault-trash"
-              type="button"
-              :title="t('vault.delete')"
-              :aria-label="t('vault.delete')"
-              @click="removeEntry(e)"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path d="M5 7.5h14" />
-                <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-                <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-              </svg>
-            </button>
+            <span class="vault-row-ops">
+              <span
+                v-if="armedVault === e.id"
+                class="action-confirm-wrap"
+                @pointerenter="vaultTip = e.id"
+                @pointerleave="vaultTip = ''"
+                @focusin="vaultTip = e.id"
+                @focusout="vaultTip = ''"
+              >
+                <button
+                  class="action-confirm"
+                  type="button"
+                  :aria-label="t('confirm.confirmAction')"
+                  @click="removeEntry(e)"
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                    <path
+                      d="M3.2 8.2 6.4 11.4 12.8 4.6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+                <span v-if="vaultTip === e.id" class="action-confirm-tip" role="tooltip">{{
+                  t("confirm.confirmAction")
+                }}</span>
+              </span>
+              <button
+                class="vault-trash"
+                type="button"
+                :aria-label="t('vault.delete')"
+                @click="armVault(e)"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path d="M5 7.5h14" />
+                  <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+                  <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
+                </svg>
+              </button>
+            </span>
           </li>
         </ul>
         <p v-else class="hint">{{ t("vault.empty") }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'memory'" class="settings-block">
-        <h3>{{ t("memory.title") }}</h3>
-        <p class="hint">{{ t("memory.settingsHint") }}</p>
+      <UiCard
+        v-if="section === 'memory'"
+        :title="t('settings.tabMemory')"
+        :hint="t('memory.settingsHint')"
+      >
+        <template #icon>
+          <UiIcon name="memory" :size="18" />
+        </template>
         <p v-if="memError" class="vault-error">{{ memError }}</p>
         <ul v-if="memEntries.length" class="settings-list">
           <li v-for="e in memEntries" :key="e.id">
@@ -323,13 +461,26 @@
           </li>
         </ul>
         <p v-else class="hint">{{ t("memory.empty") }}</p>
-      </section>
+      </UiCard>
 
-      <section v-if="section === 'companions'" class="settings-block">
-        <h3>{{ t("companion.title") }}</h3>
+      <UiCard
+        v-if="section === 'companions'"
+        :title="t('settings.tabCompanions')"
+        :hint="t('companion.hint')"
+      >
+        <template #icon>
+          <UiIcon name="monitor" :size="18" />
+        </template>
         <p v-if="needCompanion" class="companion-need">{{ t("companion.needOne") }}</p>
-        <p class="hint justified">{{ t("companion.hint") }}</p>
-        <p class="hint justified companion-responsibility">{{ t("companion.responsibility") }}</p>
+        <div class="companion-instance">
+          <div>
+            <span class="companion-instance-label">{{ t("companion.instanceLabel") }}</span>
+            <code class="companion-instance-url">{{ instanceUrl }}</code>
+          </div>
+          <button class="btn" type="button" @click="copyInstanceUrl">
+            {{ instanceCopied ? t("companion.copied") : t("companion.copy") }}
+          </button>
+        </div>
         <label class="settings-field companion-pairing-toggle">
           <span class="settings-notify">
             <span>{{ t("companion.pairingEnabled") }}</span>
@@ -403,58 +554,135 @@
           <p v-if="notifyNote" class="hint">{{ notifyNote }}</p>
         </div>
         <p v-else-if="devicesReady && !devicePending.length" class="hint">{{ t("companion.empty") }}</p>
-        <div class="companion-download">
-          <h4>{{ t("companion.downloadTitle") }}</h4>
-          <p class="hint justified">{{ t("companion.downloadHint") }}</p>
-          <p v-if="buildError" class="vault-error">{{ buildError }}</p>
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'companions'"
+        class="companion-download"
+        :title="t('companion.downloadTitle')"
+        :hint="t('companion.downloadHint')"
+      >
+        <template #icon>
+          <UiIcon name="harddrive" :size="18" />
+        </template>
+        <p v-if="buildError" class="vault-error">{{ buildError }}</p>
           <template v-if="companionBuild">
             <p class="hint">
               {{ t("companion.version") }} {{ companionBuild.version || "?" }} ·
               {{ t("companion.buildStatus") }} {{ t("companion.state_" + companionBuild.state) }}
             </p>
-            <ul v-if="companionBuild.artifacts.length" class="settings-list">
-              <li v-for="a in companionBuild.artifacts" :key="a.target">
-                <span>
-                  <strong>{{ platformLabel(a.platform) }}</strong>
-                  <small> · {{ a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
-                </span>
-                <a class="btn" :href="a.url" download>{{ t("companion.download") }}</a>
+            <p class="hint">{{ t("companion.autostartHint") }}</p>
+            <p class="hint">{{ t("companion.autoUpdateHint") }}</p>
+            <ul class="settings-list">
+              <li
+                v-for="(a, idx) in companionBuild.artifacts"
+                :key="a.target"
+                :class="{ 'companion-artifact-with-log': logUnderArtifact(idx) }"
+              >
+                <div class="companion-artifact-row">
+                  <span>
+                    <strong>{{ platformLabel(a.platform) }}</strong>
+                    <small> · {{ a.download_name || a.target }} · {{ (a.size / 1048576).toFixed(1) }} MB</small>
+                  </span>
+                  <a class="btn" :href="a.url" :download="a.download_name || ''">{{ t("companion.download") }}</a>
+                </div>
+                <div v-if="logUnderArtifact(idx)" class="companion-build-panel">
+                  <p v-for="n in companionNotes" :key="n" class="hint">{{ n }}</p>
+                  <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
+                  <pre
+                    ref="companionLogEl"
+                    class="setup-log companion-build-log"
+                  >{{ companionBuild.log.join("\n") }}</pre>
+                </div>
+              </li>
+              <li v-if="sharedBuildLog" class="companion-log-row">
+                <div class="companion-build-panel">
+                  <p v-for="n in companionNotes" :key="n" class="hint">{{ n }}</p>
+                  <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
+                  <pre
+                    ref="companionLogEl"
+                    class="setup-log companion-build-log"
+                  >{{ companionBuild.log.join("\n") }}</pre>
+                </div>
+              </li>
+            </ul>
+            <div v-if="companionBuild.toolchain" class="companion-rebuild">
+              <button
+                class="btn"
+                type="button"
+                :disabled="companionBuild.state === 'building'"
+                @click="rebuildCompanion"
+              >
+                {{ companionBuild.state === "building" ? t("setup.running") : t("companion.rebuild") }}
+              </button>
+            </div>
+            <ul class="settings-list companion-macos-list">
+              <li class="companion-macos-row">
+                <div class="companion-macos-top">
+                  <span>
+                    <strong>macOS</strong>
+                    <small> · {{ t("companion.macosMeta") }}</small>
+                  </span>
+                </div>
+                <p class="hint">{{ t("companion.macosHint") }}</p>
+                <pre class="companion-cmd">{{ t("companion.macosBuild") }}</pre>
               </li>
             </ul>
             <template v-if="companionBuild.state === 'no_toolchain'">
               <p class="hint justified">{{ t("companion.noToolchain") }}</p>
               <pre class="companion-cmd">{{ companionBuild.rustup_hint }}</pre>
             </template>
-            <p v-for="n in companionBuild.notes" :key="n" class="hint">{{ n }}</p>
-            <p v-if="companionBuild.error" class="vault-error">{{ companionBuild.error }}</p>
-            <button
-              v-if="companionBuild.toolchain"
-              class="btn"
-              type="button"
-              :disabled="companionBuild.state === 'building'"
-              @click="rebuildCompanion"
-            >
-              {{ t("companion.rebuild") }}
-            </button>
           </template>
-        </div>
-      </section>
+      </UiCard>
+
+      <UiCard
+        v-if="section === 'companions'"
+        :title="t('companion.mcpTitle')"
+        :hint="t('companion.mcpHint')"
+      >
+        <template #icon>
+          <UiIcon name="puzzle" :size="18" />
+        </template>
+        <ul class="settings-list">
+          <li v-for="item in starterMcps" :key="item.id" :class="{ 'has-steps': item.steps }">
+            <div class="companion-mcp-main">
+              <div>
+                <strong>{{ item.name }}</strong>
+                <small>{{ t(item.blurb) }}</small>
+              </div>
+              <a class="btn" :href="item.url" target="_blank" rel="noopener noreferrer">
+                {{ t("companion.mcpOpen") }}
+              </a>
+            </div>
+            <div v-if="item.steps" class="companion-mcp-steps">
+              <p class="hint">{{ t(item.steps) }}</p>
+              <pre class="companion-cmd">{{ t(item.fields) }}</pre>
+            </div>
+          </li>
+        </ul>
+      </UiCard>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../api";
+import { forgetUpdateStatus } from "../updateStatusCache";
 import { setLocale } from "../i18n";
 import { botPath } from "../router";
 import { currentBotObj, state } from "../store";
 import GroundingSettings from "./GroundingSettings.vue";
 import LlmSettings from "./LlmSettings.vue";
 import LocaleFlag from "./LocaleFlag.vue";
+import SecretInput from "./SecretInput.vue";
+import TokenUsageChart from "./TokenUsageChart.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiCard from "./ui/UiCard.vue";
+import UiIcon from "./ui/UiIcon.vue";
 
 function platformLabel(raw) {
   const key = String(raw || "").trim().toLowerCase();
@@ -465,15 +693,16 @@ function platformLabel(raw) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-const SECTIONS = ["agent", "llm", "grounding", "vault", "memory", "companions"];
+const SECTIONS = ["agent", "llm", "grounding", "tokens", "vault", "memory", "companions"];
 const DEFAULT_TZ = "Europe/Paris";
 const tabs = [
-  { id: "agent", label: "settings.tabAgent" },
-  { id: "llm", label: "settings.tabLlm" },
-  { id: "grounding", label: "settings.tabGrounding" },
-  { id: "vault", label: "vault.title" },
-  { id: "memory", label: "memory.title" },
-  { id: "companions", label: "companion.title" },
+  { id: "agent", label: "settings.tabAgent", icon: "terminal" },
+  { id: "llm", label: "settings.tabLlm", icon: "spark" },
+  { id: "grounding", label: "settings.tabGrounding", icon: "crosshair" },
+  { id: "tokens", label: "settings.tabTokens", icon: "chart" },
+  { id: "vault", label: "settings.tabVault", icon: "vault" },
+  { id: "memory", label: "settings.tabMemory", icon: "memory" },
+  { id: "companions", label: "settings.tabCompanions", icon: "monitor" },
 ];
 
 const { t, locale } = useI18n();
@@ -515,10 +744,10 @@ watch(
   },
   { immediate: true },
 );
-const status = ref(null);
-const loading = ref(true);
 const entries = ref([]);
 const vaultError = ref("");
+const armedVault = ref("");
+const vaultTip = ref("");
 const devicePending = ref([]);
 const deviceRows = ref([]);
 const deviceError = ref("");
@@ -543,7 +772,20 @@ const tzOpen = ref(false);
 const tzActive = ref(0);
 const tzDirty = ref(false);
 const tzError = ref("");
+const pwCurrent = ref("");
+const pwNew = ref("");
+const pwConfirm = ref("");
+const pwBusy = ref(false);
+const pwError = ref("");
+const pwOk = ref("");
+const deleteAllArmed = ref(false);
+const deleteAllTip = ref(false);
+const deleteAllBusy = ref(false);
 const updateChannel = ref("main");
+const updateForcing = ref(false);
+const updateForceError = ref("");
+const updateForceLog = ref([]);
+let updateForceJobId = "";
 const updateChannelBusy = ref(false);
 const updateChannelError = ref("");
 const updateGit = ref(true);
@@ -551,13 +793,80 @@ const updateCustomBranch = ref("");
 const updateRemoteDraft = ref("");
 const updateRemoteSaved = ref("");
 const updateOriginUrl = ref("");
+const updateChoice = ref("");
 let updateChannelSaved = "main";
 
 const updatePreset = computed(() => {
+  if (updateChoice.value === "custom") return "custom";
   const ch = updateChannel.value;
   if (ch === "main" || ch === "dev") return ch;
-  return "custom";
+  if (ch) return "custom";
+  return updateChoice.value || "main";
 });
+
+const pwCanSubmit = computed(
+  () =>
+    !!pwCurrent.value &&
+    pwNew.value.length >= 8 &&
+    pwNew.value === pwConfirm.value &&
+    pwNew.value !== pwCurrent.value,
+);
+
+async function submitPasswordChange() {
+  pwError.value = "";
+  pwOk.value = "";
+  if (pwNew.value !== pwConfirm.value) {
+    pwError.value = t("settings.passwordMismatch");
+    return;
+  }
+  if (pwNew.value.length < 8) {
+    pwError.value = t("settings.passwordTooShort");
+    return;
+  }
+  pwBusy.value = true;
+  try {
+    await api.changePassword(pwCurrent.value, pwNew.value);
+    pwCurrent.value = "";
+    pwNew.value = "";
+    pwConfirm.value = "";
+    pwOk.value = t("settings.passwordOk");
+  } catch (e) {
+    pwError.value = e.message || t("login.changeError");
+  } finally {
+    pwBusy.value = false;
+  }
+}
+
+function toggleDeleteAll() {
+  if (deleteAllBusy.value || !state.bots.length) return;
+  deleteAllArmed.value = !deleteAllArmed.value;
+  deleteAllTip.value = false;
+}
+
+async function deleteAllBots() {
+  if (deleteAllBusy.value || !deleteAllArmed.value) return;
+  const names = state.bots.map((b) => b.name);
+  if (!names.length) {
+    deleteAllArmed.value = false;
+    return;
+  }
+  deleteAllBusy.value = true;
+  try {
+    for (const name of names) {
+      await api.deleteBot(name);
+      delete state.messages[name];
+      delete state.threadPages[name];
+      delete state.previews[name];
+    }
+    state.currentBot = null;
+    deleteAllArmed.value = false;
+    router.replace("/");
+  } catch (e) {
+    alert(e.message || String(e));
+  } finally {
+    deleteAllBusy.value = false;
+  }
+}
 
 function tzScore(zone, q) {
   const full = zone.toLowerCase();
@@ -730,10 +1039,17 @@ async function loadVault() {
   entries.value = await api.vaultEntries();
 }
 
+function armVault(e) {
+  armedVault.value = armedVault.value === e.id ? "" : e.id;
+  vaultTip.value = "";
+}
+
 async function removeEntry(e) {
-  if (!confirm(t("vault.confirmDelete", { label: e.label }))) return;
+  if (armedVault.value !== e.id) return;
   try {
     await api.deleteVaultEntry(e.id);
+    armedVault.value = "";
+    vaultTip.value = "";
     await loadVault();
   } catch (err) {
     vaultError.value = err.message;
@@ -755,16 +1071,87 @@ async function removeMemory(e) {
 }
 
 const companionBuild = ref(null);
+const companionLogEl = ref(null);
 const buildError = ref("");
-const companionsEnabled = ref(true);
+const companionsEnabled = ref(false);
+const instanceCopied = ref(false);
+const instanceUrl = computed(() => String(window.location.origin || "").replace(/\/+$/, ""));
+const starterMcps = [
+  {
+    id: "windows",
+    name: "Windows-MCP",
+    url: "https://github.com/CursorTouch/Windows-MCP",
+    blurb: "companion.mcpWindows",
+    steps: "companion.mcpWindowsSteps",
+    fields: "companion.mcpWindowsFields",
+  },
+  {
+    id: "filesystem",
+    name: "Filesystem",
+    url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+    blurb: "companion.mcpFilesystem",
+  },
+  {
+    id: "git",
+    name: "Git",
+    url: "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+    blurb: "companion.mcpGit",
+  },
+  {
+    id: "playwright",
+    name: "Playwright",
+    url: "https://github.com/microsoft/playwright-mcp",
+    blurb: "companion.mcpPlaywright",
+  },
+];
+let instanceCopyTimer = 0;
+const companionNotes = computed(() =>
+  (companionBuild.value?.notes || []).filter((n) => !/^macOS is not built/i.test(String(n || ""))),
+);
+const hasBuildLog = computed(() => (companionBuild.value?.log || []).length > 0);
+/** Log partagé après Linux+Windows (ou pendant un build sans artefact encore). */
+const sharedBuildLog = computed(() => hasBuildLog.value && (companionBuild.value?.artifacts || []).length !== 1);
+function logUnderArtifact(idx) {
+  if (!hasBuildLog.value || sharedBuildLog.value) return false;
+  return idx === (companionBuild.value?.artifacts || []).length - 1;
+}
+let companionBuildTimer = 0;
+
+watch(
+  () => companionBuild.value?.log?.length,
+  async () => {
+    await nextTick();
+    if (companionLogEl.value) companionLogEl.value.scrollTop = companionLogEl.value.scrollHeight;
+  },
+);
 
 async function loadCompanionsEnabled() {
   try {
     const s = await api.settings();
-    companionsEnabled.value = s["companions.enabled"] !== false;
+    companionsEnabled.value = s["companions.enabled"] === true;
   } catch {
-    companionsEnabled.value = true;
+    companionsEnabled.value = false;
   }
+}
+
+async function copyInstanceUrl() {
+  const text = instanceUrl.value;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  instanceCopied.value = true;
+  if (instanceCopyTimer) clearTimeout(instanceCopyTimer);
+  instanceCopyTimer = window.setTimeout(() => {
+    instanceCopied.value = false;
+  }, 1600);
 }
 
 async function flushCompanionsEnabled() {
@@ -777,6 +1164,18 @@ async function flushCompanionsEnabled() {
   }
 }
 
+function scheduleCompanionBuildPoll() {
+  clearTimeout(companionBuildTimer);
+  const building = companionBuild.value?.state === "building";
+  if (section.value !== "companions" && !building) return;
+  companionBuildTimer = window.setTimeout(async () => {
+    if (section.value === "companions" || companionBuild.value?.state === "building") {
+      await loadCompanionBuild();
+    }
+    scheduleCompanionBuildPoll();
+  }, building ? 1200 : 4000);
+}
+
 async function loadCompanionBuild() {
   try {
     companionBuild.value = await api.companionBuild();
@@ -787,8 +1186,10 @@ async function loadCompanionBuild() {
 }
 
 async function rebuildCompanion() {
+  buildError.value = "";
   try {
     companionBuild.value = await api.rebuildCompanion();
+    scheduleCompanionBuildPoll();
   } catch (e) {
     buildError.value = e.message;
   }
@@ -864,6 +1265,89 @@ async function revokeDevice(row) {
   }
 }
 
+function updateNetworkDrop(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return (
+    err?.name === "TypeError" ||
+    msg.includes("networkerror") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("load failed") ||
+    msg.includes("network request failed")
+  );
+}
+
+function reloadAfterForcedUpdate() {
+  forgetUpdateStatus();
+  updateForceError.value = "";
+  updateForcing.value = true;
+  const note = t("update.restarting");
+  if (!updateForceLog.value.includes(note)) {
+    updateForceLog.value = [...updateForceLog.value, note];
+  }
+  const started = Date.now();
+  const tick = async () => {
+    if (Date.now() - started > 90000) {
+      window.location.reload();
+      return;
+    }
+    try {
+      const res = await fetch("/api/v1/health", { credentials: "include", cache: "no-store" });
+      if (res.ok || res.status === 401 || res.status === 403) {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      /* still restarting */
+    }
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 2000);
+}
+
+async function pollForcedUpdate() {
+  if (!updateForceJobId) return;
+  try {
+    const job = await api.getJob(updateForceJobId);
+    updateForceLog.value = job.log || [];
+    if (job.state === "pending" || job.state === "running") {
+      setTimeout(pollForcedUpdate, 1200);
+      return;
+    }
+    if (job.state === "failed") {
+      updateForcing.value = false;
+      updateForceError.value = job.error || t("update.failed");
+      return;
+    }
+    reloadAfterForcedUpdate();
+  } catch (e) {
+    if (updateForcing.value || updateNetworkDrop(e)) {
+      reloadAfterForcedUpdate();
+      return;
+    }
+    setTimeout(pollForcedUpdate, 2000);
+  }
+}
+
+async function forceUpdate() {
+  if (updateForcing.value || updateChannelBusy.value || !updateGit.value) return;
+  updateForceError.value = "";
+  updateForceLog.value = [];
+  updateForcing.value = true;
+  try {
+    const job = await api.applyUpdate(true);
+    updateForceJobId = job.id;
+    updateForceLog.value = job.log || [];
+    pollForcedUpdate();
+  } catch (e) {
+    if (updateNetworkDrop(e)) {
+      reloadAfterForcedUpdate();
+      return;
+    }
+    updateForceError.value = e.message || String(e);
+    updateForcing.value = false;
+  }
+}
+
 async function loadUpdateChannel() {
   updateChannelError.value = "";
   try {
@@ -871,6 +1355,7 @@ async function loadUpdateChannel() {
     const ch = String(st.channel || "main").trim() || "main";
     updateChannel.value = ch;
     updateChannelSaved = ch;
+    updateChoice.value = "";
     updateCustomBranch.value = ch === "main" || ch === "dev" ? "" : ch;
     updateRemoteSaved.value = String(st.remote_url || "").trim();
     updateRemoteDraft.value = updateRemoteSaved.value;
@@ -900,13 +1385,22 @@ async function applyUpdateBranch(want) {
       channel: branch,
       confirm_dev: branch !== "main",
     });
+    forgetUpdateStatus();
     updateChannelSaved = branch;
+    updateChoice.value = "";
     if (branch !== "main" && branch !== "dev") {
       updateCustomBranch.value = branch;
     }
   } catch (e) {
-    updateChannelError.value = e.message || String(e);
+    const msg = e.message || String(e);
+    updateChannelError.value = /not available on /i.test(msg)
+      ? t("update.unknownBranch", { branch })
+      : msg;
     updateChannel.value = updateChannelSaved;
+    if (branch !== "main" && branch !== "dev") {
+      updateChoice.value = "custom";
+      updateCustomBranch.value = branch;
+    }
   } finally {
     updateChannelBusy.value = false;
   }
@@ -914,16 +1408,17 @@ async function applyUpdateBranch(want) {
 
 async function pickUpdateChannel(next) {
   if (next === "custom") {
-    updateChannel.value =
-      updateCustomBranch.value.trim() ||
-      (updateChannelSaved !== "main" && updateChannelSaved !== "dev"
-        ? updateChannelSaved
-        : "");
-    if (!updateCustomBranch.value.trim() && updateChannel.value) {
-      updateCustomBranch.value = updateChannel.value;
+    updateChoice.value = "custom";
+    if (
+      !updateCustomBranch.value.trim() &&
+      updateChannelSaved !== "main" &&
+      updateChannelSaved !== "dev"
+    ) {
+      updateCustomBranch.value = updateChannelSaved;
     }
     return;
   }
+  updateChoice.value = "";
   await applyUpdateBranch(next === "dev" ? "dev" : "main");
 }
 
@@ -939,6 +1434,7 @@ async function saveUpdateRemote() {
   updateChannelBusy.value = true;
   try {
     const st = await api.setUpdateChannel({ remote_url: next });
+    forgetUpdateStatus();
     updateRemoteSaved.value = String(st.remote_url || "").trim();
     updateRemoteDraft.value = updateRemoteSaved.value;
     updateOriginUrl.value = String(st.origin_url || updateOriginUrl.value || "").trim();
@@ -951,6 +1447,7 @@ async function saveUpdateRemote() {
 
 onUnmounted(() => {
   window.clearTimeout(guardTimer);
+  window.clearTimeout(companionBuildTimer);
   window.clearInterval(deviceTimer);
 });
 
@@ -961,13 +1458,6 @@ onMounted(async () => {
   loadUpdateChannel().catch((e) => {
     updateChannelError.value = e.message;
   });
-  try {
-    status.value = await api.piStatus();
-  } catch (e) {
-    status.value = { ready: false, reason: "error", doc_url: "https://pi.dev/docs/latest/models" };
-  } finally {
-    loading.value = false;
-  }
   try {
     await loadGuard();
   } catch (e) {
@@ -989,14 +1479,21 @@ onMounted(async () => {
     deviceError.value = e.message;
   }
   loadCompanionsEnabled().catch(() => {});
-  loadCompanionBuild();
+  await loadCompanionBuild();
+  scheduleCompanionBuildPoll();
   deviceTimer = window.setInterval(() => {
     loadDevices().catch((e) => {
       deviceError.value = e.message;
     });
-    if (section.value === "companions" && companionBuild.value?.state === "building") {
-      loadCompanionBuild();
-    }
   }, 3000);
 });
+
+watch(
+  () => section.value,
+  (id) => {
+    if (id === "companions") {
+      loadCompanionBuild().then(() => scheduleCompanionBuildPoll());
+    }
+  },
+);
 </script>
