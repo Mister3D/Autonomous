@@ -78,6 +78,7 @@ class BotSchema(Schema):
     internet = fields.Bool()
     auto_sleep = fields.Bool()
     memory_access = fields.Bool()
+    thinking = fields.Str()
     is_manager = fields.Bool()
     desk_last_active_at = fields.Str(allow_none=True)
     status = fields.Str(validate=validate.OneOf(BOT_STATUSES))
@@ -152,6 +153,15 @@ class BotPatchSchema(Schema):
         metadata={
             "description": "Shared memory access (core prompt + browse tools). Default true."
         }
+    )
+    thinking = fields.Raw(
+        metadata={
+            "description": (
+                "Pi thinking level: off, minimal, low, medium, high, xhigh, max "
+                "(legacy bool still accepted). Default medium. Applies on the "
+                "next provider request — no session restart and no prefix-cache flush."
+            )
+        },
     )
     is_manager = fields.Bool(
         metadata={

@@ -99,6 +99,26 @@ def test_invalid_name(auth_client):
     assert r.status_code in (400, 422)
 
 
+def test_patch_thinking_level(auth_client):
+    r = auth_client.post("/api/v1/bots", json={"name": "Think Bot"})
+    assert r.status_code == 201
+    name = r.json["name"]
+    assert r.json.get("thinking") == "medium"
+    off = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": "off"})
+    assert off.status_code == 200
+    assert off.json.get("thinking") == "off"
+    high = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": "high"})
+    assert high.status_code == 200
+    assert high.json.get("thinking") == "high"
+    # Legacy bool still accepted
+    legacy = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": False})
+    assert legacy.status_code == 200
+    assert legacy.json.get("thinking") == "off"
+    bad = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": "ultra"})
+    assert bad.status_code in (400, 422)
+    auth_client.delete(f"/api/v1/bots/{name}")
+
+
 def test_bearer_auth(client, bearer_headers):
     r = client.post(
         "/api/v1/bots",

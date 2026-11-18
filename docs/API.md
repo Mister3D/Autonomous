@@ -42,7 +42,7 @@ POST   /bots                        # free-form {name} (spaces/CAPS OK) → labe
 GET    /bots/token-usage            # daily cumulative token series per living bot (Settings chart)
 GET    /bots/:name                  # :name = technical slug
 GET    /bots/:name/package          # disk footprint (VM layer + ~/files + chat + Pi)
-PATCH  /bots/:name                  # incl. companion_id, companion_egress, companion_killswitch
+PATCH  /bots/:name                  # incl. thinking, companion_id, companion_egress, companion_killswitch
 DELETE /bots/:name
 POST   /bots/:name/capability
 GET    /bots/:name/mail/peers          # Manager only — other bots for orchestration

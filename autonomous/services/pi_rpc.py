@@ -484,13 +484,18 @@ class PiRpcSession:
             session_dir = cwd / "sessions"
             session_dir.mkdir(parents=True, exist_ok=True)
             is_manager = False
+            thinking_level = "medium"
             try:
                 from autonomous.services import bots as bots_svc
 
                 row = bots_svc.get_bot(self.bot, home=self.home)
                 is_manager = bool(row.get("is_manager"))
+                thinking_level = bots_svc.normalize_thinking_level(
+                    row.get("thinking")
+                )
             except Exception:
                 is_manager = False
+                thinking_level = "medium"
             cmd = [
                 binary,
                 "--mode",
@@ -512,6 +517,9 @@ class PiRpcSession:
                     cmd.extend(["--extension", str(ext)])
             if self.model:
                 cmd.extend(["--model", self.model])
+            # Explicit level so a non-default bot setting sticks on spawn.
+            # Session + prefix cache stay — not a flush or RPC restart.
+            cmd.extend(["--thinking", thinking_level])
             memory_core = ""
             try:
                 from autonomous.services import memory as memory_svc
@@ -675,6 +683,16 @@ class PiRpcSession:
         if resp.get("success"):
             self.model = model_ref
         return resp
+
+    def set_thinking_level(self, level: str) -> dict[str, Any]:
+        """Pi RPC ``set_thinking_level`` (off / minimal / low / medium / high / …)."""
+        return self.request("set_thinking_level", timeout=15.0, level=level)
+
+    def apply_thinking_level(self, level: str) -> dict[str, Any]:
+        """Apply a bot ``thinking`` level on a live session."""
+        from autonomous.services.bots import normalize_thinking_level
+
+        return self.set_thinking_level(normalize_thinking_level(level))
 
     def _write(self, obj: dict[str, Any]) -> None:
         proc = self._proc

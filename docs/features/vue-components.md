@@ -50,7 +50,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `DetailsPane.vue` | Bot details: model, capability, memory, notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md), [`pi-agent.md`](./pi-agent.md) |
+| `DetailsPane.vue` | Bot details: model, capability, memory, thinking level select (Pi off→max), notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md), [`pi-agent.md`](./pi-agent.md) |
 | `LibraryPane.vue` | Files / `~/files` (private per bot): list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
 | `EventsPane.vue` | Schedules + webhooks list (pause / copy curl / delete confirm). | [`events.md`](./events.md) |
 | `EventInstructionModal.vue` | Large modal: standing instruction, plus the webhook POST body when opened from a chat bubble. | [`events.md`](./events.md) |

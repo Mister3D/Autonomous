@@ -36,6 +36,31 @@ _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 _DISPLAY_FORBIDDEN_RE = re.compile(r"[\x00-\x1f\x7f/\\]")
 _MAX_DISPLAY_LEN = 64
 
+# Pi thinking levels (``--thinking`` / RPC ``set_thinking_level``).
+THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+DEFAULT_THINKING_LEVEL = "medium"
+
+
+def normalize_thinking_level(value: Any) -> str:
+    """Coerce API / DB values to a Pi thinking level string."""
+    if value is None:
+        return DEFAULT_THINKING_LEVEL
+    if isinstance(value, bool):
+        return DEFAULT_THINKING_LEVEL if value else "off"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return DEFAULT_THINKING_LEVEL if int(value) else "off"
+    raw = str(value).strip().lower()
+    if raw in ("", "1", "true", "yes", "on"):
+        return DEFAULT_THINKING_LEVEL
+    if raw in ("0", "false", "no"):
+        return "off"
+    if raw in THINKING_LEVELS:
+        return raw
+    raise ValidationError(
+        f"thinking must be one of: {', '.join(THINKING_LEVELS)}",
+        code="invalid_thinking",
+    )
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -116,6 +141,7 @@ def _decode(row: dict[str, Any]) -> dict[str, Any]:
         "internet": bool(row["internet"]),
         "auto_sleep": True if auto_raw is None else bool(auto_raw),
         "memory_access": bool(row.get("memory_access", 1)),
+        "thinking": normalize_thinking_level(row.get("thinking")),
         "is_manager": bool(row.get("is_manager", 0)),
         "desk_last_active_at": row.get("desk_last_active_at") or None,
         "status": row["status"],
@@ -505,6 +531,7 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         "internet",
         "auto_sleep",
         "memory_access",
+        "thinking",
         "is_manager",
         "desk_last_active_at",
         "guard",
@@ -553,6 +580,11 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
     if "memory_access" in updates:
         sets.append("memory_access = ?")
         vals.append(1 if updates["memory_access"] else 0)
+    if "thinking" in updates:
+        level = normalize_thinking_level(updates["thinking"])
+        updates["thinking"] = level
+        sets.append("thinking = ?")
+        vals.append(level)
     if "is_manager" in updates:
         if updates["is_manager"]:
             ensure_manager_slot(home=home, exclude=name)
@@ -658,6 +690,24 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         if session and session.alive:
             try:
                 session.set_model(str(updates["model"]))
+            except PiRpcError:
+                pass
+            # Model switch can reset Pi thinking; re-apply bot preference.
+            try:
+                session.apply_thinking_level(
+                    normalize_thinking_level(bot.get("thinking"))
+                )
+            except PiRpcError:
+                pass
+    if "thinking" in updates:
+        from autonomous.services.pi_rpc import MANAGER, PiRpcError
+
+        session = MANAGER.get(name)
+        if session and session.alive:
+            try:
+                session.apply_thinking_level(
+                    normalize_thinking_level(updates["thinking"])
+                )
             except PiRpcError:
                 pass
     BUS.publish("bot.updated", {"bot": bot}, bot=name)
