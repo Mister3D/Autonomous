@@ -9,7 +9,7 @@
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-16 (all accent icon badges share solid --accent-badge #f9ebdb)
+**Last updated**: 2026-11-18 (home/setup in a rounded window like chat)
 
 ## User behaviour
 
@@ -21,7 +21,7 @@
 - Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
 - Stage tabs / split toolbar (`right: 0.35rem`) share the chat card’s right edge (same as `.stage-body` horizontal padding) — not a deeper inset.
 - Mobile chat (`≤720px`): stage tabs stay a compact pill (`flex: none` + `margin-left: auto`) before the inspector toggle — never stretch full-width between Back and the panel button.
-- Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane. Split resize handle stays on that plane at rest (no grey rule); screen/terminal cards keep a full bottom radius in split (height accounts for chrome `margin-top`).
+- Shell is one continuous `--bg-sidebar` plane (no rail/stage/inspector dividers); conversation sits in a detached elevated card (`.chat-surface`) on that plane. The home / setup empty state (`.brand-empty` + `SetupPanel`) uses the same inset rounded window (gradient + art stay inside the card) so a rail hover is not cut by a full-bleed home fill. Split resize handle stays on that plane at rest (no grey rule); screen/terminal cards keep a full bottom radius in split (height accounts for chrome `margin-top`).
 - The bot list does not reserve a scrollbar column (rows reach the rail edge). A 6 px thumb overlays that edge on hover or while scrolling, then fades. The conversation uses the same `0.45rem` inset on the right as on the left, so its thumb is not parked in a wide blank margin.
 - Settings: `.settings-main` has no left padding (nav already pads); top/right/bottom stay.
 - Labels: Conversation / Terminal / Écran; inspector Files tab = « Fichiers »; settings nav keys under `settings.tab*`.

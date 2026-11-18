@@ -1820,8 +1820,9 @@ a:focus-visible {
   position: relative;
   background: var(--bg-sidebar);
 }
+/* Home keeps the shell sidebar plane; the gradient lives inside the home window. */
 .main:has(.setup-panel.is-home) {
-  background: linear-gradient(180deg, #efe4f6 0%, #f7eef6 10%, #f8efe8 24%, #f6e6dc 100%);
+  background: var(--bg-sidebar);
 }
 
 .stage-toolbar {
@@ -7141,6 +7142,7 @@ a.bot-mention:hover,
   .app-shell.is-mobile-home .brand-empty {
     position: relative;
     padding-top: 3.2rem;
+    margin: 0.25rem 0.25rem 0.35rem;
   }
 
   .mobile-home-back {
@@ -7542,9 +7544,29 @@ a.bot-mention:hover,
 .pi-packages .setup-log,
 .pi-packages .vault-error { width: min(22rem, 100%); text-align: left; }
 
-.main > .empty.brand-empty:has(.setup-panel.is-home) {
+/* Home / setup empty state: detached rounded window (same band as .chat-surface)
+   so the rail hover stays on the continuous sidebar plane and is not cut by a
+   full-bleed home fill. */
+.main > .empty.brand-empty:has(.setup-panel) {
   position: relative;
+  align-self: stretch;
+  flex: 1;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0.35rem 0.35rem 0.5rem;
+  padding: 0;
+  display: flex;
   overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.main > .empty.brand-empty:has(.setup-panel.is-home) {
   background: linear-gradient(180deg, #efe4f6 0%, #f7eef6 10%, #f8efe8 24%, #f6e6dc 100%);
 }
 .main > .empty.brand-empty:has(.setup-panel.is-home)::before {
@@ -7569,10 +7591,18 @@ a.bot-mention:hover,
   pointer-events: none;
   background: url("/home-hills.png") center bottom / 100% 100% no-repeat;
 }
+.main > .empty.brand-empty:has(.setup-panel) > .setup-panel {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  width: 100%;
+}
 .setup-panel.is-home {
   position: relative;
   z-index: 1;
   width: min(880px, 100%);
+  margin-left: auto;
+  margin-right: auto;
   background: transparent;
   font-family: var(--font);
   letter-spacing: normal;
@@ -7912,7 +7942,6 @@ a.bot-mention:hover,
 }
 .setup-link { display: block; text-align: center; margin-top: 12px; font-size: 0.85rem; color: var(--muted); }
 .setup-ok { color: var(--ok); }
-.main > .empty.brand-empty:has(.setup-panel) { font-size: 1rem; font-weight: 400; letter-spacing: normal; padding: 0; width: 100%; height: 100%; display: flex; }
 
 /* LLM settings — providers + models */
 .llm-settings .ui-card-body {
