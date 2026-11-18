@@ -30,15 +30,14 @@
             <div class="events-meta">
               <span>{{ t("events.nextRun") }}: {{ formatWhen(s.next_run_at, s.timezone) }}</span>
             </div>
-            <button
-              type="button"
-              class="events-icon-btn danger"
-              :aria-label="t('events.delete')"
+            <UiIconButton
+              icon="trash"
+              danger
+              size-variant="compact"
+              :label="t('events.delete')"
               :title="t('events.delete')"
               @click="removeSchedule(s)"
-            >
-              <UiIcon name="trash" :size="15" />
-            </button>
+            />
           </div>
         </li>
       </ul>
@@ -65,31 +64,24 @@
               {{ w.name }}
             </button>
             <div class="events-item-actions">
-              <button
-                type="button"
-                class="events-icon-btn"
-                :aria-label="copiedId === w.id ? t('events.copied') : t('events.copyUrl')"
+              <UiIconButton
+                :icon="copiedId === w.id ? 'check' : 'copy'"
+                size-variant="compact"
+                :icon-size="19"
+                :label="copiedId === w.id ? t('events.copied') : t('events.copyUrl')"
                 :title="copiedId === w.id ? t('events.copied') : t('events.copyUrl')"
                 @click="copyUrl(w)"
-              >
-                <svg v-if="copiedId === w.id" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 12.5 10 17.5 19 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7" />
-                  <path d="M6 16V6a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                class="events-icon-btn danger"
-                :aria-label="t('events.delete')"
+              />
+              <UiIconButton
+                icon="trash"
+                danger
+                size-variant="compact"
+                :icon-size="19"
+                :label="t('events.delete')"
                 :title="t('events.delete')"
-                :aria-expanded="confirmWebhookId === w.id"
+                :expanded="confirmWebhookId === w.id ? 'true' : 'false'"
                 @click="confirmWebhookId = confirmWebhookId === w.id ? '' : w.id"
-              >
-                <UiIcon name="trash" :size="15" />
-              </button>
+              />
             </div>
           </div>
           <div v-if="confirmWebhookId === w.id" class="inline-confirm" role="group">
@@ -126,7 +118,7 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
 import EventInstructionModal from "./EventInstructionModal.vue";
-import UiIcon from "./ui/UiIcon.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 import UiSwitch from "./ui/UiSwitch.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });

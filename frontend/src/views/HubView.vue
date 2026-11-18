@@ -158,18 +158,15 @@
       <section class="main">
         <template v-if="bot">
           <div class="stage-toolbar">
-            <button
+            <UiIconButton
               v-if="mobileLayout"
-              type="button"
-              class="icon-btn mobile-back"
-              :aria-label="t('nav.back')"
+              icon="chevron-left"
+              size-variant="chrome"
+              button-class="mobile-back"
+              :label="t('nav.back')"
               :title="t('nav.back')"
               @click="backToBotList"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M15 6 9 12l6 6" />
-              </svg>
-            </button>
+            />
             <button
               v-if="!mobileLayout && deskOn"
               type="button"
@@ -248,19 +245,15 @@
                 {{ t("tabs.screen") }}
               </button>
             </div>
-            <button
-              class="icon-btn inspector-toggle"
-              type="button"
-              :aria-label="inspectorToggleLabel"
+            <UiIconButton
+              icon="panel"
+              button-class="inspector-toggle"
+              :icon-size="16"
+              :label="inspectorToggleLabel"
               :title="inspectorToggleLabel"
-              :aria-expanded="inspectorToggleExpanded"
+              :expanded="inspectorToggleExpanded"
               @click="onInspectorToggle"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                <rect x="4" y="5" width="16" height="14" rx="2" />
-                <path d="M14 5v14" />
-              </svg>
-            </button>
+            />
           </div>
 
           <div class="stage-body" :class="{ 'is-split': splitActive }" :style="splitStyle">
@@ -305,34 +298,27 @@
           />
         </template>
         <div v-else class="empty brand-empty">
-          <button
+          <UiIconButton
             v-if="mobileHomeMode"
-            type="button"
-            class="icon-btn mobile-back mobile-home-back"
-            :aria-label="t('nav.back')"
+            icon="chevron-left"
+            size-variant="chrome"
+            button-class="mobile-back mobile-home-back"
+            :label="t('nav.back')"
             :title="t('nav.back')"
             @click="backToBotList"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M15 6 9 12l6 6" />
-            </svg>
-          </button>
+          />
           <SetupPanel />
         </div>
       </section>
 
       <aside v-if="bot" class="inspector" :class="{ 'is-open': state.inspectorOpen }">
-        <button
-          type="button"
-          class="icon-btn inspector-collapse"
-          :aria-label="t('inspector.collapse')"
+        <UiIconButton
+          icon="chevron-right"
+          button-class="inspector-collapse"
+          :label="t('inspector.collapse')"
           :title="t('inspector.collapse')"
           @click="collapseInspector"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
+        />
         <header class="inspector-head">
           <BotAvatar
             :bot="bot"
@@ -426,6 +412,7 @@ import CreateDeskModal from "../components/CreateDeskModal.vue";
 import SettingsMenu from "../components/SettingsMenu.vue";
 import MenuSelect from "../components/MenuSelect.vue";
 import UiIcon from "../components/ui/UiIcon.vue";
+import UiIconButton from "../components/ui/UiIconButton.vue";
 
 const { t } = useI18n();
 const route = useRoute();

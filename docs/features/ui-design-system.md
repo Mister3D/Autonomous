@@ -9,7 +9,7 @@
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-19 (UiModal, UiIconButton, MenuSelect compact, Soft checkboxes)
+**Last updated**: 2026-11-19 (UiIconButton compact/chrome; drop dead `.vault-trash`)
 
 ## User behaviour
 
@@ -29,7 +29,7 @@
 ## Implementation
 
 1. `main.js` loads `tokens.css` → `styles.css` → `soft-ui.css`.
-2. Prefer `components/ui/*` for new chrome (buttons, cards, toggles, icons) instead of duplicating SVG / toggle markup. Actionable controls use `UiButton` (incl. `to` / `href`); icon-only trash uses `UiIconButton`. Specialized chrome (`send-btn`, `icon-btn`, `home-cta`, stop buttons) stays local.
+2. Prefer `components/ui/*` for new chrome (buttons, cards, toggles, icons) instead of duplicating SVG / toggle markup. Actionable controls use `UiButton` (incl. `to` / `href`); icon-only controls use `UiIconButton` (`compact` Events, `chrome` Hub back/panel). Composer attach and settings-back still use local `.icon-btn`.
 3. Existing feature CSS keeps working; Soft UI overrides polish surfaces (shell, settings, composer, bubbles).
 4. i18n: `tabs.screen` = « Écran », `tabs.discussion` aligned with Conversation, `settings.tabVault|Memory|Companions` for nav consistency.
 5. Top chrome sizes: `--chrome-top` / `--control-h-sm` in `tokens.css`; rail bottom settings orb stays `--control-h`.

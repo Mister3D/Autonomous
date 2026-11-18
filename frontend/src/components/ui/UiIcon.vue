@@ -110,6 +110,14 @@
     <template v-else-if="name === 'check'">
       <path d="M5 12.2 9.2 16 19 6.5" />
     </template>
+    <template v-else-if="name === 'copy'">
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M6 16V6a2 2 0 0 1 2-2h10" />
+    </template>
+    <template v-else-if="name === 'panel'">
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M14 5v14" />
+    </template>
     <template v-else-if="name === 'trash'">
       <path d="M5 7.5h14" />
       <path d="M9.5 7.5V5.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.7" />

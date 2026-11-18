@@ -2083,9 +2083,11 @@ a:focus-visible {
   backdrop-filter: blur(8px);
 }
 
+.ui-icon-btn.inspector-toggle:hover,
 .inspector-toggle:hover {
   color: var(--text);
   background: #fff;
+  box-shadow: none;
 }
 
 .inspector {
@@ -2109,8 +2111,11 @@ a:focus-visible {
   color: #9a9aa0;
 }
 
+.ui-icon-btn.inspector-collapse:hover,
 .inspector-collapse:hover {
   color: var(--text);
+  background: transparent;
+  box-shadow: none;
 }
 
 @media (min-width: 1081px) {
@@ -2357,44 +2362,28 @@ a:focus-visible {
   font-size: 0.72rem;
 }
 
-.events-icon-btn {
-  appearance: none;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.ui-icon-btn.is-compact {
   width: 1.45rem;
   height: 1.45rem;
-  padding: 0;
-  border: 0;
   border-radius: 6px;
-  background: transparent;
   color: #8a8a92;
-  cursor: pointer;
 }
 
-.events-icon-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.events-item-actions .events-icon-btn {
+.events-item-actions .ui-icon-btn.is-compact {
   width: 1.85rem;
   height: 1.85rem;
 }
 
-.events-item-actions .events-icon-btn svg {
-  width: 19px;
-  height: 19px;
-}
-
-.events-icon-btn:hover {
+.ui-icon-btn.is-compact:hover {
   background: #f2f2f4;
   color: #1c1c22;
+  box-shadow: none;
 }
 
-.events-icon-btn.danger:hover {
+.ui-icon-btn.is-compact.danger:hover {
   color: var(--danger);
+  background: #f2f2f4;
+  box-shadow: none;
 }
 
 .modal.events-instruction-modal {
@@ -3411,11 +3400,24 @@ label.muted,
   height: 30px;
 }
 
+.ui-icon-btn.is-chrome {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #3a3a3c;
+}
+
 .ui-icon-btn:hover,
 .file-icon-btn:hover {
   background: #fff;
   color: var(--accent-2);
   box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.ui-icon-btn.is-chrome:hover {
+  background: var(--bg-soft);
+  color: #3a3a3c;
+  box-shadow: none;
 }
 
 .ui-icon-btn.danger:hover,
@@ -4680,26 +4682,6 @@ label.muted,
 
 .vault-row-ops .action-confirm:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-/* Legacy alias — prefer UiIconButton (.ui-icon-btn). */
-.vault-trash {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-
-.vault-trash:hover {
-  color: var(--danger);
-  background: #fff;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 30%, var(--line));
 }
 
 .danger-text {
@@ -8130,8 +8112,7 @@ a.bot-mention:hover,
   right: 0.45rem;
   z-index: 2;
 }
-.llm-trash-wrap .ui-icon-btn:disabled,
-.llm-trash-wrap .vault-trash:disabled {
+.llm-trash-wrap .ui-icon-btn:disabled {
   pointer-events: none;
 }
 .llm-provider-tip {
@@ -8161,8 +8142,6 @@ a.bot-mention:hover,
 .llm-provider-card .llm-model-card-top {
   padding-right: 2rem;
 }
-.vault-trash:disabled,
-.vault-trash:disabled:hover,
 .ui-icon-btn:disabled,
 .ui-icon-btn:disabled:hover {
   color: var(--muted);

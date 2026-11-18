@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-19 (UiModal / UiIconButton; MenuSelect compact; UiButton on cards/modals)
+**Last updated**: 2026-11-19 (UiIconButton Events/Hub; drop `.vault-trash`)
 
 ## Why this note exists
 
@@ -114,7 +114,7 @@ Prefer these for new chrome. Re-exported from `components/ui/index.js`.
 | `UiCard.vue` | Settings / section card with optional icon slot. |
 | `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, `trash`, …). |
 | `UiIconBadge.vue` | Icon in soft badge (inspector rows, settings nav). |
-| `UiIconButton.vue` | Icon-only soft button (trash / revoke) — vault, memory, LLM, Files. |
+| `UiIconButton.vue` | Icon-only soft button (`default` / `file` / `compact` / `chrome`) — vault, Events, Hub chrome, Files. |
 | `UiToggleRow.vue` | Title + hint + switch; **custom tooltip** on the switch (`tip` / `disabledReason`) — never browser `title` for that tip. |
 | `UiSwitch.vue` | Switch alone (optional `compact`) — Events rows, inline companion notify. |
 | `UiActionConfirm.vue` | Arm→check confirm control (check icon + tip) — ManageMenu, Files, Settings delete-all / vault. |
