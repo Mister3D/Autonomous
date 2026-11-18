@@ -2454,48 +2454,6 @@ a:focus-visible {
   justify-content: flex-end;
 }
 
-.events-toggle {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  flex: none;
-}
-
-.events-toggle input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 26px;
-  height: 16px;
-  margin: 0;
-  border-radius: 999px;
-  background: #e1e1e6;
-  position: relative;
-  cursor: pointer;
-  border: 0;
-  flex: none;
-}
-
-.events-toggle input::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  transition: transform 0.15s ease;
-}
-
-.events-toggle input:checked {
-  background: var(--accent);
-}
-
-.events-toggle input:checked::after {
-  transform: translateX(10px);
-}
-
 .btn.danger-ghost {
   background: transparent;
   border-color: transparent;
@@ -2833,7 +2791,8 @@ a:focus-visible {
 }
 
 .toggle-row input,
-.settings-notify input {
+.settings-notify input,
+.ui-switch input {
   appearance: none;
   -webkit-appearance: none;
   width: 44px;
@@ -2845,10 +2804,12 @@ a:focus-visible {
   flex: none;
   border: 0;
   outline: none;
+  margin: 0;
 }
 
 .toggle-row input::after,
-.settings-notify input::after {
+.settings-notify input::after,
+.ui-switch input::after {
   content: "";
   position: absolute;
   top: 3px;
@@ -2862,29 +2823,57 @@ a:focus-visible {
 }
 
 .toggle-row input:checked,
-.settings-notify input:checked {
+.settings-notify input:checked,
+.ui-switch input:checked {
   background: var(--accent);
 }
 
 .toggle-row input:checked::after,
-.settings-notify input:checked::after {
+.settings-notify input:checked::after,
+.ui-switch input:checked::after {
   transform: translateX(18px);
 }
 
 .toggle-row.muted,
-label.muted {
+label.muted,
+.ui-switch.muted {
   opacity: 0.65;
 }
 
 .toggle-row input:disabled,
-.settings-notify input:disabled {
+.settings-notify input:disabled,
+.ui-switch input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .toggle-row input:focus-visible,
-.settings-notify input:focus-visible {
+.settings-notify input:focus-visible,
+.ui-switch input:focus-visible {
   outline-offset: 3px;
+}
+
+.ui-switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex: none;
+}
+
+.ui-switch.is-compact input {
+  width: 26px;
+  height: 16px;
+}
+
+.ui-switch.is-compact input::after {
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+}
+
+.ui-switch.is-compact input:checked::after {
+  transform: translateX(10px);
 }
 
 .ui-toggle-switch {
@@ -3803,7 +3792,14 @@ label.muted {
   border-color: color-mix(in srgb, #c92a2a 40%, var(--line));
 }
 
-.desk-req-card {
+.chat-request-card,
+.desk-req-card,
+.agent-resume-card,
+.vault-card,
+.memory-card,
+.approval-card,
+.bot-delete-card,
+.clarify-card {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -3811,28 +3807,78 @@ label.muted {
   padding: 0.85rem 1rem;
   box-shadow: 0 1px 2px #00000008;
 }
-.desk-req-card.pending {
+.chat-request-card.pending,
+.desk-req-card.pending,
+.agent-resume-card.pending,
+.vault-card.pending,
+.memory-card.pending,
+.approval-card.pending,
+.bot-delete-card.pending,
+.clarify-card.pending {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   background: #fffaf3;
 }
-.desk-req-card.approved {
+.chat-request-card.approved,
+.desk-req-card.approved,
+.vault-card.approved,
+.memory-card.approved,
+.approval-card.approved,
+.bot-delete-card.approved,
+.clarify-card.approved,
+.agent-resume-card.resumed {
   border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
 }
-.desk-req-card.denied {
+.chat-request-card.denied,
+.desk-req-card.denied,
+.vault-card.denied,
+.memory-card.denied,
+.approval-card.denied,
+.bot-delete-card.denied,
+.clarify-card.denied,
+.agent-resume-card.dismissed,
+.chat-request-card.cancelled,
+.vault-card.cancelled {
   opacity: 0.75;
 }
-.desk-req-head {
+.chat-request-card-head,
+.desk-req-head,
+.agent-resume-head,
+.vault-card-head,
+.memory-card-head,
+.approval-card-head,
+.bot-delete-card-head,
+.clarify-card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.35rem;
 }
-.desk-req-state {
+.chat-request-card-state,
+.desk-req-state,
+.agent-resume-state,
+.vault-state,
+.memory-state,
+.approval-state,
+.bot-delete-state,
+.clarify-state {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+.chat-request-card-actions,
+.desk-req-actions,
+.agent-resume-actions,
+.vault-actions,
+.memory-actions,
+.approval-actions,
+.bot-delete-actions,
+.clarify-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
 }
 .desk-req-mode,
 .desk-req-hint,
@@ -3872,44 +3918,6 @@ label.muted {
 .desk-req-card.creating {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
-.desk-req-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 0.75rem;
-}
-
-.agent-resume-card {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #fafafb;
-  padding: 0.85rem 1rem;
-  box-shadow: 0 1px 2px #00000008;
-}
-.agent-resume-card.pending {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: #fffaf3;
-}
-.agent-resume-card.resumed {
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
-}
-.agent-resume-card.dismissed {
-  opacity: 0.75;
-}
-.agent-resume-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.35rem;
-}
-.agent-resume-state {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
 .agent-resume-body,
 .agent-resume-error {
   margin: 0.35rem 0;
@@ -3919,19 +3927,11 @@ label.muted {
 .agent-resume-error {
   color: var(--danger, #b42318);
 }
-.agent-resume-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 0.75rem;
-}
 
 .vault-card {
-  width: 100%;
   padding: 0.85rem 0.95rem;
   border-radius: 16px;
   background: #f7f7f9;
-  border: 1px solid var(--line);
 }
 
 .vault-card.pending {
@@ -3950,11 +3950,9 @@ label.muted {
 
 /* Mémoire : même gabarit que vault / outils, teinte verte (pas un outil). */
 .memory-card {
-  width: 100%;
   padding: 0.85rem 0.95rem;
   border-radius: 16px;
   background: #f7f7f9;
-  border: 1px solid var(--line);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 

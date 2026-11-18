@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-18 (tool-row stop button no longer overlaps)
+**Last updated**: 2026-11-19 (UiActionConfirm / UiSwitch; chat-request-card shared chrome)
 
 ## Why this note exists
 
@@ -100,7 +100,7 @@ The guard-rail line and the Pi compaction line are not separate components. `Cha
 |-----------|------|----------------|
 | `BotAvatar.vue` | Rail / details companion badge (states + custom tip on `lg`). | [`avatars.md`](./avatars.md) |
 | `ModelPicker.vue` | Bot model dropdown (wraps `MenuSelect`). | [`llm-settings.md`](./llm-settings.md) |
-| `ModelCombo.vue` | Free-text + suggestions model field (settings). | [`llm-settings.md`](./llm-settings.md) |
+| `ModelCombo.vue` | Free-text combobox + suggestions (Settings timezone; reusable for model ids). | [`llm-settings.md`](./llm-settings.md) |
 | `MenuSelect.vue` | Shared custom select (no native `<select>`). | [`ui-design-system.md`](./ui-design-system.md) |
 
 ## Soft UI primitives (`components/ui/`)
@@ -115,8 +115,10 @@ Prefer these for new chrome. Re-exported from `components/ui/index.js`.
 | `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, …). |
 | `UiIconBadge.vue` | Icon in soft badge (inspector rows, settings nav). |
 | `UiToggleRow.vue` | Title + hint + switch; **custom tooltip** on the switch (`tip` / `disabledReason`) — never browser `title` for that tip. |
+| `UiSwitch.vue` | Switch alone (optional `compact`) — Events rows, inline companion notify. |
+| `UiActionConfirm.vue` | Arm→check confirm control (check icon + tip) — ManageMenu, Files, Settings delete-all / vault. |
 
-Shared patterns (not separate files): **arm → check** confirm (`.action-confirm` + `.action-confirm-tip`) in `ManageMenu`, Settings delete-all, Settings vault delete, Files delete; **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`).
+Shared patterns: chat request cards share `.chat-request-card` (+ head / state / actions); **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`).
 
 ## Pitfalls / non-regressions
 

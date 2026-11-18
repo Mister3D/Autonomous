@@ -1,8 +1,8 @@
 <template>
-  <div class="desk-req-card" :class="cardClass">
-    <header class="desk-req-head">
+  <div class="chat-request-card desk-req-card" :class="cardClass">
+    <header class="chat-request-card-head desk-req-head">
       <strong>{{ t("desk.requestTitle") }}</strong>
-      <span class="desk-req-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state desk-req-state">{{ stateLabel }}</span>
     </header>
     <template v-if="creating">
       <p class="desk-req-step">{{ currentStep }}</p>
@@ -15,7 +15,7 @@
     <template v-else-if="pending">
       <p class="desk-req-hint">{{ t("desk.requestHint") }}</p>
       <p v-if="error" class="desk-req-error">{{ error }}</p>
-      <div class="desk-req-actions">
+      <div class="chat-request-card-actions desk-req-actions">
         <button type="button" class="btn ghost" :disabled="busy" @click="deny">
           {{ t("desk.requestDeny") }}
         </button>

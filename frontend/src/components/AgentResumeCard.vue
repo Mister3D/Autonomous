@@ -1,11 +1,11 @@
 <template>
-  <div class="agent-resume-card" :class="state">
-    <header class="agent-resume-head">
+  <div class="chat-request-card agent-resume-card" :class="state">
+    <header class="chat-request-card-head agent-resume-head">
       <strong>{{ t("chat.resumeTitle") }}</strong>
-      <span class="agent-resume-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state agent-resume-state">{{ stateLabel }}</span>
     </header>
     <p class="agent-resume-body">{{ message.content || t("chat.resumeBody") }}</p>
-    <div v-if="pending" class="agent-resume-actions">
+    <div v-if="pending" class="chat-request-card-actions agent-resume-actions">
       <button type="button" class="btn primary" :disabled="busy" @click="resume">
         {{ busy ? t("chat.resuming") : t("chat.resume") }}
       </button>

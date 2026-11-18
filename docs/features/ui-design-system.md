@@ -5,11 +5,11 @@
 - `frontend/src/styles/tokens.css` — colour, radius, shadow, type tokens
 - `frontend/src/styles/soft-ui.css` — Soft UI surface + primitive styles
 - `frontend/src/styles.css` — legacy layout / feature CSS (consumes tokens)
-- `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`
+- `frontend/src/components/ui/` — `UiButton`, `UiCard`, `UiIcon`, `UiIconBadge`, `UiToggleRow`, `UiSwitch`, `UiActionConfirm`
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-18 (home/setup in a rounded window like chat)
+**Last updated**: 2026-11-19 (UiActionConfirm, UiSwitch, shared chat-request-card chrome)
 
 ## User behaviour
 
@@ -17,7 +17,7 @@
 - Settings sections are card-based with icon badges (Générale, LLM, Grounding, Consumption, vault, memory, companions). Consumption is a flush full-height chart on a wide screen, and a day bar plus a table under 760px (no cards). General stays a single full-width column. The language switch is centered. The default-model picker spans its card. **Add a provider** and **Add a model** are centered under their lists. The grounding attempt field and **Test notification** sit on the right of their row. LLM settings (`.llm-settings`) is four cards — default model, providers, models, other models — each body a flex column with one gap.
 - `UiIcon` `memory` = [SVG Repo brain](https://www.svgrepo.com/svg/521533/brain) (filled `currentColor`) — settings nav Mémoire + inspector Mémoire.
 - Bot inspector rows reuse the same icon-badge pattern: Modèle (database icon + picker only), Internet, Transfert, Mémoire, Réflexion / Thinking (`MenuSelect` of Pi levels), Manager, Veille, **MCP (puzzle)**. Manager uses `UiToggleRow` `tip` (custom bubble on the switch) instead of the `<small>` hint; when locked, the tip shows the “already a Manager” reason.
-- Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (arm → check; tooltip = « Confirmer ? »).
+- Rail settings pop: Réglages / Déconnexion (`settings`, `logout`). Delete-all bots lives under Settings → Générale (`UiActionConfirm` arm → check; tooltip = « Confirmer ? »). Chat request cards share `.chat-request-card` chrome; Events uses compact `UiSwitch`.
 - Top chrome (rail logo + search/create orbs, chat token pill, split + stage tabs, inspector collapse) shares one vertical band (`--chrome-top` + `--control-h-sm`).
 - Stage tabs / split toolbar (`right: 0.35rem`) share the chat card’s right edge (same as `.stage-body` horizontal padding) — not a deeper inset.
 - Mobile chat (`≤720px`): stage tabs stay a compact pill (`flex: none` + `margin-left: auto`) before the inspector toggle — never stretch full-width between Back and the panel button.

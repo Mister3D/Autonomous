@@ -13,7 +13,7 @@
       @focus="onFocus"
       @input="onInput"
       @keydown="onKey"
-      @blur="open = false"
+      @blur="onBlur"
     />
     <ul v-if="open && matches.length" class="tz-suggest" role="listbox">
       <li v-for="(m, i) in matches" :key="m">
@@ -32,7 +32,7 @@ const props = defineProps({
   placeholder: { type: String, default: "" },
   disabled: { type: Boolean, default: false },
 });
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "select", "blur-commit"]);
 const open = ref(false);
 const active = ref(0);
 const typed = ref(false);
@@ -81,6 +81,12 @@ function onKey(ev) {
 }
 function pick(m) {
   emit("update:modelValue", m);
+  emit("select", m);
   open.value = false;
+}
+
+function onBlur() {
+  open.value = false;
+  emit("blur-commit");
 }
 </script>

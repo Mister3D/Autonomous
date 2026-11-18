@@ -67,33 +67,13 @@
           <UiIcon name="clock" :size="18" />
         </template>
         <div class="settings-field">
-          <div class="settings-tz">
-            <input
-              v-model="tzQuery"
-              type="text"
-              :placeholder="t('settings.timezonePlaceholder')"
-              autocomplete="off"
-              spellcheck="false"
-              role="combobox"
-              aria-autocomplete="list"
-              :aria-expanded="tzOpen && timezoneMatches.length > 0"
-              @focus="onTzFocus"
-              @input="onTzInput"
-              @keydown="onTzKey"
-              @blur="onTzBlur"
-            />
-            <ul v-if="tzOpen && timezoneMatches.length" class="tz-suggest" role="listbox">
-              <li v-for="(zone, i) in timezoneMatches" :key="zone">
-                <button
-                  type="button"
-                  :class="{ active: i === tzActive }"
-                  @mousedown.prevent="pickTimezone(zone)"
-                >
-                  {{ zone }}
-                </button>
-              </li>
-            </ul>
-          </div>
+          <ModelCombo
+            v-model="tzQuery"
+            :options="ALL_ZONES"
+            :placeholder="t('settings.timezonePlaceholder')"
+            @select="pickTimezone"
+            @blur-commit="onTzBlur"
+          />
         </div>
         <p v-if="tzError" class="vault-error">{{ tzError }}</p>
       </UiCard>
@@ -169,36 +149,11 @@
                   : t("settings.deleteAllBots")
               }}
             </button>
-            <span
+            <UiActionConfirm
               v-if="deleteAllArmed"
-              class="action-confirm-wrap"
-              @pointerenter="deleteAllTip = true"
-              @pointerleave="deleteAllTip = false"
-              @focusin="deleteAllTip = true"
-              @focusout="deleteAllTip = false"
-            >
-              <button
-                class="action-confirm"
-                type="button"
-                :disabled="deleteAllBusy || !state.bots.length"
-                :aria-label="t('confirm.confirmAction')"
-                @click="deleteAllBots"
-              >
-                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                  <path
-                    d="M3.2 8.2 6.4 11.4 12.8 4.6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </button>
-              <span v-if="deleteAllTip" class="action-confirm-tip" role="tooltip">{{
-                t("confirm.confirmAction")
-              }}</span>
-            </span>
+              :disabled="deleteAllBusy || !state.bots.length"
+              @confirm="deleteAllBots"
+            />
           </div>
         </div>
       </UiCard>
@@ -379,46 +334,17 @@
               <small>{{ e.kind }}<template v-if="e.origin"> · {{ e.origin }}</template></small>
             </div>
             <span class="vault-row-ops">
-              <span
+              <UiActionConfirm
                 v-if="armedVault === e.id"
-                class="action-confirm-wrap"
-                @pointerenter="vaultTip = e.id"
-                @pointerleave="vaultTip = ''"
-                @focusin="vaultTip = e.id"
-                @focusout="vaultTip = ''"
-              >
-                <button
-                  class="action-confirm"
-                  type="button"
-                  :aria-label="t('confirm.confirmAction')"
-                  @click="removeEntry(e)"
-                >
-                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                    <path
-                      d="M3.2 8.2 6.4 11.4 12.8 4.6"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-                <span v-if="vaultTip === e.id" class="action-confirm-tip" role="tooltip">{{
-                  t("confirm.confirmAction")
-                }}</span>
-              </span>
+                @confirm="removeEntry(e)"
+              />
               <button
                 class="vault-trash"
                 type="button"
                 :aria-label="t('vault.delete')"
                 @click="armVault(e)"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path d="M5 7.5h14" />
-                  <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-                  <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-                </svg>
+                <UiIcon name="trash" :size="16" />
               </button>
             </span>
           </li>
@@ -481,19 +407,13 @@
             {{ instanceCopied ? t("companion.copied") : t("companion.copy") }}
           </button>
         </div>
-        <label class="settings-field companion-pairing-toggle">
-          <span class="settings-notify">
-            <span>{{ t("companion.pairingEnabled") }}</span>
-            <input
-              v-model="companionsEnabled"
-              type="checkbox"
-              role="switch"
-              :aria-label="t('companion.pairingEnabled')"
-              @change="flushCompanionsEnabled"
-            />
-          </span>
-          <small>{{ t("companion.pairingEnabledHint") }}</small>
-        </label>
+        <UiToggleRow
+          class="companion-pairing-toggle"
+          :title="t('companion.pairingEnabled')"
+          :hint="t('companion.pairingEnabledHint')"
+          v-model="companionsEnabled"
+          @change="flushCompanionsEnabled"
+        />
         <p v-if="deviceError" class="vault-error">{{ deviceError }}</p>
         <ul v-if="devicePending.length" class="settings-list">
           <li v-for="p in devicePending" :key="p.id">
@@ -518,16 +438,14 @@
               <span v-if="d.platform" class="settings-platform">{{ platformLabel(d.platform) }}</span>
             </div>
             <span class="settings-row-side">
-              <label class="settings-notify">
+              <span class="settings-notify">
                 <span>{{ t("companion.notify") }}</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  :checked="!!d.notify"
+                <UiSwitch
+                  :model-value="!!d.notify"
                   :aria-label="t('companion.notify')"
                   @change="onDeviceNotify(d, $event)"
                 />
-              </label>
+              </span>
               <span class="settings-status" :class="{ off: !d.online }">
                 {{ d.online ? t("companion.online") : t("companion.offline") }}
               </span>
@@ -680,9 +598,13 @@ import LlmSettings from "./LlmSettings.vue";
 import LocaleFlag from "./LocaleFlag.vue";
 import SecretInput from "./SecretInput.vue";
 import TokenUsageChart from "./TokenUsageChart.vue";
+import ModelCombo from "./ModelCombo.vue";
+import UiActionConfirm from "./ui/UiActionConfirm.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
+import UiSwitch from "./ui/UiSwitch.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 function platformLabel(raw) {
   const key = String(raw || "").trim().toLowerCase();
@@ -747,7 +669,6 @@ watch(
 const entries = ref([]);
 const vaultError = ref("");
 const armedVault = ref("");
-const vaultTip = ref("");
 const devicePending = ref([]);
 const deviceRows = ref([]);
 const deviceError = ref("");
@@ -768,9 +689,6 @@ const ALL_ZONES =
     : ["UTC", "Europe/Paris"];
 const timezone = ref("");
 const tzQuery = ref("");
-const tzOpen = ref(false);
-const tzActive = ref(0);
-const tzDirty = ref(false);
 const tzError = ref("");
 const pwCurrent = ref("");
 const pwNew = ref("");
@@ -779,7 +697,6 @@ const pwBusy = ref(false);
 const pwError = ref("");
 const pwOk = ref("");
 const deleteAllArmed = ref(false);
-const deleteAllTip = ref(false);
 const deleteAllBusy = ref(false);
 const updateChannel = ref("main");
 const updateForcing = ref(false);
@@ -840,7 +757,6 @@ async function submitPasswordChange() {
 function toggleDeleteAll() {
   if (deleteAllBusy.value || !state.bots.length) return;
   deleteAllArmed.value = !deleteAllArmed.value;
-  deleteAllTip.value = false;
 }
 
 async function deleteAllBots() {
@@ -868,33 +784,6 @@ async function deleteAllBots() {
   }
 }
 
-function tzScore(zone, q) {
-  const full = zone.toLowerCase();
-  const city = zone.split("/").pop().toLowerCase().replace(/_/g, " ");
-  const cityCompact = city.replace(/ /g, "");
-  const qCompact = q.replace(/[\s_]/g, "");
-  if (city === q || full === q) return 0;
-  if (city.startsWith(q) || cityCompact.startsWith(qCompact)) return 1;
-  if (full.startsWith(q)) return 2;
-  if (city.includes(q) || cityCompact.includes(qCompact)) return 3;
-  if (full.includes(q)) return 4;
-  return 9;
-}
-
-const timezoneMatches = computed(() => {
-  const q = tzQuery.value.trim().toLowerCase();
-  if (!q) return [];
-  return ALL_ZONES
-    .map((zone) => ({ zone, score: tzScore(zone, q) }))
-    .filter((row) => row.score < 9)
-    .sort((a, b) => a.score - b.score || a.zone.localeCompare(b.zone))
-    .slice(0, 8)
-    .map((row) => row.zone);
-});
-
-watch(timezoneMatches, () => {
-  tzActive.value = 0;
-});
 const guard = reactive({
   reviewEvery: 100,
   maxActions: 1000,
@@ -913,47 +802,19 @@ async function loadTimezone() {
   const stored = String(s.timezone || "").trim();
   const current = stored || DEFAULT_TZ;
   timezone.value = current;
-  if (!tzDirty.value) tzQuery.value = current;
+  tzQuery.value = current;
   if (!stored) {
     await api.putSettings({ timezone: DEFAULT_TZ });
     state.userTimezone = DEFAULT_TZ;
   }
 }
 
-function onTzFocus(ev) {
-  tzOpen.value = true;
-  tzDirty.value = true;
-  ev.target.select();
-}
-
-function onTzInput() {
-  tzDirty.value = true;
-  tzOpen.value = true;
-}
-
-function onTzKey(ev) {
-  if (ev.key === "ArrowDown") {
-    ev.preventDefault();
-    tzOpen.value = true;
-    const last = Math.max(timezoneMatches.value.length - 1, 0);
-    tzActive.value = Math.min(tzActive.value + 1, last);
-  } else if (ev.key === "ArrowUp") {
-    ev.preventDefault();
-    tzActive.value = Math.max(tzActive.value - 1, 0);
-  } else if (ev.key === "Enter") {
-    ev.preventDefault();
-    const zone = timezoneMatches.value[tzActive.value];
-    if (zone) pickTimezone(zone);
-  } else if (ev.key === "Escape") {
-    tzOpen.value = false;
-    tzQuery.value = timezone.value;
-  }
-}
-
 function onTzBlur() {
-  tzOpen.value = false;
-  const only = timezoneMatches.value.length === 1 ? timezoneMatches.value[0] : "";
   const q = tzQuery.value.trim().toLowerCase();
+  const matches = q
+    ? ALL_ZONES.filter((zone) => zone.toLowerCase().includes(q))
+    : ALL_ZONES;
+  const only = matches.length === 1 ? matches[0] : "";
   const exact = ALL_ZONES.find((zone) => zone.toLowerCase() === q);
   if (only) pickTimezone(only);
   else if (exact) pickTimezone(exact);
@@ -962,7 +823,6 @@ function onTzBlur() {
 
 async function pickTimezone(zone) {
   if (!zone) return;
-  tzOpen.value = false;
   tzQuery.value = zone;
   tzError.value = "";
   if (zone === timezone.value) return;
@@ -1041,7 +901,6 @@ async function loadVault() {
 
 function armVault(e) {
   armedVault.value = armedVault.value === e.id ? "" : e.id;
-  vaultTip.value = "";
 }
 
 async function removeEntry(e) {
@@ -1049,8 +908,7 @@ async function removeEntry(e) {
   try {
     await api.deleteVaultEntry(e.id);
     armedVault.value = "";
-    vaultTip.value = "";
-    await loadVault();
+      await loadVault();
   } catch (err) {
     vaultError.value = err.message;
   }

@@ -219,13 +219,11 @@
               field
             />
           </label>
-          <label class="toggle-row">
-            <span>
-              <strong>{{ t("llm.images") }}</strong>
-              <small>{{ t("llm.imagesHint") }}</small>
-            </span>
-            <input v-model="m.images" type="checkbox" role="switch" :aria-label="t('llm.images')" />
-          </label>
+          <UiToggleRow
+            :title="t('llm.images')"
+            :hint="t('llm.imagesHint')"
+            v-model="m.images"
+          />
           <div class="llm-limits-grid">
             <label class="settings-field">
               <span>{{ t("llm.maxImages") }}</span>
@@ -243,18 +241,11 @@
               <small>{{ t("llm.maxTokensHint") }}</small>
             </label>
           </div>
-          <label class="toggle-row">
-            <span>
-              <strong>{{ t("llm.parallelEnabled") }}</strong>
-              <small>{{ t("llm.parallelEnabledHint") }}</small>
-            </span>
-            <input
-              v-model="m.parallel_gate_enabled"
-              type="checkbox"
-              role="switch"
-              :aria-label="t('llm.parallelEnabled')"
-            />
-          </label>
+          <UiToggleRow
+            :title="t('llm.parallelEnabled')"
+            :hint="t('llm.parallelEnabledHint')"
+            v-model="m.parallel_gate_enabled"
+          />
           <div class="llm-limits-grid">
             <label class="settings-field">
               <span>{{ t("llm.maxParallel") }}</span>
@@ -270,18 +261,11 @@
               <small>{{ t("llm.maxParallelHint") }}</small>
             </label>
           </div>
-          <label class="toggle-row">
-            <span>
-              <strong>{{ t("llm.heavyEnabled") }}</strong>
-              <small>{{ t("llm.heavyEnabledHint") }}</small>
-            </span>
-            <input
-              v-model="m.heavy_gate_enabled"
-              type="checkbox"
-              role="switch"
-              :aria-label="t('llm.heavyEnabled')"
-            />
-          </label>
+          <UiToggleRow
+            :title="t('llm.heavyEnabled')"
+            :hint="t('llm.heavyEnabledHint')"
+            v-model="m.heavy_gate_enabled"
+          />
           <div class="llm-limits-grid">
             <label class="settings-field">
               <span>{{ t("llm.heavyMaxConcurrent") }}</span>
@@ -369,6 +353,7 @@ import ModelPicker from "./ModelPicker.vue";
 import SecretInput from "./SecretInput.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 let keySeq = 0;
 

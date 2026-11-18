@@ -8,15 +8,12 @@
       <ul v-else class="events-list">
         <li v-for="s in schedules" :key="s.id" class="events-item">
           <div class="events-item-main">
-            <label class="events-toggle">
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="!!s.enabled"
-                :aria-label="s.enabled ? t('events.on') : t('events.off')"
-                @change="toggleSchedule(s, $event)"
-              />
-            </label>
+            <UiSwitch
+              compact
+              :model-value="!!s.enabled"
+              :aria-label="s.enabled ? t('events.on') : t('events.off')"
+              @change="toggleSchedule(s, $event)"
+            />
             <button
               type="button"
               class="events-name"
@@ -40,9 +37,7 @@
               :title="t('events.delete')"
               @click="removeSchedule(s)"
             >
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <UiIcon name="trash" :size="15" />
             </button>
           </div>
         </li>
@@ -55,15 +50,12 @@
       <ul v-else class="events-list">
         <li v-for="w in webhooks" :key="w.id" class="events-item">
           <div class="events-item-main">
-            <label class="events-toggle">
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="!!w.enabled"
-                :aria-label="w.enabled ? t('events.on') : t('events.off')"
-                @change="toggleWebhook(w, $event)"
-              />
-            </label>
+            <UiSwitch
+              compact
+              :model-value="!!w.enabled"
+              :aria-label="w.enabled ? t('events.on') : t('events.off')"
+              @change="toggleWebhook(w, $event)"
+            />
             <button
               type="button"
               class="events-name"
@@ -96,9 +88,7 @@
                 :aria-expanded="confirmWebhookId === w.id"
                 @click="confirmWebhookId = confirmWebhookId === w.id ? '' : w.id"
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <UiIcon name="trash" :size="15" />
               </button>
             </div>
           </div>
@@ -136,6 +126,8 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
 import EventInstructionModal from "./EventInstructionModal.vue";
+import UiIcon from "./ui/UiIcon.vue";
+import UiSwitch from "./ui/UiSwitch.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();

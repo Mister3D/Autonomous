@@ -25,29 +25,24 @@
             <ModelPicker field :model="model" @update:model="(v) => (model = v)" />
           </div>
           <div class="create-bot-options">
-            <label class="create-check">
-              <input v-model="internet" type="checkbox" />
-              <span>{{ t("create.internet") }}</span>
-            </label>
-            <div class="create-check-group">
-              <label class="create-check">
-                <input v-model="memoryAccess" type="checkbox" />
-                <span>{{ t("create.memoryAccess") }}</span>
-              </label>
-              <p class="field-hint">{{ t("create.memoryAccessHint") }}</p>
-            </div>
-            <div class="create-check-group">
-              <label class="create-check" :class="{ muted: managerTaken }">
-                <input v-model="isManager" type="checkbox" :disabled="managerTaken" />
-                <span>{{ t("create.isManager") }}</span>
-              </label>
-              <p class="field-hint">
-                <template v-if="managerTaken">
-                  {{ t("create.isManagerTaken", { name: managerTaken.label || managerTaken.name }) }}
-                </template>
-                <template v-else>{{ t("create.isManagerHint") }}</template>
-              </p>
-            </div>
+            <UiToggleRow :title="t('create.internet')" v-model="internet" />
+            <UiToggleRow
+              :title="t('create.memoryAccess')"
+              :hint="t('create.memoryAccessHint')"
+              v-model="memoryAccess"
+            />
+            <UiToggleRow
+              :title="t('create.isManager')"
+              :hint="
+                managerTaken
+                  ? t('create.isManagerTaken', { name: managerTaken.label || managerTaken.name })
+                  : t('create.isManagerHint')
+              "
+              :tip="managerTaken ? t('create.isManagerTaken', { name: managerTaken.label || managerTaken.name }) : ''"
+              :disabled="!!managerTaken"
+              :muted="!!managerTaken"
+              v-model="isManager"
+            />
           </div>
         </div>
         <div class="create-avatar-block">
@@ -88,6 +83,7 @@ import { CompanionAvatarPicker, CHARACTER_IDS } from "@companion-avatar";
 import { api } from "../api";
 import { state, setupReady } from "../store";
 import ModelPicker from "./ModelPicker.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const { t } = useI18n();
 const router = useRouter();

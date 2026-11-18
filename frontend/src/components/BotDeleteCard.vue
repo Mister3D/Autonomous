@@ -1,8 +1,8 @@
 <template>
-  <div class="bot-delete-card" :class="state">
-    <header class="bot-delete-card-head">
+  <div class="chat-request-card bot-delete-card" :class="state">
+    <header class="chat-request-card-head bot-delete-card-head">
       <strong>{{ title }}</strong>
-      <span class="bot-delete-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state bot-delete-state">{{ stateLabel }}</span>
     </header>
     <p v-if="prompt" class="bot-delete-prompt">{{ prompt }}</p>
 
@@ -23,7 +23,7 @@
 
     <template v-if="pending">
       <p v-if="error" class="bot-delete-error">{{ error }}</p>
-      <div class="bot-delete-actions">
+      <div class="chat-request-card-actions bot-delete-actions">
         <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
           {{ t("botDelete.cancel") }}
         </button>

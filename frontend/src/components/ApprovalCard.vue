@@ -1,14 +1,14 @@
 <template>
-  <div class="approval-card" :class="state">
-    <header class="approval-card-head">
+  <div class="chat-request-card approval-card" :class="state">
+    <header class="chat-request-card-head approval-card-head">
       <strong>{{ title }}</strong>
-      <span class="approval-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state approval-state">{{ stateLabel }}</span>
     </header>
     <p class="approval-prompt">{{ prompt }}</p>
 
     <template v-if="pending">
       <p v-if="error" class="approval-error">{{ error }}</p>
-      <div class="approval-actions">
+      <div class="chat-request-card-actions approval-actions">
         <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
           {{ t("approval.refuse") }}
         </button>

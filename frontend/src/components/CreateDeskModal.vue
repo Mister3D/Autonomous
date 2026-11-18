@@ -7,12 +7,11 @@
       </p>
 
       <template v-if="!job">
-        <label class="choice" style="margin: 1rem 0">
-          <input v-model="internet" type="checkbox" />
-          <span>
-            <strong>{{ t("desk.internet") }}</strong>
-          </span>
-        </label>
+        <UiToggleRow
+          style="margin: 1rem 0"
+          :title="t('desk.internet')"
+          v-model="internet"
+        />
 
         <p v-if="error" style="color: var(--danger)">{{ error }}</p>
         <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
@@ -63,6 +62,7 @@ import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },

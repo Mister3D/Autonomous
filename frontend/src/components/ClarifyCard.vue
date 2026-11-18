@@ -1,8 +1,8 @@
 <template>
-  <div class="clarify-card" :class="state">
-    <header class="clarify-card-head">
+  <div class="chat-request-card clarify-card" :class="state">
+    <header class="chat-request-card-head clarify-card-head">
       <strong>{{ title }}</strong>
-      <span class="clarify-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state clarify-state">{{ stateLabel }}</span>
     </header>
     <p class="clarify-prompt">{{ prompt }}</p>
 
