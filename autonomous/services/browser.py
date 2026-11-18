@@ -65,15 +65,28 @@ def _cdp_failure_text(err: str) -> str:
     return text[-500:]
 
 
-def _run(bot: str, args: list[str], *, home: Path | None = None) -> dict[str, Any]:
+def _run(
+    bot: str,
+    args: list[str],
+    *,
+    home: Path | None = None,
+    ensure_chrome: bool = True,
+) -> dict[str, Any]:
     from autonomous.services import desk as desk_svc
 
     _ensure_desk(bot, home=home)
-    # Desks no longer autostart Chrome — bring CDP up for this browser tool.
-    if not desk_svc.ensure_bot_chrome(bot, home=home):
+    # Explicit browser_* tools start Chrome. Soft reads after a VNC gesture must
+    # NOT — otherwise a calculator click spawns about:blank over the desk.
+    if ensure_chrome:
+        if not desk_svc.ensure_bot_chrome(bot, home=home):
+            raise AutonomousError(
+                "Chrome did not start (CDP port 9222). Try again or restart the desk.",
+                code="browser_chrome_start_failed",
+            )
+    elif not desk_svc.chrome_cdp_ready(bot, home=home):
         raise AutonomousError(
-            "Chrome did not start (CDP port 9222). Try again or restart the desk.",
-            code="browser_chrome_start_failed",
+            "Chrome CDP is not running",
+            code="browser_cdp_down",
         )
     _copy_workers(bot, home=home)
     cmd = [
@@ -205,12 +218,16 @@ def page_did_change(before: dict[str, Any] | None, after: dict[str, Any] | None)
 
 
 def page_marker(bot: str, *, home: Path | None = None) -> dict[str, Any]:
-    """Cheap URL / title / readyState sample. Empty when Chrome is not answering."""
+    """Cheap URL / title / readyState sample. Empty when Chrome is not answering.
+
+    Never starts Chrome — used from VNC gestures on native windows too.
+    """
     try:
         data = evaluate(
             bot,
             "({url:location.href,title:document.title,ready:document.readyState})",
             home=home,
+            ensure_chrome=False,
         )
     except Exception:
         return {}
@@ -231,19 +248,26 @@ def read_after_gesture(
     before: dict[str, Any] | None = None,
     home: Path | None = None,
 ) -> str:
-    """Snapshot after a gesture. Wait for load only if the page changed."""
+    """Snapshot after a gesture. Wait for load only if the page changed.
+
+    Soft path: if Chrome is not already up, return empty (native GUI work).
+    """
+    from autonomous.services import desk as desk_svc
+
+    if not desk_svc.chrome_cdp_ready(bot, home=home):
+        return ""
     if wait:
         try:
             time.sleep(0.15)
             after = page_marker(bot, home=home)
             if page_did_change(before, after):
-                wait_load(bot, timeout=2.5, home=home)
+                wait_load(bot, timeout=2.5, home=home, ensure_chrome=False)
         except Exception:
             pass
     try:
-        snap = snapshot(bot, home=home)
-    except Exception as exc:
-        return f"(page read failed: {exc})"
+        snap = snapshot(bot, home=home, ensure_chrome=False)
+    except Exception:
+        return ""
     return format_page_read(snap)
 
 
@@ -266,11 +290,20 @@ def navigate(bot: str, url: str, *, home: Path | None = None) -> dict[str, Any]:
 
 
 def wait_load(
-    bot: str, *, timeout: float = 15.0, home: Path | None = None
+    bot: str,
+    *,
+    timeout: float = 15.0,
+    home: Path | None = None,
+    ensure_chrome: bool = True,
 ) -> dict[str, Any]:
     """Wait (bounded) for the active page to finish loading — replaces ``sleep N``."""
     timeout = max(1.0, min(float(timeout), 30.0))
-    return _run(bot, ["wait_load", "--timeout", f"{timeout:g}"], home=home)
+    return _run(
+        bot,
+        ["wait_load", "--timeout", f"{timeout:g}"],
+        home=home,
+        ensure_chrome=ensure_chrome,
+    )
 
 
 def switch_tab(
@@ -369,12 +402,13 @@ def snapshot(
     max_elements: int = 60,
     query: str | None = None,
     home: Path | None = None,
+    ensure_chrome: bool = True,
 ) -> dict[str, Any]:
     """Read interactive DOM controls without scrolling or clicking."""
     args = ["snapshot", "--max", str(max(1, min(int(max_elements), 120)))]
     if query:
         args.extend(["--query", query])
-    out = _run(bot, args, home=home)
+    out = _run(bot, args, home=home, ensure_chrome=ensure_chrome)
     from autonomous.services.observe_gate import mark_dom_observe, remember_browser_read
 
     mark_dom_observe(bot)
@@ -412,10 +446,16 @@ def click_selector(
     return _run(bot, ["click_selector", "--selector", selector], home=home)
 
 
-def evaluate(bot: str, js: str, *, home: Path | None = None) -> dict[str, Any]:
+def evaluate(
+    bot: str,
+    js: str,
+    *,
+    home: Path | None = None,
+    ensure_chrome: bool = True,
+) -> dict[str, Any]:
     js = (js or "").strip()
     if not js:
         raise ValidationError("js required")
     if len(js) > 8000:
         raise ValidationError("js too long")
-    return _run(bot, ["eval", "--js", js], home=home)
+    return _run(bot, ["eval", "--js", js], home=home, ensure_chrome=ensure_chrome)

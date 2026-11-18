@@ -267,7 +267,7 @@ def _stamp_chrome_eula(name: str) -> None:
         pass
 
 
-def _chrome_cdp_ready(bot: str, *, home: Path | None = None) -> bool:
+def chrome_cdp_ready(bot: str, *, home: Path | None = None) -> bool:
     """True when Chrome answers CDP on ``127.0.0.1:9222`` inside the desk."""
     name = container_name(bot, home=home)
     try:
@@ -302,13 +302,34 @@ def _chrome_lock(bot: str) -> threading.Lock:
         return lock
 
 
+def _kill_lazy_chrome(bot: str, home: Path | None = None) -> None:
+    """Stop Chrome started by a legacy image/session — keep CDP off until needed."""
+    name = container_name(bot, home=home)
+    script = r"""
+export HOME=/home/autonomous
+killall -u autonomous -q chrome chrome_crashpad_handler 2>/dev/null || true
+pkill -u autonomous -f 'bot-chrome' 2>/dev/null || true
+sleep 0.3
+killall -u autonomous -q -9 chrome 2>/dev/null || true
+"""
+    try:
+        subprocess.run(
+            ["docker", "exec", "-u", "autonomous", name, "bash", "-lc", script],
+            check=False,
+            capture_output=True,
+            timeout=15,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+
 def ensure_bot_chrome(bot: str, home: Path | None = None) -> bool:
     """Start ``bot-chrome`` if CDP is down. Idempotent; used by browser tools.
 
     Desks no longer autostart Chrome — shell-only tasks stay without a browser.
     """
     with _chrome_lock(bot):
-        if _chrome_cdp_ready(bot, home=home):
+        if chrome_cdp_ready(bot, home=home):
             return True
         return restart_bot_chrome(bot, home=home)
 
@@ -699,31 +720,11 @@ def _finish_wake_background(bot: str, home: Path | None) -> None:
         _ensure_files_alias(bot, home=home)
     except Exception:
         pass
-    # If Chrome is already up (user left it open before sleep), accept a terms
-    # dialog without killing the window. Do not start Chrome on wake — browser
-    # tools call ensure_bot_chrome when they need CDP.
-    if _chrome_cdp_ready(bot, home=home):
-        try:
-            subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    "-u",
-                    "autonomous",
-                    "-e",
-                    "DISPLAY=:1",
-                    "-e",
-                    "HOME=/home/autonomous",
-                    container_name(bot, home=home),
-                    "python3",
-                    "/usr/local/bin/dismiss-chrome-tos.py",
-                ],
-                check=False,
-                capture_output=True,
-                timeout=20,
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+    # Do not start Chrome on wake — browser tools call ensure_bot_chrome.
+    # Legacy images may have left Chrome running; stop it so GUI/shell work
+    # is not covered by about:blank. If CDP is already up from a deliberate
+    # browser session in this wake, leave dismiss to the next browser tool.
+    _kill_lazy_chrome(bot, home=home)
 
 
 def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:
@@ -1243,6 +1244,9 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
             home=home,
         )
     # Chrome stays off until a browser_* / CDP tool calls ensure_bot_chrome.
+    # Old images may still launch Chrome from a legacy xstartup; kill it so
+    # shell/GUI tasks start on a clean desk.
+    _kill_lazy_chrome(bot, home=home)
     _job_log(
         job_id,
         "Chrome en attente (démarrage à la demande au premier outil navigateur)",

@@ -13,7 +13,7 @@
 
 ## Expected behaviour in the VM
 
-- Chrome does **not** autostart with the desk (no XFCE `chrome.desktop`, no `xstartup` launch, no `restart_bot_chrome` on create/wake). The first `browser_*` / CDP call runs `ensure_bot_chrome` on the host. Shell-only / calculator tasks keep a light desktop.
+- Chrome does **not** autostart with the desk (no XFCE `chrome.desktop`, no `xstartup` launch, no `restart_bot_chrome` on create/wake). The first **`browser_*`** tool runs `ensure_bot_chrome` on the host. Soft CDP reads after a VNC gesture (`page_marker` / `read_after_gesture`) must **not** start Chrome — otherwise `vm_click` on a calculator spawned `about:blank` over the desk. Desk create/wake also kills leftover Chrome from legacy images. Shell-only / calculator tasks keep a light desktop.
 - When started, Chrome opens **maximised** on the 1920×1200 desktop (usable area ~1920×1171 excluding the bar).
 - **Chrome sandbox enabled** (default): the desk starts with `security_opt: seccomp=unconfined` so that the zygote/userns works. **No** `--no-sandbox` or `--test-type` except the escape hatch `BOT_CHROME_NO_SANDBOX=1`. If CDP doesn't come up → **explicit error** (no half-dead browser).
 - Useful flags in `bot-chrome`: `--start-maximized`, `--remote-debugging-port`, `--lang=fr-FR`, plus CDP helper/`maximize-window.py`.
@@ -27,7 +27,7 @@
 ### What is `--no-sandbox`?
 
 Chrome isolates each tab in an OS **sandbox** (namespaces / seccomp). In "tight" Docker, this sandbox often fails (`Operation not permitted` on PID namespaces) — hence the habit of passing `--no-sandbox`, which **turns off** this isolation. Consequences: (1) less safe if a page is malicious; (2) **very visible** to anti-bots, which read the flags / environment. We prefer to loosen Docker a little (`seccomp=unconfined`) and keep the Chrome sandbox, rather than a browser that "works" but is fingerprinted as a bot.
-- Useful shell packages: `nano`, `vim-tiny`, `less` (via Dockerfile).
+- Useful shell / GUI packages (via Dockerfile): `nano`, `vim-tiny`, `less`, `galculator`, `drawing`, `libreoffice-calc`, `wmctrl`. Agents still may `sudo apt-get install` anything else the task needs.
 - Downloads → `/home/autonomous/shared` (policy in the image). That path is the same private folder as `~/files` and `~/workspace`, not a folder other bots can read.
 
 ## Rebuild
