@@ -62,7 +62,12 @@ _BATCH_SYSTEM_HINT = (
     "earlier result. "
     "Do not batch a step that needs a result you do not have yet (a click that "
     "needs coordinates from a snapshot, a command that needs the previous "
-    "output). Emit one tool and wait. Never call batch_sequential alone."
+    "output). Emit one tool and wait. Never call batch_sequential alone. "
+    "When the user asks for many separate command-tool invocations whose "
+    "arguments you already know (each command its own tool call — never one "
+    "shell that runs them all), emit a large sequential batch with "
+    "batch_sequential so they run one after another without a model turn "
+    "between each. Resume the same way after GUARD:CONTINUE."
 )
 
 _APPROACH_SYSTEM_HINT = (
@@ -82,6 +87,17 @@ _APPROACH_SYSTEM_HINT = (
     "Two failed attempts of the same method are enough to move to the next "
     "level. In one sentence, tell the user what failed and what you will "
     "try next. Do not ask permission to switch method."
+)
+
+# Generic throughput — any long tool sequence, not a specific benchmark.
+_THROUGHPUT_SYSTEM_HINT = (
+    "Throughput: when the user asks for many successive similar tool calls "
+    "(each call its own step — do not batch several requested steps into one "
+    "call if they forbade that), move fast: almost no chat chatter between "
+    "calls, no vm_look / screenshot / narration between trivial identical-"
+    "pattern commands unless something failed. After a GUARD:CONTINUE token, "
+    "resume the next required tool in the same turn. Prefer the shortest "
+    "correct path for any task; do not pad the run with optional checks."
 )
 
 _APPROVAL_SYSTEM_HINT = (
@@ -154,6 +170,11 @@ _FILES_SYSTEM_HINT = (
     "FORBIDDEN: inventing image URLs, external http(s) links, or guessing paths — "
     "those break the chat. Only the markdown from files_share_image works. "
     "PDF/zip/other non-preview files: files_attach(path) → download card on the reply. "
+    "When the user asks you to download or generate a file into their files, "
+    "put it under ~/files (workspace), then report the exact path (and "
+    "files_attach when it helps). For a named public-domain work without a URL, "
+    "find a legitimate source (web search or browser address-bar search) then "
+    "download — do not invent a login bypass. "
     "Do NOT use attachments for images. Do NOT request a screen desk or vm_screenshot "
     "just to show a workspace image. "
     "Do NOT overwrite images with files_write. "
@@ -489,6 +510,7 @@ class PiRpcSession:
                 for p in (
                     memory_core,
                     _BATCH_SYSTEM_HINT,
+                    _THROUGHPUT_SYSTEM_HINT,
                     _APPROACH_SYSTEM_HINT,
                     _VAULT_SYSTEM_HINT,
                     _FILES_SYSTEM_HINT,

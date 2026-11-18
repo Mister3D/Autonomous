@@ -934,6 +934,31 @@ class PiAgent:
                         state.setdefault("mail_sent", []).append(
                             {"tool": tool_name, "to": to}
                         )
+                # One-shot nudge: many tiny independent shell calls → batch them.
+                if (
+                    tool_name == "vm_terminal_exec"
+                    and not is_error
+                    and not state.get("throughput_steered")
+                ):
+                    cmd = str((args or {}).get("command") or "").strip()
+                    simple = bool(
+                        cmd
+                        and "\n" not in cmd
+                        and ";" not in cmd
+                        and "&&" not in cmd
+                        and "|" not in cmd
+                        and len(cmd) < 80
+                    )
+                    streak = int(state.get("simple_shell_streak") or 0)
+                    state["simple_shell_streak"] = streak + 1 if simple else 0
+                    if state["simple_shell_streak"] >= 8:
+                        state["throughput_steered"] = True
+                        try:
+                            MANAGER.steer(bot, _THROUGHPUT_BATCH_STEER)
+                        except Exception:
+                            log.exception(
+                                "throughput batch steer failed for %s", bot
+                            )
                 if tool_name not in _HIDDEN_TOOL_CARDS:
                     result_text = _tool_result_text(record.get("result"))
                     details = _tool_result_details(record.get("result"))
@@ -1584,6 +1609,16 @@ _GUARD_GATE_RETRY_STEER = (
     "or GUARD:STOP (and stop). Nothing else before that token."
 )
 
+_THROUGHPUT_BATCH_STEER = (
+    "THROUGHPUT — you have been issuing many independent short shell tool "
+    "calls one model turn at a time. That is too slow.\n"
+    "For every remaining command whose arguments you already know, emit them "
+    "NOW in one response: each command is still its own tool call, and include "
+    "batch_sequential once so they run one after another without a model turn "
+    "between each. Fill up to the next GUARD review (or the end of the task). "
+    "Do not narrate between them."
+)
+
 
 _GUARD_GATE_RUN_PROMPT = (
     "GUARD RAIL checkpoint — mandatory. You reached a review milestone and tried "
@@ -1594,7 +1629,9 @@ _GUARD_GATE_RUN_PROMPT = (
     "Reply with exactly one of:\n"
     "GUARD:CONTINUE — you are progressing and will resume the task right after\n"
     "GUARD:STOP — you should stop now\n"
-    "If you choose CONTINUE, immediately continue the unfinished task after the token."
+    "If you choose CONTINUE, put the token first, then immediately emit the next "
+    "required tool calls in that same turn (large sequential batches with "
+    "batch_sequential are fine when arguments are already known)."
 )
 
 
@@ -1766,7 +1803,8 @@ def _steer_progress_review(
         "Reply with exactly one of:\n"
         "GUARD:CONTINUE — still progressing; then take the next useful step\n"
         "GUARD:STOP — stop now, no more tools\n"
-        "Nothing else before that token."
+        "Nothing else before that token. After CONTINUE, resume tools in the "
+        "same turn when you can (sequential batches OK if args are known)."
     )
     try:
         chat_svc.create_message(
@@ -1796,7 +1834,9 @@ def _steer_progress_review(
 _GUARD_RESUME_PROMPT = (
     "GUARD:CONTINUE was accepted. An in-flight tool batch was interrupted by the "
     "review gate. Resume your unfinished task immediately with the next useful "
-    "tool calls. Do not redo work that already succeeded."
+    "tool calls. Prefer a large batch_sequential for remaining independent "
+    "commands whose arguments you already know. Do not redo work that already "
+    "succeeded."
 )
 
 
