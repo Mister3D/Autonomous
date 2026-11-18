@@ -98,20 +98,6 @@
         <article v-else-if="item.kind === 'tools'" class="msg tool" :data-msg-id="item.id">
           <ToolGroup :entries="item.entries" :sealed="item.sealed" :bot="bot.name" />
         </article>
-        <article
-          v-else-if="item.kind === 'run_progress'"
-          class="msg run-progress"
-          :data-msg-id="item.id"
-        >
-          <div class="run-progress-stack">
-            <div
-              v-for="m in item.messages"
-              :key="m.id"
-              class="run-progress-text"
-              v-html="render(m)"
-            />
-          </div>
-        </article>
         <article v-else-if="item.kind === 'notice'" class="msg notice" :data-msg-id="item.message.id">
           <div class="notice-card" :class="item.message.meta?.status">
             <div class="notice-dir">
@@ -245,17 +231,6 @@
           :data-msg-id="item.message.id"
           :data-queued="item.message.meta?.queued ? '1' : undefined"
         >
-          <div
-            v-if="item.progress?.length"
-            class="run-progress-stack"
-          >
-            <div
-              v-for="m in item.progress"
-              :key="m.id"
-              class="run-progress-text"
-              v-html="render(m)"
-            />
-          </div>
           <p v-if="sourceOf(item.message)" class="msg-source">
             {{ t("chat.from") }}
             <span class="src-pip" :style="{ background: avatarColor(sourceOf(item.message)) }" />
@@ -2339,27 +2314,16 @@ const thread = computed(() => {
 
   function flushActivity() {
     if (!activityBuf.length) return;
-    const raw = sortByCreatedAt(pruneOrphanLlmSeals(activityBuf));
+    const entries = sortByCreatedAt(pruneOrphanLlmSeals(activityBuf));
     activityBuf = [];
-    const entries = [];
-    const progress = [];
-    for (const m of raw) {
-      if (m?.meta?.kind === "run_text") progress.push(m);
-      else entries.push(m);
-    }
+    // Keep mid-run asides (run_text) inside the tool group, between tool rows —
+    // not a separate run_progress stack outside (that looked like a final bubble
+    // then shrank).
     if (entries.length) {
       items.push({
         kind: "tools",
         id: `tools-${entries[0].id}`,
         entries,
-      });
-    }
-    // One left-aligned stack (merged onto the next assistant bubble when present).
-    if (progress.length) {
-      items.push({
-        kind: "run_progress",
-        id: `progress-${progress[0].id}`,
-        messages: progress,
       });
     }
   }
@@ -2446,21 +2410,26 @@ const thread = computed(() => {
     if (isEmptyAssistant(m)) {
       continue;
     }
-    // Mid-run asides: buffer with tools, then flush under the group.
-    // Never fold image markdown — run_progress used to show it as raw `![…](…)`.
-    // Look past llm_turns so a trailing reflection after the final reply does
-    // not mis-classify that reply as a mid-run aside.
+    // Mid-run asides: stay in the tool group (chronological). Never fold image
+    // markdown (must stay a real bubble) or GUARD:CONTINUE/STOP (centred card).
+    // Look past llm_turns so a seal after the final reply does not mis-classify
+    // it. While the bot is still busy and no later item exists yet, fold too —
+    // otherwise the aside flashes as a full bubble then shrinks when the next
+    // tool arrives.
     if (
       m?.role === "assistant" &&
       activityBuf.length &&
       !hasChatImageMarkdown(m) &&
-      isRunContinue(nextAfterLlmTurns(i + 1))
+      !guardReply(m)
     ) {
-      activityBuf.push({
-        ...m,
-        meta: { ...(m.meta || {}), kind: "run_text" },
-      });
-      continue;
+      const next = nextAfterLlmTurns(i + 1);
+      if (isRunContinue(next) || (!next && busy.value)) {
+        activityBuf.push({
+          ...m,
+          meta: { ...(m.meta || {}), kind: "run_text" },
+        });
+        continue;
+      }
     }
     if (isActivity(m)) {
       activityBuf.push(m);
@@ -2538,21 +2507,6 @@ const thread = computed(() => {
     items.push({ kind: "msg", id: m.id, message: m });
   }
   flushActivity();
-  // Fold mid-run asides onto the following assistant bubble (same left column).
-  for (let i = 0; i < items.length; ) {
-    const it = items[i];
-    const next = items[i + 1];
-    if (
-      it.kind === "run_progress" &&
-      next?.kind === "msg" &&
-      next.message?.role === "assistant"
-    ) {
-      next.progress = it.messages;
-      items.splice(i, 1);
-      continue;
-    }
-    i += 1;
-  }
   // message_end often seals the final llm_turn *after* the assistant bubble is
   // written → a lone « 1 réflexion » bar under the reply (same content). Pull
   // those llm-only groups back into the preceding tools group (above the bubble).
@@ -2573,7 +2527,6 @@ const thread = computed(() => {
         prevTools = j;
         break;
       }
-      if (k === "run_progress") continue;
       if (k === "msg" && items[j].message?.role === "assistant") continue;
       break;
     }
