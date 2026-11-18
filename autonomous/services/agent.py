@@ -973,9 +973,9 @@ class PiAgent:
                 if not is_error:
                     pending = state.setdefault("pending_images_md", [])
                     found: list[str] = []
-                    # Desk captures stay on the tool row (ToolGroup). Only
-                    # files_share_image / MCP images are auto-embedded in the
-                    # assistant bubble — never vm_screenshot.
+                    # Desk captures (vm_screenshot): the model pastes share
+                    # markdown into its reply — do not host-auto-embed them.
+                    # Only files_share_image / MCP images are auto-embedded.
                     if tool_name == "files_share_image":
                         md = _extract_share_image_markdown(record.get("result"))
                         if md:

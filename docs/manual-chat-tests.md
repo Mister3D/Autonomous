@@ -64,7 +64,7 @@ My Fnac credentials are already saved. Retrieve the amount and the contents of m
 
 ## calc-screenshot
 
-**Area**: VM GUI launch hygiene, `vm_screenshot` on the tool row  
+**Area**: VM GUI launch hygiene, `vm_screenshot` pasted into the assistant reply  
 
 **Prerequisites**:
 - Desk running (or bot may request one)
@@ -72,11 +72,11 @@ My Fnac credentials are already saved. Retrieve the amount and the contents of m
 
 **Expect** — Pass when all of:
 - A calculator app is running on the desk (process + window), not a browser tab / blank screen
-- At least one ``vm_screenshot`` (or equivalent) whose PNG is visible under the **tool-row detail** in the chat tool group (not required as assistant-bubble markdown)
+- At least one ``vm_screenshot`` whose PNG appears **inside the assistant bubble** (model-pasted markdown — not only under the tool row)
 - The capture visibly shows the calculator UI
 - Known-arg shell steps (e.g. install then launch) may be grouped with `batch_sequential` — preferred, not required for Pass here
 
-**Fail if**: claims success with no capture on a tool row; screenshot shows Chrome/about:blank/empty desktop; “success” inferred only from `exit_code=0` with no capture.
+**Fail if**: image only under tools / user told to open the tool row; screenshot shows Chrome/about:blank/empty desktop; “success” inferred only from `exit_code=0` with no capture.
 
 ### Prompt
 
@@ -95,7 +95,7 @@ Launch a calculator in your VM and show me a screenshot in this conversation.
 - Calculator driven via native GUI (`vm_ground` / `vm_click` / `vm_type` / `vm_key`) — not `xdotool` click chains or shell-only arithmetic
 - On-screen display shows the computation for **473 × 984**
 - Result visible on screen is **465 432** (spaces/separators OK)
-- Screenshot of that result visible under the tool-row detail (assistant-bubble image markdown is not required)
+- Screenshot of that result visible **in the assistant bubble** (model-pasted markdown)
 
 **Fail if**: bot only computes 465432 in chat without the calculator UI showing it; uses shell/`xdotool` as the primary input path; screenshot missing or does not show the result.
 
@@ -173,10 +173,10 @@ Download an EPUB of Les Misérables (Victor Hugo). It is in the public domain. S
 **Expect** — Pass when all of:
 - A drawing application window is open on the desk (GIMP, Drawing, KolourPaint, etc.)
 - Canvas shows a **blue circle** (filled or stroke OK; clearly circular and blue)
-- Screenshot under the tool-row detail showing that canvas
+- Screenshot of that canvas visible **in the assistant bubble**
 - Time budget target: **&lt; 4 min**
 
-**Fail if**: no capture on a tool row; circle only described in text; wrong colour/shape; screenshot of unrelated UI; app never opened.
+**Fail if**: no image in the assistant bubble; circle only described in text; wrong colour/shape; screenshot of unrelated UI; app never opened.
 
 ### Prompt
 
@@ -194,10 +194,10 @@ Open a drawing application in your VM, draw a blue circle on the canvas, and sho
 **Expect** — Pass when all of:
 - A folder is created via the **graphical** desktop / file-manager UI (dialogs, not “success” from shell-only `mkdir`+`mv` as the sole method)
 - Folder renamed to **`TestAlpha`** through that GUI
-- Screenshot under the tool-row detail shows the desktop (or file manager) with **TestAlpha** visible
+- Screenshot in the **assistant bubble** shows the desktop (or file manager) with **TestAlpha** visible
 - Time budget target: **&lt; 4 min**
 
-**Fail if**: rename done only in shell while claiming GUI; no capture on a tool row; name wrong / folder not visible on the capture.
+**Fail if**: rename done only in shell while claiming GUI; no image in the assistant bubble; name wrong / folder not visible on the capture.
 
 ### Prompt
 
@@ -258,7 +258,7 @@ Generate a PDF that says Hello World, save it into my files, and tell me the exa
 - Work done in a **graphical** spreadsheet (LibreOffice Calc or similar) — not a shell-only CSV/`echo` claiming success
 - **B6** and **D5** each contain a numeric value entered via the UI
 - **F9** shows the **sum** of those two cells (formula like `=B6+D5` or the computed total visible)
-- Screenshot under the tool-row detail makes **B6, D5, and F9** identifiable (values/headers readable enough to verify)
+- Screenshot in the **assistant bubble** makes **B6, D5, and F9** identifiable (values/headers readable enough to verify)
 - Bot reaches **idle** with a **substantive assistant reply** in chat (not only `GUARD:CONTINUE` / empty)
 - Time budget target: **&lt; 5 min** (note `OVER_BUDGET` if exceeded; incomplete cut-off = Fail)
 
