@@ -716,7 +716,6 @@
       <button
         v-else
         class="send-btn"
-        :class="{ queue: busy }"
         type="submit"
         :aria-label="t('chat.send')"
         :title="t('chat.send')"

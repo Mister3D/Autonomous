@@ -6660,14 +6660,6 @@ a.bot-mention:hover,
   opacity: 0.45;
 }
 
-.send-btn.queue:not(:disabled) {
-  background: #c9892e;
-}
-
-.send-btn.queue:hover:not(:disabled) {
-  background: #b87a22;
-}
-
 .send-btn.working {
   background: #3a3a3e;
   color: #fff;
@@ -6680,10 +6672,6 @@ a.bot-mention:hover,
 .send-btn.working .working-orb {
   display: block;
   pointer-events: none;
-}
-
-.send-btn.working.waiting {
-  background: color-mix(in srgb, var(--warn) 75%, #3a3a3e);
 }
 
 .send-wait-dot {
