@@ -73,7 +73,7 @@ def parse_action(text: str) -> dict[str, Any]:
     return {"action": "unknown", "raw": raw}
 
 
-# Same regex string as the working Hermes curl (for the API body).
+# Same regex string as the structured_outputs curl example (API body).
 STRUCTURED_REGEX = (
     r"(?:(?:click|left_double|right_single)\(start_box='(?:<\|box_start\|>)?"
     r"\([0-9]{1,4},[0-9]{1,4}\)(?:<\|box_end\|>)?'\)|"
