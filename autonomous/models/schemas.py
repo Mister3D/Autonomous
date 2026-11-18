@@ -129,6 +129,16 @@ class BotCreateSchema(Schema):
         },
     )
     model = fields.Str(load_default=None)
+    thinking = fields.Raw(
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Optional Pi thinking level at create. When omitted, uses "
+                "settings bots.default_thinking (default medium)."
+            )
+        },
+    )
     avatar = fields.Str(
         load_default=None,
         allow_none=True,
@@ -430,6 +440,19 @@ class SettingsSchema(Schema):
         allow_none=True,
         metadata={
             "description": "Default Pi model ref (provider/id). New bots and Manager-created bots use only this."
+        },
+    )
+    bots_default_thinking = fields.Str(
+        data_key="bots.default_thinking",
+        allow_none=True,
+        validate=validate.OneOf(
+            ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+        ),
+        metadata={
+            "description": (
+                "Default Pi thinking level for new bots (UI create and Manager "
+                "household). Per-bot override stays in Details."
+            )
         },
     )
 

@@ -7,9 +7,24 @@
     <p v-if="loadError" class="vault-error">{{ loadError }}</p>
     <div class="llm-default-model">
       <ModelPicker field :model="defaultModel" @update:model="onDefaultModel" />
-      <span v-if="defaultModelSaving" class="hint">…</span>
-      <span v-else-if="defaultModelOk" class="setup-ok">{{ defaultModelOk }}</span>
-      <span v-else-if="defaultModelError" class="vault-error">{{ defaultModelError }}</span>
+      <label class="settings-field llm-default-thinking">
+        <span>{{ t("llm.defaultThinking") }}</span>
+        <MenuSelect
+          field
+          :model-value="defaultThinking"
+          :options="thinkingOptions"
+          :aria-label="t('llm.defaultThinking')"
+          @update:model-value="onDefaultThinking"
+        />
+        <small>{{ t("llm.defaultThinkingHint") }}</small>
+      </label>
+      <span v-if="defaultModelSaving || defaultThinkingSaving" class="hint">…</span>
+      <span v-else-if="defaultModelOk || defaultThinkingOk" class="setup-ok">{{
+        defaultModelOk || defaultThinkingOk
+      }}</span>
+      <span v-else-if="defaultModelError || defaultThinkingError" class="vault-error">{{
+        defaultModelError || defaultThinkingError
+      }}</span>
     </div>
   </UiCard>
 
@@ -457,11 +472,26 @@ const loadError = ref("");
 const providerDrafts = ref([]);
 const modelRows = ref([]);
 const catalogModels = ref([]);
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
 const defaultModel = ref("");
 const defaultModelSaving = ref(false);
 const defaultModelOk = ref("");
 const defaultModelError = ref("");
 let defaultModelTimer = 0;
+
+const defaultThinking = ref("medium");
+const defaultThinkingSaving = ref(false);
+const defaultThinkingOk = ref("");
+const defaultThinkingError = ref("");
+let defaultThinkingTimer = 0;
+
+const thinkingOptions = computed(() =>
+  THINKING_LEVELS.map((value) => ({
+    value,
+    label: t(`details.thinkingLevel.${value}`),
+  })),
+);
 
 const savedProviders = computed(() => (view.value?.providers || []).filter((p) => p.provider));
 const providerOptions = computed(() =>
@@ -606,6 +636,11 @@ function applyView(data) {
     );
 }
 
+function normalizeThinking(raw) {
+  const s = String(raw ?? "medium").trim().toLowerCase();
+  return THINKING_LEVELS.includes(s) ? s : "medium";
+}
+
 async function load() {
   try {
     applyView(await api.setupLlm());
@@ -615,6 +650,7 @@ async function load() {
   try {
     const settings = await api.settings();
     defaultModel.value = String(settings?.["bots.default_model"] || "").trim();
+    defaultThinking.value = normalizeThinking(settings?.["bots.default_thinking"]);
   } catch {
     /* optional — picker still works */
   }
@@ -638,6 +674,27 @@ async function onDefaultModel(next) {
     defaultModelError.value = e.message || String(e);
   } finally {
     defaultModelSaving.value = false;
+  }
+}
+
+async function onDefaultThinking(next) {
+  const level = normalizeThinking(next);
+  if (level === defaultThinking.value) return;
+  defaultThinking.value = level;
+  defaultThinkingSaving.value = true;
+  defaultThinkingOk.value = "";
+  defaultThinkingError.value = "";
+  try {
+    await api.putSettings({ "bots.default_thinking": level });
+    defaultThinkingOk.value = t("llm.saved");
+    clearTimeout(defaultThinkingTimer);
+    defaultThinkingTimer = window.setTimeout(() => {
+      defaultThinkingOk.value = "";
+    }, 1800);
+  } catch (e) {
+    defaultThinkingError.value = e.message || String(e);
+  } finally {
+    defaultThinkingSaving.value = false;
   }
 }
 

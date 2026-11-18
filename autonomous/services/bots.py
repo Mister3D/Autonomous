@@ -425,6 +425,19 @@ def ensure_manager_slot(*, home: Path | None = None, exclude: str | None = None)
         )
 
 
+def default_thinking_level(*, home: Path | None = None) -> str:
+    """Household / create-bot default from ``bots.default_thinking``."""
+    from autonomous.services import settings as settings_svc
+
+    return normalize_thinking_level(
+        settings_svc.get(
+            "bots.default_thinking",
+            home=home,
+            default=DEFAULT_THINKING_LEVEL,
+        )
+    )
+
+
 def create_bot(
     name: str,
     *,
@@ -434,6 +447,7 @@ def create_bot(
     memory_access: bool = True,
     is_manager: bool = False,
     model: str | None = None,
+    thinking: str | None = None,
     avatar: str | None = None,
     avatar_color: int | None = None,
     home: Path | None = None,
@@ -469,6 +483,11 @@ def create_bot(
     bot_id = new_bot_id()
     # No auto-pick: empty model stays empty (API / UI require a model at create).
     model_ref = (model or "").strip()
+    thinking_level = (
+        normalize_thinking_level(thinking)
+        if thinking is not None
+        else default_thinking_level(home=home)
+    )
     used_avatars = {b.get("avatar") or "" for b in list_bots(home=home)}
     avatar_raw = (avatar or "").strip()
     if avatar_raw:
@@ -491,10 +510,10 @@ def create_bot(
                 """
                 INSERT INTO bots(
                   id, name, label, capability, internet, auto_sleep, status,
-                  guard_json, desk_json, model, pi_session_id, memory_access,
+                  guard_json, desk_json, model, thinking, pi_session_id, memory_access,
                   is_manager, avatar, avatar_color,
                   created_at, updated_at
-                ) VALUES (?, ?, ?, 'none', ?, 1, 'idle', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, 'none', ?, 1, 'idle', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     bot_id,
@@ -503,6 +522,7 @@ def create_bot(
                     1 if internet else 0,
                     json.dumps(guard),
                     model_ref,
+                    thinking_level,
                     session_id,
                     1 if memory_access else 0,
                     1 if is_manager else 0,

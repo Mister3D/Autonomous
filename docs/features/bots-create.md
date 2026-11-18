@@ -7,7 +7,7 @@
 - `autonomous/models/schemas.py` (`BotCreateSchema`)
 - `frontend/src/api.js` (`formatApiError` for flask-smorest 422)
 
-**Last updated**: 2026-11-19 (Details select for per-bot Pi thinking levels)
+**Last updated**: 2026-11-19 (create uses bots.default_thinking from LLM settings)
 
 ## User behaviour
 
@@ -29,7 +29,7 @@
 - `POST /bots`: `{ "name": "Debug Bot" }` → `label="Debug Bot"`, `name="debug-bot"`.
 - **Shared memory** checkbox (`memory_access`, default on): untick to isolate the bot (see [memory.md](./memory.md)).
 - **Manager** checkbox (`is_manager`, default off): orchestrator — lists bots and delegates without waiting (see [manager.md](./manager.md)). **Only one** Manager: if another one already exists, the checkbox is disabled (API → 409 `manager_exists`).
-- **Thinking / Réflexion** select in Details (`thinking`, default `medium`): Pi levels `off` · `minimal` · `low` · `medium` · `high` · `xhigh` · `max`. Applies on the next LLM call; no session restart and no prefix-cache flush (see [pi-agent.md](./pi-agent.md)).
+- **Thinking / Réflexion**: new bots take `bots.default_thinking` from Settings → LLM (default `medium`) unless `POST /bots` sends `thinking`. Details keeps a per-bot select (`off` · `minimal` · `low` · `medium` · `high` · `xhigh` · `max`). Applies on the next LLM call; no session restart and no prefix-cache flush (see [pi-agent.md](./pi-agent.md)).
 - **Model** is required: the picker has **no** “Aucun modèle / No model” row. It opens on `bots.default_model` from Settings when that ref is set. Create stays disabled until a real model is chosen; Details cannot clear the model. `POST /bots` and `PATCH /bots/:name` reject empty `model` (`model_required`). No silent auto-pick of the first Pi model. Placeholder text may still appear if a legacy bot has an empty model, or if Settings has no default yet.
 - Optional: `{ "name": "Mon Assistant", "slug": "asst" }` to force the technical id.
 - `label` in the payload is still accepted (legacy) and overrides the display if provided.

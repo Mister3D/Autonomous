@@ -18,6 +18,7 @@ def manager(home):
 
 
 def test_create_bots_uses_settings_default_only(manager, home):
+    settings_svc.set_value("bots.default_thinking", "high", home=home)
     created = household_svc.create_bots(
         "assistant",
         [
@@ -29,6 +30,8 @@ def test_create_bots_uses_settings_default_only(manager, home):
     assert {c["name"] for c in created} == {"alpha", "beta"}
     assert bots_svc.get_bot("alpha", home=home)["model"] == "test/provider:fixture"
     assert bots_svc.get_bot("beta", home=home)["model"] == "test/provider:fixture"
+    assert bots_svc.get_bot("alpha", home=home)["thinking"] == "high"
+    assert bots_svc.get_bot("beta", home=home)["thinking"] == "high"
 
 
 def test_create_requires_manager(home):

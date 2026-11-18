@@ -34,6 +34,8 @@ DEFAULTS: dict[str, Any] = {
     "companions.enabled": False,
     # Default Pi model ref (provider/id). The only model for new bots the Manager creates.
     "bots.default_model": "",
+    # Default Pi thinking level for new bots (UI create + Manager household).
+    "bots.default_thinking": "medium",
 }
 
 # Removed product setting (was a Cursor test harness, not a feature).
