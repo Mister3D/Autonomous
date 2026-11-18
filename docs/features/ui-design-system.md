@@ -9,7 +9,7 @@
 - `frontend/index.html` — Plus Jakarta Sans
 - Full component map (panes, cards, modals): [`vue-components.md`](./vue-components.md)
 
-**Last updated**: 2026-11-19 (UiIconButton compact/chrome; drop dead `.vault-trash`)
+**Last updated**: 2026-11-19 (composer equal inset via --composer-btn / --composer-inset)
 
 ## User behaviour
 
@@ -33,7 +33,7 @@
 3. Existing feature CSS keeps working; Soft UI overrides polish surfaces (shell, settings, composer, bubbles).
 4. i18n: `tabs.screen` = « Écran », `tabs.discussion` aligned with Conversation, `settings.tabVault|Memory|Companions` for nav consistency.
 5. Top chrome sizes: `--chrome-top` / `--control-h-sm` in `tokens.css`; rail bottom settings orb stays `--control-h`.
-6. Chat card: `ChatPane` wraps messages + composer in `.chat-surface`; stage panes reuse the same radius/shadow on canvas.
+6. Chat card: `ChatPane` wraps messages + composer in `.chat-surface`; stage panes reuse the same radius/shadow on canvas. Composer uses `--composer-btn` / `--composer-inset` (equal padding on all sides; one-line field height = button) so the gap above / below / beside send and + matches to the pixel.
 
 ## Pitfalls / non-regressions
 

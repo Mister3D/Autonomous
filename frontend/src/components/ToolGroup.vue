@@ -583,9 +583,24 @@ function toolDurationMs(m) {
   return null;
 }
 
+/** Command deadline in seconds (vm_terminal_exec default 30 when omitted). */
+function toolTimeoutSec(m) {
+  const meta = m?.meta || {};
+  const args = meta.args && typeof meta.args === "object" ? meta.args : {};
+  const raw = Number(args.timeout);
+  if (Number.isFinite(raw) && raw > 0) return Math.max(1, Math.min(Math.round(raw), 600));
+  if (meta.tool_name === "vm_terminal_exec") return 30;
+  return null;
+}
+
 function toolDurationLabel(m) {
   const ms = toolDurationMs(m);
-  return ms == null ? "" : formatDurationMs(ms);
+  if (ms == null) return "";
+  const elapsed = formatDurationMs(ms);
+  if (!isRunning(m)) return elapsed;
+  const timeoutSec = toolTimeoutSec(m);
+  if (timeoutSec == null) return elapsed;
+  return `${elapsed} / ${formatDurationMs(timeoutSec * 1000)}`;
 }
 
 const groupTimeIso = computed(() => {

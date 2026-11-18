@@ -6212,12 +6212,15 @@ button.msg-queued-action:disabled {
 }
 
 .composer {
+  box-sizing: border-box;
   display: flex;
-  align-items: center;
+  /* Bottom-align so padding-bottom == padding-inline around the send / + circles. */
+  align-items: flex-end;
   gap: 0.15rem;
   margin: 0.35rem 0.75rem 0.7rem;
-  padding: 0.25rem 0.3rem 0.25rem 0.25rem;
-  min-height: calc(32px + 0.5rem);
+  padding: var(--composer-inset);
+  /* Inner row = button; +2px for the 1px border on each side (border-box). */
+  min-height: calc(var(--composer-btn) + 2 * var(--composer-inset) + 2px);
   border: 1px solid #e4e4e8;
   border-radius: 16px;
   background: #fff;
@@ -6344,18 +6347,22 @@ button.msg-queued-action:disabled {
 
 .composer-mirror,
 .composer textarea {
+  display: block;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  min-height: 32px;
+  /* One-line height == send button so vertical inset equals side inset. */
+  min-height: var(--composer-btn);
   max-height: 140px;
-  padding: 0.4rem 0.35rem;
-  line-height: 1.25;
+  padding: calc((var(--composer-btn) - var(--composer-line)) / 2) 0.35rem;
+  line-height: var(--composer-line);
   font: inherit;
   font-size: 0.95rem;
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-wrap: break-word;
+  /* Kill the inline-block baseline gap that added ~4px under the field. */
+  vertical-align: top;
 }
 
 .composer-mirror {
@@ -6641,15 +6648,21 @@ a.bot-mention:hover,
   flex: none;
 }
 
-.composer .icon-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+.composer .icon-btn,
+.composer .send-btn {
+  width: var(--composer-btn);
+  height: var(--composer-btn);
+  border-radius: 50%;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
 }
 
-.composer .send-btn {
-  width: 32px;
-  height: 32px;
+/* Paper-plane path sits optically high in the circle — nudge down. */
+.composer .send-btn svg {
+  display: block;
+  transform: translateY(1px);
 }
 
 .send-btn:hover:not(:disabled) {

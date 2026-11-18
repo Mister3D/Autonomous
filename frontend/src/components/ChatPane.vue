@@ -1015,7 +1015,7 @@ function autosize() {
   if (!el) return;
   el.style.height = "auto";
   const max = 160;
-  const min = 32; /* match .composer .icon-btn */
+  const min = 32; /* match --composer-btn */
   el.style.height = `${Math.min(Math.max(el.scrollHeight, min), max)}px`;
   syncMirrorScroll();
 }
