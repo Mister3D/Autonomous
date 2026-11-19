@@ -21,29 +21,29 @@ English UI by default; French translations included.
 
 ## Screenshots
 
-Example bots (**Atlas**, **Nova**, **Pixel**, **Harbor**) in the English UI:
+Example bots (**Atlas**, **Nova**, **Pixel**, **Harbor**) in the English UI ([French set](docs/screenshots/fr/)):
 
 <p align="center">
-  <img src="docs/screenshots/01-discussion.png" alt="Manager bot Atlas coordinating the team in chat" width="820">
+  <img src="docs/screenshots/en/01-discussion.png" alt="Manager bot Atlas coordinating the team in chat" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/04-pixel-screen.png" alt="Pixel bot desk — Chrome desktop via noVNC" width="820">
+  <img src="docs/screenshots/en/04-pixel-screen.png" alt="Pixel bot desk — Chrome desktop via noVNC" width="820">
 </p>
 
 <details>
 <summary>More (inspector, digest, shared files)</summary>
 
 <p align="center">
-  <img src="docs/screenshots/02-discussion-inspector.png" alt="Atlas with the details inspector open" width="820">
+  <img src="docs/screenshots/en/02-discussion-inspector.png" alt="Atlas with the details inspector open" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/03-nova-digest.png" alt="Nova drafting an ops digest" width="820">
+  <img src="docs/screenshots/en/03-nova-digest.png" alt="Nova drafting an ops digest" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor listing files in ~/files" width="820">
+  <img src="docs/screenshots/en/05-harbor-files.png" alt="Harbor listing files in ~/files" width="820">
 </p>
 
 </details>

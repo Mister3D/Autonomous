@@ -21,29 +21,29 @@ Interface en anglais par défaut ; traductions françaises incluses.
 
 ## Captures d’écran
 
-Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface anglaise :
+Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface française ([jeu anglais](docs/screenshots/en/)) :
 
 <p align="center">
-  <img src="docs/screenshots/01-discussion.png" alt="Le bot manager Atlas coordonne l’équipe dans le chat" width="820">
+  <img src="docs/screenshots/fr/01-discussion.png" alt="Le bot manager Atlas coordonne l’équipe dans le chat" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/04-pixel-screen.png" alt="Bureau du bot Pixel — Chrome via noVNC" width="820">
+  <img src="docs/screenshots/fr/04-pixel-screen.png" alt="Bureau du bot Pixel — Chrome via noVNC" width="820">
 </p>
 
 <details>
 <summary>Plus (inspecteur, digest, fichiers partagés)</summary>
 
 <p align="center">
-  <img src="docs/screenshots/02-discussion-inspector.png" alt="Atlas avec le panneau détails ouvert" width="820">
+  <img src="docs/screenshots/fr/02-discussion-inspector.png" alt="Atlas avec le panneau détails ouvert" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/03-nova-digest.png" alt="Nova rédige un digest ops" width="820">
+  <img src="docs/screenshots/fr/03-nova-digest.png" alt="Nova rédige un digest ops" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor liste les fichiers de ~/files" width="820">
+  <img src="docs/screenshots/fr/05-harbor-files.png" alt="Harbor liste les fichiers de ~/files" width="820">
 </p>
 
 </details>
