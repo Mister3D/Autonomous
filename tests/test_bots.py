@@ -99,19 +99,6 @@ def test_invalid_name(auth_client):
     assert r.status_code in (400, 422)
 
 
-def test_create_uses_default_thinking_setting(auth_client, home):
-    from autonomous.services import settings as settings_svc
-
-    settings_svc.set_value("bots.default_thinking", "low", home=home)
-    r = auth_client.post(
-        "/api/v1/bots",
-        json={"name": "Think Default", "model": "test/provider:fixture"},
-    )
-    assert r.status_code == 201
-    assert r.json.get("thinking") == "low"
-    auth_client.delete(f"/api/v1/bots/{r.json['name']}")
-
-
 def test_patch_thinking_level(auth_client):
     r = auth_client.post("/api/v1/bots", json={"name": "Think Bot"})
     assert r.status_code == 201

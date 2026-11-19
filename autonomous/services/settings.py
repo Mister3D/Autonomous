@@ -34,8 +34,6 @@ DEFAULTS: dict[str, Any] = {
     "companions.enabled": False,
     # Default Pi model ref (provider/id). The only model for new bots the Manager creates.
     "bots.default_model": "",
-    # Default Pi thinking level for new bots (UI create + Manager household).
-    "bots.default_thinking": "medium",
 }
 
 # Removed product setting (was a Cursor test harness, not a feature).
@@ -47,6 +45,8 @@ _OBSOLETE_KEYS = (
     "llm.heavy_gate_enabled",
     "llm.heavy_max_concurrent",
     "llm.heavy_token_threshold",
+    # Moved to per-model ``autonomous.defaultThinking`` in models.json.
+    "bots.default_thinking",
 )
 
 

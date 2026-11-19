@@ -425,17 +425,34 @@ def ensure_manager_slot(*, home: Path | None = None, exclude: str | None = None)
         )
 
 
-def default_thinking_level(*, home: Path | None = None) -> str:
-    """Household / create-bot default from ``bots.default_thinking``."""
-    from autonomous.services import settings as settings_svc
+def thinking_default_for_model(model_ref: str | None) -> str:
+    """Pi thinking level configured on the model card (``autonomous.defaultThinking``)."""
+    ref = (model_ref or "").strip()
+    if not ref:
+        return DEFAULT_THINKING_LEVEL
+    try:
+        from autonomous.services import setup_config as setup_cfg
 
-    return normalize_thinking_level(
-        settings_svc.get(
-            "bots.default_thinking",
-            home=home,
-            default=DEFAULT_THINKING_LEVEL,
-        )
-    )
+        provider, model_id = setup_cfg.split_model_ref(ref)
+        entry = setup_cfg.find_model_entry(setup_cfg._read_models_json(), provider, model_id)
+    except Exception:
+        return DEFAULT_THINKING_LEVEL
+    if not isinstance(entry, dict):
+        return DEFAULT_THINKING_LEVEL
+    auto = entry.get("autonomous") if isinstance(entry.get("autonomous"), dict) else {}
+    raw = auto.get("defaultThinking", auto.get("default_thinking"))
+    if raw is None or str(raw).strip() == "":
+        return DEFAULT_THINKING_LEVEL
+    try:
+        return normalize_thinking_level(raw)
+    except ValidationError:
+        return DEFAULT_THINKING_LEVEL
+
+
+def default_thinking_level(*, model: str | None = None, home: Path | None = None) -> str:
+    """Create-bot / Manager default: per-model card, else ``medium``."""
+    _ = home  # reserved (models.json is under the user HOME, not AUTONOMOUS_HOME)
+    return thinking_default_for_model(model)
 
 
 def create_bot(
@@ -486,7 +503,7 @@ def create_bot(
     thinking_level = (
         normalize_thinking_level(thinking)
         if thinking is not None
-        else default_thinking_level(home=home)
+        else default_thinking_level(model=model_ref, home=home)
     )
     used_avatars = {b.get("avatar") or "" for b in list_bots(home=home)}
     avatar_raw = (avatar or "").strip()

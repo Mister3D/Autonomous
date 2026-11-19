@@ -2,12 +2,13 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/setup_config.py`, `autonomous/services/llm_heavy_gate.py`, `autonomous/pi_extensions/llm_heavy_gate.ts`, `autonomous/services/chat_attachments.py`, `frontend/src/components/LlmSettings.vue`  
-**Last updated**: 2026-11-19 (default thinking level for new bots)
+**Last updated**: 2026-11-19 (per-model default thinking on the model card)
 
 ## User behaviour
 
 - Settings → **LLM**: edit OpenAI-compatible providers written to `~/.pi/agent/models.json` (Pi schema).
-- **Default model** (its own card): the only Pi ref a Manager-created bot receives, and the model preselected in the Create bot dialog (see [household.md](./household.md) and [bots-create.md](./bots-create.md)). Also a **Default thinking** select (Pi `off`→`max`, default `medium`) saved as `bots.default_thinking` — applied when the user creates a bot or the Manager does. Per-bot override stays in Details. Saved via `PUT /settings` (`bots.default_model`, `bots.default_thinking`). The model picker spans the card.
+- **Default model** (its own card): the only Pi ref a Manager-created bot receives, and the model preselected in the Create bot dialog (see [household.md](./household.md) and [bots-create.md](./bots-create.md)). Saved via `PUT /settings` (`bots.default_model`). The picker spans the card.
+- **Models** cards: each model has a **Default thinking** select (Pi `off`→`max`, default `medium`) stored as `autonomous.defaultThinking` on that entry. New bots (UI create or Manager) that use this model inherit that level; Details still overrides per bot.
 - Two clear blocks:
   1. **Providers** — add / edit API endpoints (id, URL, key). Save without needing a model.
   2. **Models** — same cards as providers: collapsed on arrival, trash on the row, **Add a model** opens one empty card. Fields start with the display name, then provider (placeholder until chosen; that pick fetches `/v1/models`), then the model id menu, vision, limits, and optional **large-request concurrency** (toggle + max concurrent + token threshold).
@@ -25,7 +26,7 @@
 
 ## Implementation
 
-- Source of truth for config: Pi `models.json` (`name`, `input`, `inputLimits.images.maxPerRequest`, `contextWindow`, `maxTokens`, plus Autonomous overlays `autonomous.parallelGate` / `autonomous.heavyGate`).
+- Source of truth for config: Pi `models.json` (`name`, `input`, `inputLimits.images.maxPerRequest`, `contextWindow`, `maxTokens`, plus Autonomous overlays `autonomous.parallelGate` / `autonomous.heavyGate` / `autonomous.defaultThinking`).
 - `PUT /setup/llm`:
   - no `models` / `model` → update provider credentials only (keep existing models, or create empty);
   - `models: [...]` → full list replace for that provider (may be `[]`);

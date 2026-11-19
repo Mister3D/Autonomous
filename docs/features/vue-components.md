@@ -86,7 +86,7 @@ The guard-rail line and the Pi compaction line are not separate components. `Cha
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `LlmSettings.vue` | Settings → LLM: four cards (default model + default thinking, providers, models, other models). Model cards include per-model parallel + large-request concurrency. | [`llm-settings.md`](./llm-settings.md) |
+| `LlmSettings.vue` | Settings → LLM: four cards (default model, providers, models, other models). Model cards include default thinking + per-model parallel / large-request concurrency. | [`llm-settings.md`](./llm-settings.md) |
 | `GroundingSettings.vue` | Settings → grounding / UI-TARS keys. | [`grounding.md`](./grounding.md) |
 | `TokenUsageChart.vue` | Settings → Consumption. Chart on a wide screen; under 760px a day bar and a table of that day’s totals. | [`token-usage.md`](./token-usage.md) |
 | `SetupPanel.vue` | First-run checklist + updates + first chat CTA (home). | [`setup.md`](./setup.md), [`updates.md`](./updates.md) |
