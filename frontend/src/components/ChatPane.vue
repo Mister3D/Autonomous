@@ -2091,6 +2091,12 @@ function compactionItem(m) {
   }
   const bits = [];
   if (reason) bits.push(reason);
+  if (meta.chunked && Number(meta.passes) > 1) {
+    bits.push(t("chat.compactionPasses", { n: Number(meta.passes) }));
+  }
+  if (status === "error" && meta.hint === "lower_thinking") {
+    bits.push(t("chat.compactionHintLowerThinking"));
+  }
   if (
     status === "done" &&
     Number.isFinite(Number(meta.tokens_before)) &&

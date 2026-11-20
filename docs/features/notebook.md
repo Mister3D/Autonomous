@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/notebook.py`, `autonomous/api/bots.py`, `autonomous/pi_extensions/notebook.ts`, `autonomous/migrations/026_bot_notebook.sql`, `frontend/src/components/DetailsPane.vue`, `frontend/src/components/ChatPane.vue`  
-**Last updated**: 2026-11-18 (centred notebook card in the thread)
+**Last updated**: 2026-11-20 (survives chunked compaction; not a substitute for it)
 
 ## User behaviour
 
@@ -27,6 +27,7 @@
 ## Pitfalls
 
 - An already-open Pi session does not see `notebook.ts` or the new hint until that process restarts. The trailer appears on the next `prompt()` as soon as the server process is running this code.
+- The notebook is durable across Pi compaction, but it does **not** replace compaction. Huge sessions still need a successful summary (chunked with overlap — see [pi-agent.md](./pi-agent.md)); the notebook only keeps standing orders / open lines / note titles so the bot does not lose intent when history is compressed.
 - Do not put the notebook into the system prompt on each message. That rewrites the prefix and busts the KV cache.
 - Do not store per-bot rules in shared `memory_propose`. Household facts (name, tastes, rules for every bot) stay there.
 - Reuse the same `title` to update a rule. A new title is a new row, until the cap.

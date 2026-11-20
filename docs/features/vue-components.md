@@ -70,7 +70,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `AgentResumeCard.vue` | Manual Resume fallback after interrupt (rare; server auto-resumes first). | [`pi-agent.md`](./pi-agent.md) |
 | `BotDeleteCard.vue` | Manager household delete checkboxes. | [`household.md`](./household.md) |
 
-The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as centred cards (`meta.kind` `guard` or `compaction`). LLM turns are always rows inside `ToolGroup`. See [`pi-agent.md`](./pi-agent.md).
+The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as centred cards (`meta.kind` `guard` or `compaction`). Compaction detail may show reason, optional « N passes » when chunked, and token counts. LLM turns are always rows inside `ToolGroup`. See [`pi-agent.md`](./pi-agent.md).
 
 ## Modals / overlays
 

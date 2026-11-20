@@ -37,6 +37,8 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "react.ts",
     _EXTENSIONS_DIR / "memory.ts",
     _EXTENSIONS_DIR / "notebook.ts",
+    # Chunked summary with overlap — avoids one-shot "token cap" compaction failures.
+    _EXTENSIONS_DIR / "compaction.ts",
     _EXTENSIONS_DIR / "approval.ts",
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
@@ -45,6 +47,18 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "llm_heavy_gate.ts",
     # After vision_budget so the request preview matches what is actually sent.
     _EXTENSIONS_DIR / "llm_trace.ts",
+)
+
+# Replaces Pi's default "You are a coding assistant running inside pi…" preamble
+# (``--system-prompt``). Domain rules stay in ``--append-system-prompt``.
+_BASE_SYSTEM_PROMPT = (
+    "You are a helpful autonomous companion running inside Autonomous. "
+    "Help the user with everyday work: browsing the web, using desktop apps, "
+    "managing files, coordinating with other bots, remembering preferences, "
+    "and answering questions. You have a private virtual desktop and tools — "
+    "use them when the task needs action, not only prose. Coding is one "
+    "possible task among many, not your default role. Be clear and concise. "
+    "Prefer doing the work over explaining how to do it."
 )
 
 _BATCH_SYSTEM_HINT = (
@@ -520,6 +534,8 @@ class PiRpcSession:
             # Explicit level so a non-default bot setting sticks on spawn.
             # Session + prefix cache stay — not a flush or RPC restart.
             cmd.extend(["--thinking", thinking_level])
+            # Replace Pi's coding-assistant preamble (not an append).
+            cmd.extend(["--system-prompt", _BASE_SYSTEM_PROMPT])
             memory_core = ""
             try:
                 from autonomous.services import memory as memory_svc
