@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { api } from "./api";
 import { i18n } from "./i18n";
 import { uid } from "./uid";
 
@@ -47,7 +48,6 @@ let setupInflight = null;
 export function refreshSetup(force = false) {
   if (setupInflight && !force) return setupInflight;
   setupInflight = (async () => {
-    const { api } = await import("./api");
     try {
       state.setup = await api.setupStatus(force);
     } catch {
