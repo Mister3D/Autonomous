@@ -224,11 +224,11 @@ def test_parse_pi_model_list_keeps_capabilities():
 
     text = """provider  model  context  max-out  thinking  images
 openai    gpt-5.4  272K  128K  yes  yes
-Mister3D  custom/id  128K  16K  no  yes
+Local  custom/id  128K  16K  no  yes
 Use /login to add more
 """
     rows = parse_model_list(text)
     assert [(r["provider"], r["id"], r["context"], r["thinking"], r["images"]) for r in rows] == [
         ("openai", "gpt-5.4", "272K", True, True),
-        ("Mister3D", "custom/id", "128K", False, True),
+        ("Local", "custom/id", "128K", False, True),
     ]

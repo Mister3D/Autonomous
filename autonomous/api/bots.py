@@ -156,6 +156,7 @@ class BotList(MethodView):
                 memory_access=data.get("memory_access", True),
                 is_manager=bool(data.get("is_manager", False)),
                 model=model,
+                thinking=data.get("thinking"),
                 avatar=data.get("avatar"),
                 avatar_color=data.get("avatar_color"),
                 home=g.home,

@@ -40,19 +40,13 @@
           @focusin="p._tip = true"
           @focusout="p._tip = false"
         >
-          <button
-            class="vault-trash"
-            type="button"
+          <UiIconButton
+            icon="trash"
+            danger
             :disabled="providerInUse(p) || p._saving"
-            :aria-label="providerTip(p)"
+            :label="providerTip(p)"
             @click.stop="removeProvider(p)"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path d="M5 7.5h14" />
-              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-            </svg>
-          </button>
+          />
           <span v-if="p._tip" class="llm-provider-tip" role="tooltip">{{ providerTip(p) }}</span>
         </span>
         <button
@@ -106,14 +100,14 @@
           <small>{{ providerKeyHint(p) }}</small>
         </label>
         <div class="setup-toolbar">
-          <button
-            class="btn primary"
+          <UiButton
+            variant="primary"
             type="button"
             :disabled="!isProviderDirty(p) || p._saving || !canSaveProvider(p)"
             @click="saveProvider(p)"
           >
             {{ p._saving ? "…" : t("llm.saveProvider") }}
-          </button>
+          </UiButton>
           <span v-if="p._ok" class="setup-ok">{{ p._ok }}</span>
           <span v-if="p._error" class="vault-error">{{ p._error }}</span>
         </div>
@@ -122,9 +116,9 @@
     </ul>
     <p v-else class="hint">{{ t("llm.providersEmpty") }}</p>
     <div class="setup-toolbar">
-      <button class="btn" type="button" :disabled="addingProvider" @click="startAddProvider">
+      <UiButton type="button" :disabled="addingProvider" @click="startAddProvider">
         {{ t("llm.addProvider") }}
-      </button>
+      </UiButton>
     </div>
   </UiCard>
 
@@ -147,19 +141,13 @@
           @focusin="m._tip = true"
           @focusout="m._tip = false"
         >
-          <button
-            class="vault-trash"
-            type="button"
+          <UiIconButton
+            icon="trash"
+            danger
             :disabled="m._saving"
-            :aria-label="t('llm.deleteModel')"
+            :label="t('llm.deleteModel')"
             @click.stop="removeModel(m)"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path d="M5 7.5h14" />
-              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-            </svg>
-          </button>
+          />
           <span v-if="m._tip" class="llm-provider-tip" role="tooltip">{{ t("llm.deleteModel") }}</span>
         </span>
         <button
@@ -219,13 +207,22 @@
               field
             />
           </label>
-          <label class="toggle-row">
-            <span>
-              <strong>{{ t("llm.images") }}</strong>
-              <small>{{ t("llm.imagesHint") }}</small>
-            </span>
-            <input v-model="m.images" type="checkbox" role="switch" :aria-label="t('llm.images')" />
+          <label class="settings-field llm-model-thinking">
+            <span>{{ t("llm.defaultThinking") }}</span>
+            <MenuSelect
+              field
+              :model-value="m.default_thinking"
+              :options="thinkingOptions"
+              :aria-label="t('llm.defaultThinking')"
+              @update:model-value="(v) => (m.default_thinking = normalizeThinking(v))"
+            />
+            <small>{{ t("llm.defaultThinkingHint") }}</small>
           </label>
+          <UiToggleRow
+            :title="t('llm.images')"
+            :hint="t('llm.imagesHint')"
+            v-model="m.images"
+          />
           <div class="llm-limits-grid">
             <label class="settings-field">
               <span>{{ t("llm.maxImages") }}</span>
@@ -243,18 +240,11 @@
               <small>{{ t("llm.maxTokensHint") }}</small>
             </label>
           </div>
-          <label class="toggle-row">
-            <span>
-              <strong>{{ t("llm.parallelEnabled") }}</strong>
-              <small>{{ t("llm.parallelEnabledHint") }}</small>
-            </span>
-            <input
-              v-model="m.parallel_gate_enabled"
-              type="checkbox"
-              role="switch"
-              :aria-label="t('llm.parallelEnabled')"
-            />
-          </label>
+          <UiToggleRow
+            :title="t('llm.parallelEnabled')"
+            :hint="t('llm.parallelEnabledHint')"
+            v-model="m.parallel_gate_enabled"
+          />
           <div class="llm-limits-grid">
             <label class="settings-field">
               <span>{{ t("llm.maxParallel") }}</span>
@@ -270,18 +260,11 @@
               <small>{{ t("llm.maxParallelHint") }}</small>
             </label>
           </div>
-          <label class="toggle-row">
-            <span>
-              <strong>{{ t("llm.heavyEnabled") }}</strong>
-              <small>{{ t("llm.heavyEnabledHint") }}</small>
-            </span>
-            <input
-              v-model="m.heavy_gate_enabled"
-              type="checkbox"
-              role="switch"
-              :aria-label="t('llm.heavyEnabled')"
-            />
-          </label>
+          <UiToggleRow
+            :title="t('llm.heavyEnabled')"
+            :hint="t('llm.heavyEnabledHint')"
+            v-model="m.heavy_gate_enabled"
+          />
           <div class="llm-limits-grid">
             <label class="settings-field">
               <span>{{ t("llm.heavyMaxConcurrent") }}</span>
@@ -310,14 +293,14 @@
             </label>
           </div>
           <div class="setup-toolbar">
-            <button
-              class="btn primary"
+            <UiButton
+              variant="primary"
               type="button"
               :disabled="!isModelDirty(m) || m._saving || !canSaveModel(m)"
               @click="saveModel(m)"
             >
               {{ m._saving ? "…" : t("llm.saveModel") }}
-            </button>
+            </UiButton>
             <span v-if="m._ok" class="setup-ok">{{ m._ok }}</span>
             <span v-if="m._error" class="vault-error">{{ m._error }}</span>
           </div>
@@ -326,9 +309,9 @@
     </ul>
     <p v-else class="hint">{{ t("llm.modelsEmpty") }}</p>
     <div class="setup-toolbar">
-      <button class="btn" type="button" :disabled="addingModel || !savedProviders.length" @click="startAddModel">
+      <UiButton type="button" :disabled="addingModel || !savedProviders.length" @click="startAddModel">
         {{ t("llm.addModel") }}
-      </button>
+      </UiButton>
     </div>
   </UiCard>
 
@@ -367,14 +350,23 @@ import { refreshSetup } from "../store";
 import MenuSelect from "./MenuSelect.vue";
 import ModelPicker from "./ModelPicker.vue";
 import SecretInput from "./SecretInput.vue";
+import UiButton from "./ui/UiButton.vue";
 import UiCard from "./ui/UiCard.vue";
 import UiIcon from "./ui/UiIcon.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 let keySeq = 0;
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 function normNum(v) {
   if (v === "" || v == null || Number.isNaN(Number(v))) return null;
   return Number(v);
+}
+
+function normalizeThinking(raw) {
+  const s = String(raw ?? "medium").trim().toLowerCase();
+  return THINKING_LEVELS.includes(s) ? s : "medium";
 }
 
 function modelFingerprint(m) {
@@ -391,6 +383,7 @@ function modelFingerprint(m) {
     heavy_gate_enabled: !!m.heavy_gate_enabled,
     heavy_max_concurrent: normNum(m.heavy_max_concurrent) ?? 2,
     heavy_token_threshold: normNum(m.heavy_token_threshold) ?? 10000,
+    default_thinking: normalizeThinking(m.default_thinking),
   });
 }
 
@@ -418,6 +411,7 @@ function blankModel(partial = {}) {
     heavy_gate_enabled: false,
     heavy_max_concurrent: 2,
     heavy_token_threshold: 10000,
+    default_thinking: "medium",
     _isNew: false,
     _open: false,
     _originProvider: "",
@@ -487,6 +481,13 @@ const defaultModelSaving = ref(false);
 const defaultModelOk = ref("");
 const defaultModelError = ref("");
 let defaultModelTimer = 0;
+
+const thinkingOptions = computed(() =>
+  THINKING_LEVELS.map((value) => ({
+    value,
+    label: t(`details.thinkingLevel.${value}`),
+  })),
+);
 
 const savedProviders = computed(() => (view.value?.providers || []).filter((p) => p.provider));
 const providerOptions = computed(() =>
@@ -614,6 +615,7 @@ function applyView(data) {
         heavy_gate_enabled: !!m.heavy_gate_enabled,
         heavy_max_concurrent: m.heavy_max_concurrent ?? 2,
         heavy_token_threshold: m.heavy_token_threshold ?? 10000,
+        default_thinking: normalizeThinking(m.default_thinking),
         _originProvider: p.provider,
         _originId: id,
         _open: keepModelOpen.has(`${p.provider}\n${id}`),
@@ -775,6 +777,7 @@ async function saveModel(m) {
       heavy_gate_enabled: !!m.heavy_gate_enabled,
       heavy_max_concurrent: Math.max(1, Math.min(64, Math.round(normNum(m.heavy_max_concurrent) || 2))),
       heavy_token_threshold: Math.max(0, Math.round(normNum(m.heavy_token_threshold) ?? 10000)),
+      default_thinking: normalizeThinking(m.default_thinking),
     });
     m._isNew = false;
     applyView(data);
@@ -817,6 +820,7 @@ async function removeModel(m) {
       heavy_gate_enabled: !!row.heavy_gate_enabled,
       heavy_max_concurrent: Math.max(1, Math.min(64, Math.round(normNum(row.heavy_max_concurrent) || 2))),
       heavy_token_threshold: Math.max(0, Math.round(normNum(row.heavy_token_threshold) ?? 10000)),
+      default_thinking: normalizeThinking(row.default_thinking),
     }))
     .filter((row) => !!row.id);
   try {

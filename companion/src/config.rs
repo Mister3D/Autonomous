@@ -64,22 +64,12 @@ pub fn config_path() -> Option<PathBuf> {
         .map(|dirs| dirs.config_dir().join("companion.json"))
 }
 
-/// Location used by versions <= 0.1.0; read once if the new file is absent.
-fn legacy_config_path() -> Option<PathBuf> {
-    directories::ProjectDirs::from("fr", "mister3d", "Autonomous")
-        .map(|dirs| dirs.config_dir().join("companion.json"))
-}
-
 pub fn load() -> Config {
     let Some(path) = config_path() else {
         return Config::default();
     };
-    let text = match fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(_) => match legacy_config_path().and_then(|p| fs::read_to_string(p).ok()) {
-            Some(text) => text,
-            None => return Config::default(),
-        },
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Config::default();
     };
     serde_json::from_str(&text).unwrap_or_default()
 }

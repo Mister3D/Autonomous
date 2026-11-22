@@ -50,33 +50,39 @@
         </template>
       </nav>
       <div class="files-actions">
-        <button
-          class="btn file-action icon-only"
+        <UiButton
+          class="file-action"
+          icon-only
           type="button"
           :disabled="busy"
           :title="t('files.mkdir')"
           :aria-label="t('files.mkdir')"
           @click="startMkdir"
         >
-          <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 9.2V7.1A1.6 1.6 0 0 1 5.1 5.5h4l1.5 1.6h8.3A1.6 1.6 0 0 1 20.5 8.7v1" />
-            <path d="M3.5 10h17l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.3H6.2a1.6 1.6 0 0 1-1.6-1.3L3.5 10Z" />
-            <path d="M12 12.2v5M9.5 14.7h5" />
-          </svg>
-        </button>
-        <button
-          class="btn file-action icon-only"
+          <template #icon>
+            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.5 9.2V7.1A1.6 1.6 0 0 1 5.1 5.5h4l1.5 1.6h8.3A1.6 1.6 0 0 1 20.5 8.7v1" />
+              <path d="M3.5 10h17l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.3H6.2a1.6 1.6 0 0 1-1.6-1.3L3.5 10Z" />
+              <path d="M12 12.2v5M9.5 14.7h5" />
+            </svg>
+          </template>
+        </UiButton>
+        <UiButton
+          class="file-action"
+          icon-only
           type="button"
           :disabled="busy"
           :title="uploading ? t('files.uploading') : t('files.upload')"
           :aria-label="uploading ? t('files.uploading') : t('files.upload')"
           @click="pickFiles"
         >
-          <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 15.5V5.5M8.5 9 12 5.5 15.5 9" />
-            <path d="M5 16.5v1.3A1.7 1.7 0 0 0 6.7 19.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
-          </svg>
-        </button>
+          <template #icon>
+            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15.5V5.5M8.5 9 12 5.5 15.5 9" />
+              <path d="M5 16.5v1.3A1.7 1.7 0 0 0 6.7 19.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
+            </svg>
+          </template>
+        </UiButton>
         <input
           ref="fileInput"
           type="file"
@@ -102,12 +108,12 @@
         :disabled="uploading"
         @keydown.esc.prevent="cancelMkdir"
       />
-      <button class="btn primary" type="submit" :disabled="uploading || !mkdirName.trim()">
+      <UiButton variant="primary" type="submit" :disabled="uploading || !mkdirName.trim()">
         {{ t("ok") }}
-      </button>
-      <button class="btn" type="button" :disabled="uploading" @click="cancelMkdir">
+      </UiButton>
+      <UiButton type="button" :disabled="uploading" @click="cancelMkdir">
         {{ t("files.cancel") }}
-      </button>
+      </UiButton>
     </form>
 
     <p class="files-hint">{{ t("files.sharedHint") }}</p>
@@ -189,52 +195,22 @@
           class="file-size"
         >{{ formatSize(e.size) }}</span>
         <div class="file-ops">
-          <span
+          <UiActionConfirm
             v-if="armedDelete === e.path"
-            class="action-confirm-wrap"
-            @pointerenter="deleteTip = e.path"
-            @pointerleave="deleteTip = ''"
-            @focusin="deleteTip = e.path"
-            @focusout="deleteTip = ''"
-          >
-            <button
-              class="action-confirm file-icon-btn"
-              type="button"
-              :disabled="busy"
-              :aria-label="t('confirm.confirmAction')"
-              @click="confirmDelete(e)"
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                <path
-                  d="M3.2 8.2 6.4 11.4 12.8 4.6"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </button>
-            <span
-              v-if="deleteTip === e.path"
-              class="action-confirm-tip"
-              role="tooltip"
-            >{{ t("confirm.confirmAction") }}</span>
-          </span>
-          <button
-            class="file-icon-btn danger"
-            type="button"
+            button-class="ui-icon-btn is-file"
+            :disabled="busy"
+            @confirm="confirmDelete(e)"
+          />
+          <UiIconButton
+            v-else
+            icon="trash"
+            danger
+            size-variant="file"
+            :label="t('files.delete')"
             :title="t('files.delete')"
-            :aria-label="t('files.delete')"
             :disabled="busy"
             @click="armDelete(e)"
-          >
-            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 7.5h14" />
-              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-            </svg>
-          </button>
+          />
         </div>
       </li>
     </ul>
@@ -246,6 +222,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import UiActionConfirm from "./ui/UiActionConfirm.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 
 const INTERNAL_MIME = "application/x-autonomous-file";
 
@@ -265,7 +244,6 @@ const mkdirOpen = ref(false);
 const mkdirName = ref("");
 const mkdirInput = ref(null);
 const armedDelete = ref("");
-const deleteTip = ref("");
 /** Custom hover tip (full name) — never browser ``title``. */
 const nameTip = ref("");
 let dragDepth = 0;
@@ -349,7 +327,6 @@ function download(e) {
 
 function clearTips() {
   armedDelete.value = "";
-  deleteTip.value = "";
   nameTip.value = "";
 }
 
@@ -383,7 +360,6 @@ function goUp() {
 
 function armDelete(e) {
   armedDelete.value = armedDelete.value === e.path ? "" : e.path;
-  deleteTip.value = "";
 }
 
 async function confirmDelete(e) {
@@ -393,8 +369,7 @@ async function confirmDelete(e) {
   try {
     await api.deleteFile(props.bot.name, e.path);
     armedDelete.value = "";
-    deleteTip.value = "";
-    await load();
+      await load();
   } catch (err) {
     error.value = err.message || String(err);
   } finally {

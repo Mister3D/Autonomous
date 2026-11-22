@@ -716,7 +716,6 @@
       <button
         v-else
         class="send-btn"
-        :class="{ queue: busy }"
         type="submit"
         :aria-label="t('chat.send')"
         :title="t('chat.send')"
@@ -1016,7 +1015,7 @@ function autosize() {
   if (!el) return;
   el.style.height = "auto";
   const max = 160;
-  const min = 32; /* match .composer .icon-btn */
+  const min = 32; /* match --composer-btn */
   el.style.height = `${Math.min(Math.max(el.scrollHeight, min), max)}px`;
   syncMirrorScroll();
 }
@@ -2092,6 +2091,12 @@ function compactionItem(m) {
   }
   const bits = [];
   if (reason) bits.push(reason);
+  if (meta.chunked && Number(meta.passes) > 1) {
+    bits.push(t("chat.compactionPasses", { n: Number(meta.passes) }));
+  }
+  if (status === "error" && meta.hint === "lower_thinking") {
+    bits.push(t("chat.compactionHintLowerThinking"));
+  }
   if (
     status === "done" &&
     Number.isFinite(Number(meta.tokens_before)) &&
@@ -2130,14 +2135,35 @@ function isSecretLeak(m) {
   );
 }
 
-/** Hard agent failures posted as `⚠️ …` assistant bubbles — show as centered red cards. */
+/**
+ * Host hard-failure assistant bubbles (`⚠️ pi process ended`, RPC timeout, …).
+ * Not ordinary bot prose that happens to open with a warning emoji.
+ */
+function isHardFailureText(raw, meta = {}) {
+  const text = String(raw || "").trim();
+  if (!text) return false;
+  if (meta?.aborted || meta?.error) {
+    return (
+      /^\s*⚠️/.test(text) ||
+      text === String(meta.error || "").trim() ||
+      /^⏹\s*Stopped\.?$/i.test(text)
+    );
+  }
+  if (!/^\s*⚠️\s+\S/.test(text)) return false;
+  const body = text.replace(/^\s*⚠️\s*/, "").trim();
+  // Real host failures are one short line — not a multi-paragraph reply.
+  if (body.includes("\n")) return false;
+  if (body.length > 240) return false;
+  // Bot emphasis often puts markdown right after the emoji (e.g. `⚠️ **Alert**`).
+  if (/^(\*\*|__|#{1,6}\s|>\s)/.test(body)) return false;
+  return true;
+}
+
+/** Hard agent failures → centred red cards (not left bubbles). */
 function isAgentError(m) {
   if (m?.role !== "assistant") return false;
   if (m?.meta?.streaming) return false;
-  const raw = String(m?.content || "").trim();
-  if (!raw) return false;
-  if (m?.meta?.error) return /^\s*⚠️/.test(raw) || raw === String(m.meta.error).trim();
-  return /^\s*⚠️\s+\S/.test(raw);
+  return isHardFailureText(m?.content, m?.meta || {});
 }
 
 function agentErrorItem(m) {
@@ -2637,11 +2663,7 @@ const lastTurnFailed = computed(() => {
     const meta = m.meta || {};
     const text = String(m.content || "").trim();
     if (meta.streaming) return false;
-    if (meta.aborted || meta.error) {
-      sawFailure = true;
-      continue;
-    }
-    if (!text || text.startsWith("⚠️") || /^⏹\s*Stopped\.?$/i.test(text)) {
+    if (!text || isHardFailureText(text, meta)) {
       sawFailure = true;
       continue;
     }
@@ -2664,7 +2686,7 @@ const stuckBusy = computed(() => {
     if (m?.role !== "assistant") continue;
     const meta = m.meta || {};
     const text = String(m.content || "").trim();
-    if (meta.aborted || meta.error || text.startsWith("⚠️")) return true;
+    if (isHardFailureText(text, meta)) return true;
     return false;
   }
   return false;

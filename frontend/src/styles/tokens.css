@@ -66,6 +66,10 @@
   --chrome-top: 0.55rem;
   --control-h: 40px;
   --control-h-sm: 32px;
+  /* Composer chrome: button size + equal inset (top = bottom = side). */
+  --composer-btn: 32px;
+  --composer-inset: 6px;
+  --composer-line: 20px;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;

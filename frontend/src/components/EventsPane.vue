@@ -8,15 +8,12 @@
       <ul v-else class="events-list">
         <li v-for="s in schedules" :key="s.id" class="events-item">
           <div class="events-item-main">
-            <label class="events-toggle">
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="!!s.enabled"
-                :aria-label="s.enabled ? t('events.on') : t('events.off')"
-                @change="toggleSchedule(s, $event)"
-              />
-            </label>
+            <UiSwitch
+              compact
+              :model-value="!!s.enabled"
+              :aria-label="s.enabled ? t('events.on') : t('events.off')"
+              @change="toggleSchedule(s, $event)"
+            />
             <button
               type="button"
               class="events-name"
@@ -33,17 +30,14 @@
             <div class="events-meta">
               <span>{{ t("events.nextRun") }}: {{ formatWhen(s.next_run_at, s.timezone) }}</span>
             </div>
-            <button
-              type="button"
-              class="events-icon-btn danger"
-              :aria-label="t('events.delete')"
+            <UiIconButton
+              icon="trash"
+              danger
+              size-variant="compact"
+              :label="t('events.delete')"
               :title="t('events.delete')"
               @click="removeSchedule(s)"
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
+            />
           </div>
         </li>
       </ul>
@@ -55,15 +49,12 @@
       <ul v-else class="events-list">
         <li v-for="w in webhooks" :key="w.id" class="events-item">
           <div class="events-item-main">
-            <label class="events-toggle">
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="!!w.enabled"
-                :aria-label="w.enabled ? t('events.on') : t('events.off')"
-                @change="toggleWebhook(w, $event)"
-              />
-            </label>
+            <UiSwitch
+              compact
+              :model-value="!!w.enabled"
+              :aria-label="w.enabled ? t('events.on') : t('events.off')"
+              @change="toggleWebhook(w, $event)"
+            />
             <button
               type="button"
               class="events-name"
@@ -73,33 +64,24 @@
               {{ w.name }}
             </button>
             <div class="events-item-actions">
-              <button
-                type="button"
-                class="events-icon-btn"
-                :aria-label="copiedId === w.id ? t('events.copied') : t('events.copyUrl')"
+              <UiIconButton
+                :icon="copiedId === w.id ? 'check' : 'copy'"
+                size-variant="compact"
+                :icon-size="19"
+                :label="copiedId === w.id ? t('events.copied') : t('events.copyUrl')"
                 :title="copiedId === w.id ? t('events.copied') : t('events.copyUrl')"
                 @click="copyUrl(w)"
-              >
-                <svg v-if="copiedId === w.id" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 12.5 10 17.5 19 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7" />
-                  <path d="M6 16V6a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                class="events-icon-btn danger"
-                :aria-label="t('events.delete')"
+              />
+              <UiIconButton
+                icon="trash"
+                danger
+                size-variant="compact"
+                :icon-size="19"
+                :label="t('events.delete')"
                 :title="t('events.delete')"
-                :aria-expanded="confirmWebhookId === w.id"
+                :expanded="confirmWebhookId === w.id ? 'true' : 'false'"
                 @click="confirmWebhookId = confirmWebhookId === w.id ? '' : w.id"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+              />
             </div>
           </div>
           <div v-if="confirmWebhookId === w.id" class="inline-confirm" role="group">
@@ -136,6 +118,8 @@ import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
 import EventInstructionModal from "./EventInstructionModal.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
+import UiSwitch from "./ui/UiSwitch.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();

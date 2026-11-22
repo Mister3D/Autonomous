@@ -17,7 +17,7 @@
 
 - FTS5 index `messages_fts` (body + UNINDEXED metadata). Synced on `create_message` / `send_message` / `update_message`; purged on `clear_messages`; backfilled once at startup (`ensure_fts`).
 - Indexed roles: `user` / `assistant` / `system`. Excluded: `hidden_prompt`, `queued`, tool events / vault-memory-approval cards.
-- LLM: `~/.pi/agent/models.json` (`baseUrl`) + key (`AUTONOMOUS_LLM_API_KEY`, legacy `MISTER3D_API_KEY`, or `apiKey`).
+- LLM: `~/.pi/agent/models.json` (`baseUrl`) + key (`AUTONOMOUS_LLM_API_KEY` or `apiKey`).
 - Outbound NL calls use `assert_safe_outbound_url` + `urlopen_safe` (same gate as Settings / grounding): cloud metadata / link-local blocked; LAN/localhost allowed; redirects re-checked.
 - API: `GET /search/messages?q=&bot=&limit=&mode=auto|lexical|nl`; `POST /search/messages/nl`.
 - Agent: **`chat_search`** tool (hidden from the thread), system hint.

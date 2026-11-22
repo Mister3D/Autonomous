@@ -1,4 +1,5 @@
 import { createI18n } from "vue-i18n";
+import { api } from "./api";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 
@@ -25,17 +26,14 @@ export function setLocale(locale, { persist = true } = {}) {
   i18n.global.locale.value = code;
   localStorage.setItem("autonomous.locale", code);
   if (!persist) return;
-  // Dynamic import: avoid a hard cycle with api ↔ store ↔ i18n.
-  import("./api")
-    .then(({ api }) => api.putSettings({ locale: code }))
-    .catch(() => {
-      /* offline / not logged in — localStorage still updated */
-    });
+  // api.js has no i18n/store imports — static is fine (avoids Vite dual-import warn).
+  api.putSettings({ locale: code }).catch(() => {
+    /* offline / not logged in — localStorage still updated */
+  });
 }
 
 /** Load ``settings.locale`` after auth (server wins over a stale localStorage). */
 export async function loadLocaleFromServer() {
-  const { api } = await import("./api");
   const s = await api.settings();
   const raw = s?.locale;
   if (raw === "fr" || raw === "en") {

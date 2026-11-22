@@ -37,6 +37,8 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "react.ts",
     _EXTENSIONS_DIR / "memory.ts",
     _EXTENSIONS_DIR / "notebook.ts",
+    # Chunked summary with overlap — avoids one-shot "token cap" compaction failures.
+    _EXTENSIONS_DIR / "compaction.ts",
     _EXTENSIONS_DIR / "approval.ts",
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
@@ -45,6 +47,18 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "llm_heavy_gate.ts",
     # After vision_budget so the request preview matches what is actually sent.
     _EXTENSIONS_DIR / "llm_trace.ts",
+)
+
+# Replaces Pi's default "You are a coding assistant running inside pi…" preamble
+# (``--system-prompt``). Domain rules stay in ``--append-system-prompt``.
+_BASE_SYSTEM_PROMPT = (
+    "You are a helpful autonomous companion running inside Autonomous. "
+    "Help the user with everyday work: browsing the web, using desktop apps, "
+    "managing files, coordinating with other bots, remembering preferences, "
+    "and answering questions. You have a private virtual desktop and tools — "
+    "use them when the task needs action, not only prose. Coding is one "
+    "possible task among many, not your default role. Be clear and concise. "
+    "Prefer doing the work over explaining how to do it."
 )
 
 _BATCH_SYSTEM_HINT = (
@@ -339,14 +353,14 @@ DESKTOP & BROWSER (server-side; works without the web UI open)
 - One VM per bot: a full computer (terminal, screen, browser, files). vm_request_desk() WAITS for the user; call nothing else meanwhile. Check state with vm_desk_status. If the desk is down, ask the user once. When you describe the desk, stop after that sentence. Do not add a remark about modes, tabs, or choosing between a terminal and a screen.
 - Shell work: vm_terminal_exec (cwd /home/autonomous/workspace, the same private folder as ~/files). Bot files (~/files, this bot only): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for the VM and waits. Never invent command output. There is no host bash on the Autonomous server: the agent cannot run commands on the host machine.
 - This VM is yours. User ``autonomous`` has passwordless sudo (``sudo -n``). Install desktop apps and packages with ``sudo apt-get update`` / ``sudo apt-get install -y …`` (or ``sudo pip``) whenever the task needs them — do not invent a permission barrier, do not claim you lack the right, do not ask the user to "authorize apt". A bare ``apt-get`` without sudo fails with lock errors; that is not a policy block — retry with ``sudo``. The only gate for starting the desk is vm_request_desk; after that, act.
-- GUI apps (calculator, editor, drawing, spreadsheet, file manager, desktop icons, dialogs, …): (1) ``command -v`` — if missing, ``sudo apt-get update`` then ``sudo apt-get install -y …``; (2) launch with ``DISPLAY=:1`` and ``setsid``; on the first attempt do **not** redirect stderr to ``/dev/null``; (3) confirm the process is alive; (4) raise/focus the window (``wmctrl -a`` / click its taskbar entry) so it is not hidden under Chrome or another window — keys go to the focused window. When install and launch arguments are already known, emit those shell tools in **one sequential batch** (``batch_sequential``) instead of one model turn per command; wait for results before claiming the window is up. To **use** the app (press buttons, focus fields, menus, draw, fill cells, rename via a dialog): there is no browser DOM — do **not** call ``browser_snapshot`` first. Prefer ``vm_ground`` (English instruction naming the control) then ``vm_click`` / ``vm_type`` / ``vm_key``. ``vm_ground`` works on a desk screenshot without a DOM read. That is faster and more reliable than ``vm_look`` loops or ``xdotool`` / guessed coordinates in ``vm_terminal_exec``. Shell is for install/launch/process checks — not for clicking the GUI. When the user asked for the **graphical** UI of a document app (spreadsheet, drawing, desktop rename dialog), do the work in that UI — do not substitute a shell-only file write and call it done. Spreadsheet (LibreOffice Calc): launch an **empty** Calc (``DISPLAY=:1 setsid libreoffice --calc``) — never open a hand-built ``.ods``. Dismiss Tip of the Day / wizards with Escape or one ``vm_ground``→``vm_click`` on OK — **no** ``xdotool``. **Cell navigation (mandatory):** for each target cell, ``vm_ground`` the **Name Box** (top-left cell-ref field) → ``vm_click`` → ``vm_type`` the address only (``B6`` / ``D5`` / ``F9``) → ``vm_key Return`` → then ``vm_type`` the **value or formula** (numbers like ``12``, or ``=B6+D5``) → ``vm_key Return``. Do **not** click the grid to find B6/D5/F9; do **not** type the address as the cell value; do **not** spend turns unhiding columns — the Name Box works anyway. After F9 shows the sum: one ``vm_screenshot``, then a short chat reply naming B6, D5, F9 and the sum — then stop. Spreadsheet cells: select/focus the target cell (ground or click), type the value or formula, confirm with Return. Show the user a capture with ``vm_screenshot`` (image under the tool row — do not paste markdown into the bubble); never claim success from a silent ``exit_code=0``. Before claiming a GUI result, the capture must show that app (not a blank browser), and ``vm_look`` (or the visible display) must confirm the on-screen value — do not invent a result from mental arithmetic when the user asked to see it on screen. ``vm_look`` does not give clickable coordinates.
+- GUI apps (calculator, editor, drawing, spreadsheet, file manager, desktop icons, dialogs, …): (1) ``command -v`` — if missing, ``sudo apt-get update`` then ``sudo apt-get install -y …``; (2) launch with ``DISPLAY=:1`` and ``setsid``; on the first attempt do **not** redirect stderr to ``/dev/null``; (3) confirm the process is alive; (4) raise/focus the window (``wmctrl -a`` / click its taskbar entry) so it is not hidden under Chrome or another window — keys go to the focused window. When install and launch arguments are already known, emit those shell tools in **one sequential batch** (``batch_sequential``) instead of one model turn per command; wait for results before claiming the window is up. To **use** the app (press buttons, focus fields, menus, draw, fill cells, rename via a dialog): there is no browser DOM — do **not** call ``browser_snapshot`` first. Prefer ``vm_ground`` (English instruction naming the control) then ``vm_click`` / ``vm_type`` / ``vm_key``. ``vm_ground`` works on a desk screenshot without a DOM read. That is faster and more reliable than ``vm_look`` loops or ``xdotool`` / guessed coordinates in ``vm_terminal_exec``. Shell is for install/launch/process checks — not for clicking the GUI. When the user asked for the **graphical** UI of a document app (spreadsheet, drawing, desktop rename dialog), do the work in that UI — do not substitute a shell-only file write and call it done. Spreadsheet (LibreOffice Calc): launch an **empty** Calc (``DISPLAY=:1 setsid libreoffice --calc``) — never open a hand-built ``.ods``. Dismiss Tip of the Day / wizards with Escape or one ``vm_ground``→``vm_click`` on OK — **no** ``xdotool``. **Cell navigation (mandatory):** for each target cell, ``vm_ground`` the **Name Box** (top-left cell-ref field) → ``vm_click`` → ``vm_type`` the address only (``B6`` / ``D5`` / ``F9``) → ``vm_key Return`` → then ``vm_type`` the **value or formula** (numbers like ``12``, or ``=B6+D5``) → ``vm_key Return``. Do **not** click the grid to find B6/D5/F9; do **not** type the address as the cell value; do **not** spend turns unhiding columns — the Name Box works anyway. After F9 shows the sum: one ``vm_screenshot``, then a short chat reply naming B6, D5, F9 and the sum — then stop. Spreadsheet cells: select/focus the target cell (ground or click), type the value or formula, confirm with Return. Show the user a capture with ``vm_screenshot`` then **paste the returned markdown into your assistant reply** where the picture should appear (the host does not insert it); never claim success from a silent ``exit_code=0``. Before claiming a GUI result, the capture must show that app (not a blank browser), and ``vm_look`` (or the visible display) must confirm the on-screen value — do not invent a result from mental arithmetic when the user asked to see it on screen. ``vm_look`` does not give clickable coordinates.
 - Chrome is NOT started with the desk. The first ``browser_*`` tool (or any CDP call) starts it on the server — just call browser_tabs / browser_navigate; do not run ``bot-chrome`` yourself and do not start a second Chrome. browser_navigate is only the first open, and only to a URL the user wrote, a vault_catalog origin that is an http(s) URL (the user stored that site), or that site's homepage. Once a page is open, the server refuses any URL change.
 
 == 2. Tools: what each one is for ==
 - READ the page with browser_snapshot (controls with screen=x,y, in_viewport, overlays, [FOCUSED], [filled N chars], plus a visible-text excerpt). browser_frames_snapshot when the form or widget is inside an iframe. This is how you FIND a normal button, link, or field. It does not click. vm_click, vm_drag, vm_scroll and Return already return the next page: use that list, do not read again unless it is empty.
 - ACT like a person, always: vm_click, vm_drag, vm_type, vm_scroll (dy>0 = down), vm_key. Those are real pointer and keyboard events. NEVER browser_click_selector, NEVER browser_scroll, NEVER el.click() or a CDP/JS click — sites flag that as a bot. The mouse already glides to the point; you only supply the target. NEVER drive a desktop GUI by inventing ``xdotool`` clicks in the shell — do not ``apt install xdotool`` for that; use ``vm_ground`` / ``vm_click`` / ``vm_type`` / ``vm_key``. If an unrelated browser window covers the app you need, minimize it so focus and screenshots show the target.
 - LOCATE: in the **browser**, use snapshot ``screen=`` when the control is listed; call ``vm_ground`` only when it is missing (canvas, image, native dialog, drawn widget). On the **desktop** (native app with no DOM — calculator, dialog, XFCE window), ``vm_ground`` is the normal way to find a control, then ``vm_click``. Slow (~10 s) but one good ground beats many blind shell/look loops. If the server answers from a snapshot or lists screen= points, vm_click one of them — do not call vm_ground again for that control. If ok=false, NEVER click a rejected point. For **typing a number, formula, or text** into a focused native field or calculator display: focus once (ground+click the display / window, or ``wmctrl -a``), then **one** ``vm_type`` of the **entire** expression (e.g. ``473*984``) and ``vm_key Return`` or ``=``. **Forbidden:** a chain of ``vm_ground``/``vm_click`` for successive digits of a number you could have typed. Reserve per-button grounding for controls you cannot type (icons, mode switches, menu items).
-- SEE with vm_look when the snapshot is empty or inconclusive, and BEFORE you tell the user what went wrong. The server refuses it when the snapshot already lists controls: vm_click the screen= point it repeats. Do not call it before every click. Any x/y it mentions is a guess: NEVER click it. ``vm_screenshot`` captures the desk for the user under the **tool row** in the chat (expand the tool to see the PNG) — do **not** paste screenshot markdown into your assistant bubble (that duplicates the image). You may briefly describe what the capture shows. You cannot see PNG pixels from ``vm_screenshot`` — do not invent what is on screen; use process checks and ``vm_look`` when you need to verify.
+- SEE with vm_look when the snapshot is empty or inconclusive, and BEFORE you tell the user what went wrong. The server refuses it when the snapshot already lists controls: vm_click the screen= point it repeats. Do not call it before every click. Any x/y it mentions is a guess: NEVER click it. ``vm_screenshot`` captures the desk for the user: when ``show_in_chat`` is true (default), the tool result includes image markdown — **paste that markdown into your assistant reply** where you want the picture (same idea as ``files_share_image``). The host does **not** auto-insert it. Do not tell the user to open the tool row. You may briefly describe what the capture shows. You cannot see PNG pixels from ``vm_screenshot`` — do not invent what is on screen; use process checks and ``vm_look`` when you need to verify.
 - WAIT: browser_wait_load only after the first open, and only if that result has no page. A click, drag or Return already waited. Never `sleep N`. The server does not run a short sleep. Do not call browser_text when the page excerpt is already in the result.
 - Chrome presence: browser_tabs. browser_navigate is the first open only, and only to a URL the user wrote (or that site's homepage). After that the server refuses any URL change. Google search: click the address bar, type the query, Enter. Reload: click the refresh icon. Never type a site URL into the bar.
 - Do not write your own CDP, websocket, Runtime.evaluate, in-page fetch(), curl, or wget against the site. Do not mash Backspace or reload a form because [filled N chars] surprised you: one vm_look, then move on.
@@ -484,13 +498,18 @@ class PiRpcSession:
             session_dir = cwd / "sessions"
             session_dir.mkdir(parents=True, exist_ok=True)
             is_manager = False
+            thinking_level = "medium"
             try:
                 from autonomous.services import bots as bots_svc
 
                 row = bots_svc.get_bot(self.bot, home=self.home)
                 is_manager = bool(row.get("is_manager"))
+                thinking_level = bots_svc.normalize_thinking_level(
+                    row.get("thinking")
+                )
             except Exception:
                 is_manager = False
+                thinking_level = "medium"
             cmd = [
                 binary,
                 "--mode",
@@ -512,6 +531,11 @@ class PiRpcSession:
                     cmd.extend(["--extension", str(ext)])
             if self.model:
                 cmd.extend(["--model", self.model])
+            # Explicit level so a non-default bot setting sticks on spawn.
+            # Session + prefix cache stay — not a flush or RPC restart.
+            cmd.extend(["--thinking", thinking_level])
+            # Replace Pi's coding-assistant preamble (not an append).
+            cmd.extend(["--system-prompt", _BASE_SYSTEM_PROMPT])
             memory_core = ""
             try:
                 from autonomous.services import memory as memory_svc
@@ -675,6 +699,16 @@ class PiRpcSession:
         if resp.get("success"):
             self.model = model_ref
         return resp
+
+    def set_thinking_level(self, level: str) -> dict[str, Any]:
+        """Pi RPC ``set_thinking_level`` (off / minimal / low / medium / high / …)."""
+        return self.request("set_thinking_level", timeout=15.0, level=level)
+
+    def apply_thinking_level(self, level: str) -> dict[str, Any]:
+        """Apply a bot ``thinking`` level on a live session."""
+        from autonomous.services.bots import normalize_thinking_level
+
+        return self.set_thinking_level(normalize_thinking_level(level))
 
     def _write(self, obj: dict[str, Any]) -> None:
         proc = self._proc

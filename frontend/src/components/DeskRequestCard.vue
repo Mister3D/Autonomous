@@ -1,8 +1,8 @@
 <template>
-  <div class="desk-req-card" :class="cardClass">
-    <header class="desk-req-head">
+  <div class="chat-request-card desk-req-card" :class="cardClass">
+    <header class="chat-request-card-head desk-req-head">
       <strong>{{ t("desk.requestTitle") }}</strong>
-      <span class="desk-req-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state desk-req-state">{{ stateLabel }}</span>
     </header>
     <template v-if="creating">
       <p class="desk-req-step">{{ currentStep }}</p>
@@ -15,13 +15,13 @@
     <template v-else-if="pending">
       <p class="desk-req-hint">{{ t("desk.requestHint") }}</p>
       <p v-if="error" class="desk-req-error">{{ error }}</p>
-      <div class="desk-req-actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="deny">
+      <div class="chat-request-card-actions desk-req-actions">
+        <UiButton variant="ghost" type="button" :disabled="busy" @click="deny">
           {{ t("desk.requestDeny") }}
-        </button>
-        <button type="button" class="btn primary" :disabled="busy" @click="approve">
+        </UiButton>
+        <UiButton variant="primary" type="button" :disabled="busy" @click="approve">
           {{ busy ? t("desk.working") : t("desk.requestApprove") }}
-        </button>
+        </UiButton>
       </div>
     </template>
 
@@ -34,6 +34,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

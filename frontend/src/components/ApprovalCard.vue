@@ -1,25 +1,26 @@
 <template>
-  <div class="approval-card" :class="state">
-    <header class="approval-card-head">
+  <div class="chat-request-card approval-card" :class="state">
+    <header class="chat-request-card-head approval-card-head">
       <strong>{{ title }}</strong>
-      <span class="approval-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state approval-state">{{ stateLabel }}</span>
     </header>
     <p class="approval-prompt">{{ prompt }}</p>
 
     <template v-if="pending">
       <p v-if="error" class="approval-error">{{ error }}</p>
-      <div class="approval-actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
+      <div class="chat-request-card-actions approval-actions">
+        <UiButton variant="ghost" type="button" :disabled="busy" @click="resolve('deny')">
           {{ t("approval.refuse") }}
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          variant="primary"
           type="button"
-          class="btn primary approval-accept"
+          class="approval-accept"
           :disabled="busy"
           @click="resolve('approve')"
         >
           {{ t("approval.accept") }}
-        </button>
+        </UiButton>
       </div>
     </template>
     <p v-else class="approval-resolved">{{ resolvedText }}</p>
@@ -30,6 +31,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

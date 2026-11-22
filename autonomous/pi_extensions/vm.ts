@@ -263,14 +263,14 @@ export default function (pi: ExtensionAPI) {
       `url: ${url}\n`;
     if (showInChat) {
       text +=
-        "The capture is on this tool card in the chat tool group — do NOT paste image " +
-        "markdown into your assistant bubble (duplicates the picture). Say in text what " +
-        "matters; the user opens the tool row to see the PNG.\n";
+        "Show this capture to the user IN your assistant reply: paste the markdown below " +
+        "where you want the image to appear (same pattern as files_share_image). Do not tell " +
+        "the user to open the tool row — the picture belongs in your message.\n";
       if (markdown) {
-        text += `(Internal share markdown kept for tooling only — do not paste):\n${markdown}\n`;
+        text += `Paste this markdown into your reply:\n${markdown}\n`;
       }
     } else {
-      text += "Silent capture (show_in_chat=false) — no tool-row preview.\n";
+      text += "Silent capture (show_in_chat=false) — not for the user reply.\n";
     }
     text +=
       "(PNG is never attached to the model — use vm_ground for pixel localization.)";
@@ -282,18 +282,17 @@ export default function (pi: ExtensionAPI) {
     name: "vm_screenshot",
     label: "VM screenshot",
     description:
-      "Capture this bot's desktop (server-side X11). Requires a running desk. " +
-      "The image is shown under this tool's detail in the chat tool group — do NOT paste " +
-      "screenshot markdown into your assistant bubble (that duplicates the capture). " +
-      "Describe what matters in text if needed. show_in_chat=false: silent file for " +
-      "chaining / grounding prep (no tool-row preview).",
+      "Capture this bot's desktop (server-side X11) for the user. Requires a running desk. " +
+      "When show_in_chat=true (default), the tool result includes image markdown — you MUST " +
+      "paste that markdown into your assistant reply where you want the picture to appear. " +
+      "The host does not insert it for you. Do not tell the user to open the tool row. " +
+      "show_in_chat=false: silent file for chaining / grounding prep (no reply markdown).",
     parameters: Type.Object({
       show_in_chat: Type.Optional(
         Type.Boolean({
           description:
-            "If true (default), the capture is attached to this tool card for the user to " +
-            "expand in the tool group. Do not also paste the markdown into the assistant " +
-            "bubble. Set false for silent tool-chain use.",
+            "If true (default), returns markdown you paste into your assistant reply so the " +
+            "user sees the PNG in the message. Set false for silent tool-chain use.",
         }),
       ),
     }),

@@ -45,6 +45,8 @@ _OBSOLETE_KEYS = (
     "llm.heavy_gate_enabled",
     "llm.heavy_max_concurrent",
     "llm.heavy_token_threshold",
+    # Moved to per-model ``autonomous.defaultThinking`` in models.json.
+    "bots.default_thinking",
 )
 
 

@@ -13,6 +13,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "../autonomous/static"),
     emptyOutDir: true,
+    // SPA ships one main chunk; avoid noisy update-log warnings.
+    chunkSizeWarningLimit: 2000,
   },
   server: {
     port: 5173,

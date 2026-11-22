@@ -17,21 +17,19 @@
       <p v-if="log?.state === 'failed'" class="vault-error">{{ log.error || t("setup.jobFailed") }}</p>
     </div>
     <div class="setup-actions">
-      <router-link
+      <UiButton
         v-if="check.action?.type === 'link' || check.action?.to"
-        class="btn"
         :to="check.action.to"
-      >{{ t("setup.configure") }}</router-link>
-      <button
+      >{{ t("setup.configure") }}</UiButton>
+      <UiButton
         v-if="check.action?.type === 'job'"
-        class="btn"
-        :class="{ primary: check.status !== 'ok' }"
+        :variant="check.status !== 'ok' ? 'primary' : 'secondary'"
         type="button"
         :disabled="running"
         @click="$emit('job', check.action.job)"
       >
         {{ running ? t("setup.running") : check.action.rebuild || check.status === "ok" ? t("setup.rebuild") : t(`setup.job.${check.action.job}`) }}
-      </button>
+      </UiButton>
     </div>
   </li>
 </template>
@@ -39,6 +37,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   check: { type: Object, required: true },

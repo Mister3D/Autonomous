@@ -5,15 +5,15 @@
     </div>
     <div v-else-if="waking || deskSleeping" class="empty desk-wake">
       <p>{{ wakeError || t("desk.waking") }}</p>
-      <button
+      <UiButton
         v-if="wakeError"
-        class="btn primary"
+        variant="primary"
         type="button"
         :disabled="waking"
         @click="wake"
       >
         {{ t("desk.wakeRetry") }}
-      </button>
+      </UiButton>
     </div>
     <div v-else-if="!deskRunning" class="empty">
       <p>{{ t("terminal.needDesk") }}</p>
@@ -41,6 +41,7 @@ import {
 } from "vue";
 import { useI18n } from "vue-i18n";
 import { wakeBotDesk } from "../deskWake";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },

@@ -9,36 +9,11 @@
       >
         {{ item.label }}
       </button>
-      <span
+      <UiActionConfirm
         v-if="item.confirm && armed === item.id"
-        class="action-confirm-wrap"
-        @pointerenter="tip = item.id"
-        @pointerleave="tip = ''"
-        @focusin="tip = item.id"
-        @focusout="tip = ''"
-      >
-        <button
-          class="action-confirm"
-          type="button"
-          :disabled="busy"
-          :aria-label="t('confirm.confirmAction')"
-          @click="run(item.id)"
-        >
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path
-              d="M3.2 8.2 6.4 11.4 12.8 4.6"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-        <span v-if="tip === item.id" class="action-confirm-tip" role="tooltip">{{
-          t("confirm.confirmAction")
-        }}</span>
-      </span>
+        :disabled="busy"
+        @confirm="run(item.id)"
+      />
     </div>
   </div>
 </template>
@@ -49,12 +24,12 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { api } from "../api";
 import { state } from "../store";
+import UiActionConfirm from "./ui/UiActionConfirm.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
 const router = useRouter();
 const armed = ref("");
-const tip = ref("");
 const busy = ref(false);
 const exporting = ref(false);
 
@@ -110,7 +85,6 @@ watch(
   () => props.bot?.name,
   () => {
     armed.value = "";
-    tip.value = "";
     busy.value = false;
     exporting.value = false;
   },
@@ -135,7 +109,6 @@ function onRow(item) {
     return;
   }
   armed.value = armed.value === item.id ? "" : item.id;
-  tip.value = "";
 }
 
 async function clearChat() {

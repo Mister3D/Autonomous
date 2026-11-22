@@ -36,6 +36,31 @@ _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 _DISPLAY_FORBIDDEN_RE = re.compile(r"[\x00-\x1f\x7f/\\]")
 _MAX_DISPLAY_LEN = 64
 
+# Pi thinking levels (``--thinking`` / RPC ``set_thinking_level``).
+THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+DEFAULT_THINKING_LEVEL = "medium"
+
+
+def normalize_thinking_level(value: Any) -> str:
+    """Coerce API / DB values to a Pi thinking level string."""
+    if value is None:
+        return DEFAULT_THINKING_LEVEL
+    if isinstance(value, bool):
+        return DEFAULT_THINKING_LEVEL if value else "off"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return DEFAULT_THINKING_LEVEL if int(value) else "off"
+    raw = str(value).strip().lower()
+    if raw in ("", "1", "true", "yes", "on"):
+        return DEFAULT_THINKING_LEVEL
+    if raw in ("0", "false", "no"):
+        return "off"
+    if raw in THINKING_LEVELS:
+        return raw
+    raise ValidationError(
+        f"thinking must be one of: {', '.join(THINKING_LEVELS)}",
+        code="invalid_thinking",
+    )
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -116,6 +141,7 @@ def _decode(row: dict[str, Any]) -> dict[str, Any]:
         "internet": bool(row["internet"]),
         "auto_sleep": True if auto_raw is None else bool(auto_raw),
         "memory_access": bool(row.get("memory_access", 1)),
+        "thinking": normalize_thinking_level(row.get("thinking")),
         "is_manager": bool(row.get("is_manager", 0)),
         "desk_last_active_at": row.get("desk_last_active_at") or None,
         "status": row["status"],
@@ -399,6 +425,36 @@ def ensure_manager_slot(*, home: Path | None = None, exclude: str | None = None)
         )
 
 
+def thinking_default_for_model(model_ref: str | None) -> str:
+    """Pi thinking level configured on the model card (``autonomous.defaultThinking``)."""
+    ref = (model_ref or "").strip()
+    if not ref:
+        return DEFAULT_THINKING_LEVEL
+    try:
+        from autonomous.services import setup_config as setup_cfg
+
+        provider, model_id = setup_cfg.split_model_ref(ref)
+        entry = setup_cfg.find_model_entry(setup_cfg._read_models_json(), provider, model_id)
+    except Exception:
+        return DEFAULT_THINKING_LEVEL
+    if not isinstance(entry, dict):
+        return DEFAULT_THINKING_LEVEL
+    auto = entry.get("autonomous") if isinstance(entry.get("autonomous"), dict) else {}
+    raw = auto.get("defaultThinking", auto.get("default_thinking"))
+    if raw is None or str(raw).strip() == "":
+        return DEFAULT_THINKING_LEVEL
+    try:
+        return normalize_thinking_level(raw)
+    except ValidationError:
+        return DEFAULT_THINKING_LEVEL
+
+
+def default_thinking_level(*, model: str | None = None, home: Path | None = None) -> str:
+    """Create-bot / Manager default: per-model card, else ``medium``."""
+    _ = home  # reserved (models.json is under the user HOME, not AUTONOMOUS_HOME)
+    return thinking_default_for_model(model)
+
+
 def create_bot(
     name: str,
     *,
@@ -408,6 +464,7 @@ def create_bot(
     memory_access: bool = True,
     is_manager: bool = False,
     model: str | None = None,
+    thinking: str | None = None,
     avatar: str | None = None,
     avatar_color: int | None = None,
     home: Path | None = None,
@@ -443,6 +500,11 @@ def create_bot(
     bot_id = new_bot_id()
     # No auto-pick: empty model stays empty (API / UI require a model at create).
     model_ref = (model or "").strip()
+    thinking_level = (
+        normalize_thinking_level(thinking)
+        if thinking is not None
+        else default_thinking_level(model=model_ref, home=home)
+    )
     used_avatars = {b.get("avatar") or "" for b in list_bots(home=home)}
     avatar_raw = (avatar or "").strip()
     if avatar_raw:
@@ -465,10 +527,10 @@ def create_bot(
                 """
                 INSERT INTO bots(
                   id, name, label, capability, internet, auto_sleep, status,
-                  guard_json, desk_json, model, pi_session_id, memory_access,
+                  guard_json, desk_json, model, thinking, pi_session_id, memory_access,
                   is_manager, avatar, avatar_color,
                   created_at, updated_at
-                ) VALUES (?, ?, ?, 'none', ?, 1, 'idle', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, 'none', ?, 1, 'idle', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     bot_id,
@@ -477,6 +539,7 @@ def create_bot(
                     1 if internet else 0,
                     json.dumps(guard),
                     model_ref,
+                    thinking_level,
                     session_id,
                     1 if memory_access else 0,
                     1 if is_manager else 0,
@@ -505,6 +568,7 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         "internet",
         "auto_sleep",
         "memory_access",
+        "thinking",
         "is_manager",
         "desk_last_active_at",
         "guard",
@@ -553,6 +617,11 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
     if "memory_access" in updates:
         sets.append("memory_access = ?")
         vals.append(1 if updates["memory_access"] else 0)
+    if "thinking" in updates:
+        level = normalize_thinking_level(updates["thinking"])
+        updates["thinking"] = level
+        sets.append("thinking = ?")
+        vals.append(level)
     if "is_manager" in updates:
         if updates["is_manager"]:
             ensure_manager_slot(home=home, exclude=name)
@@ -658,6 +727,24 @@ def patch_bot(name: str, fields: dict[str, Any], home: Path | None = None) -> di
         if session and session.alive:
             try:
                 session.set_model(str(updates["model"]))
+            except PiRpcError:
+                pass
+            # Model switch can reset Pi thinking; re-apply bot preference.
+            try:
+                session.apply_thinking_level(
+                    normalize_thinking_level(bot.get("thinking"))
+                )
+            except PiRpcError:
+                pass
+    if "thinking" in updates:
+        from autonomous.services.pi_rpc import MANAGER, PiRpcError
+
+        session = MANAGER.get(name)
+        if session and session.alive:
+            try:
+                session.apply_thinking_level(
+                    normalize_thinking_level(updates["thinking"])
+                )
             except PiRpcError:
                 pass
     BUS.publish("bot.updated", {"bot": bot}, bot=name)

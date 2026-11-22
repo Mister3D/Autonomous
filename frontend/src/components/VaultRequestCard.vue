@@ -1,8 +1,8 @@
 <template>
-  <div class="vault-card" :class="state">
-    <header class="vault-card-head">
+  <div class="chat-request-card vault-card" :class="state">
+    <header class="chat-request-card-head vault-card-head">
       <strong>{{ title }}</strong>
-      <span class="vault-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state vault-state">{{ stateLabel }}</span>
     </header>
     <p v-if="meta.reason" class="vault-reason">{{ meta.reason }}</p>
     <p v-if="meta.origin" class="vault-meta-line">
@@ -16,14 +16,16 @@
       <form class="vault-form" @submit.prevent="submit('approve')">
         <template v-if="kind === 'access'">
           <p class="vault-hint">{{ t("vault.accessHint") }}</p>
-          <label v-if="entries.length">
+          <label v-if="entries.length" class="vault-entry-pick">
             <span>{{ t("vault.entry") }}</span>
-            <select v-model="entryId" required>
-              <option disabled value="">{{ t("vault.pickEntry") }}</option>
-              <option v-for="e in entries" :key="e.id" :value="e.id">
-                {{ e.label }} ({{ e.kind }})
-              </option>
-            </select>
+            <MenuSelect
+              v-model="entryId"
+              :options="entryOptions"
+              :placeholder="t('vault.pickEntry')"
+              :aria-label="t('vault.entry')"
+              allow-empty
+              field
+            />
           </label>
           <p v-else class="vault-hint warn">{{ t("vault.empty") }}</p>
         </template>
@@ -52,13 +54,13 @@
         </template>
         <p class="vault-hint">{{ t("vault.neverLlm") }}</p>
         <p v-if="error" class="vault-error">{{ error }}</p>
-        <div class="vault-actions">
-          <button type="button" class="btn ghost" :disabled="busy" @click="submit('deny')">
+        <div class="chat-request-card-actions vault-actions">
+          <UiButton variant="ghost" type="button" :disabled="busy" @click="submit('deny')">
             {{ t("vault.deny") }}
-          </button>
-          <button type="submit" class="btn primary" :disabled="busy || !canApprove">
+          </UiButton>
+          <UiButton variant="primary" type="submit" :disabled="busy || !canApprove">
             {{ t("vault.approve") }}
-          </button>
+          </UiButton>
         </div>
       </form>
     </template>
@@ -70,7 +72,9 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import MenuSelect from "./MenuSelect.vue";
 import SecretInput from "./SecretInput.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -106,6 +110,14 @@ const formFields = computed(() => {
 });
 
 const showLabelInput = computed(() => kind.value !== "access");
+
+const entryOptions = computed(() =>
+  entries.value.map((e) => ({
+    value: e.id,
+    label: e.label,
+    meta: e.kind || "",
+  })),
+);
 
 const title = computed(() => {
   if (meta.value.label && kind.value !== "access") return meta.value.label;

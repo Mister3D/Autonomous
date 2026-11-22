@@ -289,6 +289,17 @@ def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
     from autonomous.services.llm_heavy_gate import concurrency_from_entry
 
     conc = concurrency_from_entry(entry)
+    auto = entry.get("autonomous") if isinstance(entry.get("autonomous"), dict) else {}
+    thinking_raw = auto.get("defaultThinking", auto.get("default_thinking"))
+    default_thinking = "medium"
+    if thinking_raw is not None and str(thinking_raw).strip() != "":
+        from autonomous.services.bots import THINKING_LEVELS, normalize_thinking_level
+
+        try:
+            default_thinking = normalize_thinking_level(thinking_raw)
+        except Exception:
+            raw = str(thinking_raw).strip().lower()
+            default_thinking = raw if raw in THINKING_LEVELS else "medium"
     return {
         "id": str(entry.get("id") or ""),
         "name": str(entry.get("name") or ""),
@@ -301,6 +312,7 @@ def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
         "heavy_gate_enabled": conc["heavy_gate_enabled"],
         "heavy_max_concurrent": conc["heavy_max_concurrent"],
         "heavy_token_threshold": conc["heavy_token_threshold"],
+        "default_thinking": default_thinking,
     }
 
 
@@ -373,9 +385,21 @@ def _patch_model_entry(entry: dict[str, Any], patch: dict[str, Any]) -> None:
         "max_parallel",
         "parallel_gate",
     )
-    if any(k in patch for k in _HEAVY_KEYS + _PARALLEL_KEYS):
+    _THINKING_KEYS = ("default_thinking", "defaultThinking")
+    if any(k in patch for k in _HEAVY_KEYS + _PARALLEL_KEYS + _THINKING_KEYS):
         auto = entry.get("autonomous")
         auto = dict(auto) if isinstance(auto, dict) else {}
+
+        if any(k in patch for k in _THINKING_KEYS):
+            from autonomous.services.bots import normalize_thinking_level
+
+            raw = patch.get("default_thinking", patch.get("defaultThinking"))
+            if raw is None or str(raw).strip() == "":
+                auto.pop("defaultThinking", None)
+                auto.pop("default_thinking", None)
+            else:
+                auto["defaultThinking"] = normalize_thinking_level(raw)
+                auto.pop("default_thinking", None)
 
         if any(k in patch for k in _HEAVY_KEYS):
             raw_gate = patch.get("heavy_gate") if isinstance(patch.get("heavy_gate"), dict) else {}
@@ -648,6 +672,8 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
                 "parallel_gate_enabled",
                 "max_parallel",
                 "parallel_gate",
+                "default_thinking",
+                "defaultThinking",
             ):
                 if hk in row:
                     patch[hk] = row.get(hk)
@@ -678,6 +704,8 @@ def save_llm(body: dict[str, Any]) -> dict[str, Any]:
             "parallel_gate_enabled",
             "max_parallel",
             "parallel_gate",
+            "default_thinking",
+            "defaultThinking",
         ):
             if hk in body:
                 patch[hk] = body.get(hk)

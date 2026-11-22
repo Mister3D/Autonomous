@@ -29,6 +29,8 @@ $AUTONOMOUS_HOME/
   "capability": "none",
   "internet": true,
   "auto_sleep": true,
+  "memory_access": true,
+  "thinking": "medium",
   "tokens_in": 0,
   "tokens_out": 0,
   "status": "idle",
@@ -51,6 +53,8 @@ $AUTONOMOUS_HOME/
 `last_message_at` is computed when listing (`MAX(messages.created_at)`), not a SQLite column. No messages → `null`; the UI then sorts on `created_at`.
 
 Desktop sleep columns: `auto_sleep` (default 1), `desk_last_active_at`. See [features/desk-screen.md](./features/desk-screen.md).
+
+`thinking` (text, default `medium`): Pi thinking level — `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Spawn uses `--thinking <level>`; a live session gets RPC `set_thinking_level`. Applies on the **next** provider request; does **not** restart the session or flush the prefix cache. See [features/pi-agent.md](./features/pi-agent.md).
 
 Conversation counters `tokens_in` / `tokens_out` reset on chat clear. Durable daily history lives in `bot_token_usage_daily` (see [features/token-usage.md](./features/token-usage.md)) and is purged when the bot row is deleted.
 

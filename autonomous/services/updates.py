@@ -553,17 +553,52 @@ def _schedule_systemd_restart(unit: str, log) -> None:
     threading.Thread(target=worker, name="autonomous-restart", daemon=True).start()
 
 
+class _SetuptoolsLogFilter:
+    """Drop setuptools BuildBackendWarning blocks from pip's isolated build env.
+
+    ``PYTHONWARNINGS`` does not reach that subprocess, so we strip the multi-line
+    banner (header → ``!!`` body → ``with strategy, WheelFile…``) from the job log.
+    """
+
+    def __init__(self) -> None:
+        self._skip = False
+
+    def omit(self, line: str) -> bool:
+        if "BuildBackendWarning" in line:
+            self._skip = True
+            return True
+        if not self._skip:
+            return False
+        stripped = line.strip()
+        if (
+            stripped == "!!"
+            or stripped.startswith("*")
+            or "WheelFile" in line
+            or stripped.startswith("with strategy")
+            or (line[:1] in " \t" and stripped)
+        ):
+            if "WheelFile" in line or stripped.startswith("with strategy"):
+                self._skip = False
+            return True
+        self._skip = False
+        return False
+
+
 def _stream_argv(
     job_id: str,
     argv: list[str],
     home: Path | None,
     *,
     cwd: str | None = None,
+    extra_env: dict[str, str] | None = None,
+    omit_line=None,
 ) -> int:
     from autonomous.services import jobs as jobs_svc
 
     env = os.environ.copy()
     env.setdefault("DEBIAN_FRONTEND", "noninteractive")
+    if extra_env:
+        env.update(extra_env)
     jobs_svc.update_job(job_id, log_line=("$ " + " ".join(argv))[:500], home=home)
     proc = subprocess.Popen(
         argv,
@@ -579,7 +614,7 @@ def _stream_argv(
     buf: list[str] = []
     for line in proc.stdout:
         shown = line.rstrip()[:500]
-        if shown:
+        if shown and not (omit_line and omit_line(shown)):
             buf.append(shown)
         if time.monotonic() - last > 0.4:
             for b in buf:
@@ -711,10 +746,12 @@ def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, A
 
             jobs_svc.update_job(job["id"], progress=75, home=home)
             py = str(venv_python if venv_python.is_file() else sys.executable)
+            # Isolated pip build envs ignore PYTHONWARNINGS — filter the job log instead.
             rc = _stream_argv(
                 job["id"],
                 [py, "-m", "pip", "install", "-q", "-e", str(root)],
                 home,
+                omit_line=_SetuptoolsLogFilter().omit,
             )
             if rc != 0:
                 raise RuntimeError(f"pip install failed (exit {rc})")

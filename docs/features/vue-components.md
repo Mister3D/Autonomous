@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-18 (tool-row stop button no longer overlaps)
+**Last updated**: 2026-11-19 (LLM default thinking select)
 
 ## Why this note exists
 
@@ -44,13 +44,13 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `TerminalPane.vue` | xterm.js + PTY WebSocket. | [`terminal-pty.md`](./terminal-pty.md) |
 | `ScreenPane.vue` | noVNC desktop frame. Sleep stays asleep until **Wake**; control holds the idle clock at zero. Switching bots drops the previous desktop and connects to the selected one. | [`desk-screen.md`](./desk-screen.md) |
 | `WorkingOrb.vue` | Thinking-orbs canvas (send button / in-thread wait). Orb label shows phase + elapsed. | [`pi-agent.md`](./pi-agent.md) |
-| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines, **Réflexion** LLM rows, and mid-run assistant asides (`run_text`) in `created_at` order — not a separate `run_progress` stack (that flashed a full bubble then shrank). Never fold image markdown or `GUARD:CONTINUE`/`STOP` into `run_text` (those stay centred guard cards); while busy with no later item yet, treat other asides as `run_text` to avoid the flash. Absorb a post-bubble llm-only group back into the tools above. User-facing desk captures (`vm_screenshot`) stay **out of the assistant bubble**; when the group is folded, the latest non-grounding shot is shown as a preview under the summary bar (also nested under the tool row when the list is open). Running-tool row head is a `div` (not a `<button>`) so **Arrêter l’outil** can sit in the same flex row without nested-button layout breakage. | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md), [`agent-vm-screenshot.md`](./agent-vm-screenshot.md) |
+| `ToolGroup.vue` | Grouped tool cards. Folded bar shows **Grounding · N** when the group called `vm_ground`. Open list includes the loop lines, **Réflexion** LLM rows, and mid-run assistant asides (`run_text`) in `created_at` order — not a separate `run_progress` stack (that flashed a full bubble then shrank). Never fold image markdown or `GUARD:CONTINUE`/`STOP` into `run_text` (those stay centred guard cards); while busy with no later item yet, treat other asides as `run_text` to avoid the flash. Absorb a post-bubble llm-only group back into the tools above. User-facing desk captures (`vm_screenshot`): the **bot pastes** share markdown into its assistant bubble (host does not auto-inject). When the tool group is folded, a preview of the latest non-grounding shot may still sit under the summary bar; when the list is open, it is nested under the `vm_screenshot` row. Running-tool row head is a `div` (not a `<button>`) so **Arrêter l’outil** can sit in the same flex row without nested-button layout breakage. Live `vm_terminal_exec` duration shows **elapsed / timeout** (e.g. `26s / 30s`). | [`pi-agent.md`](./pi-agent.md), [`grounding.md`](./grounding.md), [`agent-vm-screenshot.md`](./agent-vm-screenshot.md) |
 
 ## Inspector panes
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `DetailsPane.vue` | Bot details: model, capability, memory, notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md), [`pi-agent.md`](./pi-agent.md) |
+| `DetailsPane.vue` | Bot details: model, capability, memory, thinking level select (Pi off→max), notebook (eye opens a read-only dialog), manager, companion, MCP, package size, manage actions. | [`bots-create.md`](./bots-create.md), [`bot-package.md`](./bot-package.md), [`manager.md`](./manager.md), [`companion.md`](./companion.md), [`notebook.md`](./notebook.md), [`pi-agent.md`](./pi-agent.md) |
 | `LibraryPane.vue` | Files / `~/files` (private per bot): list, sizes, DnD upload/move, click=download, delete arm→check. | [`files-shared.md`](./files-shared.md) |
 | `EventsPane.vue` | Schedules + webhooks list (pause / copy curl / delete confirm). | [`events.md`](./events.md) |
 | `EventInstructionModal.vue` | Large modal: standing instruction, plus the webhook POST body when opened from a chat bubble. | [`events.md`](./events.md) |
@@ -70,7 +70,7 @@ Supporting modules (not components, but always nearby): `store.js` (reactive sta
 | `AgentResumeCard.vue` | Manual Resume fallback after interrupt (rare; server auto-resumes first). | [`pi-agent.md`](./pi-agent.md) |
 | `BotDeleteCard.vue` | Manager household delete checkboxes. | [`household.md`](./household.md) |
 
-The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as centred cards (`meta.kind` `guard` or `compaction`). LLM turns are always rows inside `ToolGroup`. See [`pi-agent.md`](./pi-agent.md).
+The guard-rail line and the Pi compaction line are not separate components. `ChatPane` renders both as centred cards (`meta.kind` `guard` or `compaction`). Compaction detail may show reason, optional « N passes » when chunked, and token counts. LLM turns are always rows inside `ToolGroup`. See [`pi-agent.md`](./pi-agent.md).
 
 ## Modals / overlays
 
@@ -86,7 +86,7 @@ The guard-rail line and the Pi compaction line are not separate components. `Cha
 
 | Component | Role | Feature note |
 |-----------|------|----------------|
-| `LlmSettings.vue` | Settings → LLM: four cards (default model, providers, models, other models). Model cards include per-model parallel + large-request concurrency. | [`llm-settings.md`](./llm-settings.md) |
+| `LlmSettings.vue` | Settings → LLM: four cards (default model, providers, models, other models). Model cards include default thinking + per-model parallel / large-request concurrency. | [`llm-settings.md`](./llm-settings.md) |
 | `GroundingSettings.vue` | Settings → grounding / UI-TARS keys. | [`grounding.md`](./grounding.md) |
 | `TokenUsageChart.vue` | Settings → Consumption. Chart on a wide screen; under 760px a day bar and a table of that day’s totals. | [`token-usage.md`](./token-usage.md) |
 | `SetupPanel.vue` | First-run checklist + updates + first chat CTA (home). | [`setup.md`](./setup.md), [`updates.md`](./updates.md) |
@@ -100,7 +100,7 @@ The guard-rail line and the Pi compaction line are not separate components. `Cha
 |-----------|------|----------------|
 | `BotAvatar.vue` | Rail / details companion badge (states + custom tip on `lg`). | [`avatars.md`](./avatars.md) |
 | `ModelPicker.vue` | Bot model dropdown (wraps `MenuSelect`). | [`llm-settings.md`](./llm-settings.md) |
-| `ModelCombo.vue` | Free-text + suggestions model field (settings). | [`llm-settings.md`](./llm-settings.md) |
+| `ModelCombo.vue` | Free-text combobox + suggestions (Settings timezone; reusable for model ids). | [`llm-settings.md`](./llm-settings.md) |
 | `MenuSelect.vue` | Shared custom select (no native `<select>`). | [`ui-design-system.md`](./ui-design-system.md) |
 
 ## Soft UI primitives (`components/ui/`)
@@ -109,14 +109,18 @@ Prefer these for new chrome. Re-exported from `components/ui/index.js`.
 
 | Component | Role |
 |-----------|------|
-| `UiButton.vue` | Soft button variants. |
+| `UiButton.vue` | Soft button variants (`variant`, `to` / `href` for links) — prefer over raw `.btn` everywhere. |
 | `UiOrb.vue` | 28px round inspector button (MCP add, notebook eye). |
 | `UiCard.vue` | Settings / section card with optional icon slot. |
-| `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, …). |
+| `UiIcon.vue` | Named SVG icons (`spark`, `memory`, `puzzle`, `eye`, `trash`, …). |
 | `UiIconBadge.vue` | Icon in soft badge (inspector rows, settings nav). |
+| `UiIconButton.vue` | Icon-only soft button (`default` / `file` / `compact` / `chrome`) — vault, Events, Hub chrome, Files. |
 | `UiToggleRow.vue` | Title + hint + switch; **custom tooltip** on the switch (`tip` / `disabledReason`) — never browser `title` for that tip. |
+| `UiSwitch.vue` | Switch alone (optional `compact`) — Events rows, inline companion notify. |
+| `UiActionConfirm.vue` | Arm→check confirm control (check icon + tip) — ManageMenu, Files, Settings delete-all / vault. |
+| `UiModal.vue` | Teleport + backdrop + panel (`as="form"` supported, Escape / backdrop close) — Create*/Avatar/Event/MCP/notebook. |
 
-Shared patterns (not separate files): **arm → check** confirm (`.action-confirm` + `.action-confirm-tip`) in `ManageMenu`, Settings delete-all, Settings vault delete, Files delete; **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`).
+Shared patterns: chat request cards share `.chat-request-card` (+ head / state / actions); Soft checkboxes use `.ui-check` (BotDeleteCard); **custom tips** (`.bot-avatar-tip`, `.chat-token-tip`, `.file-row-tip`, `.ui-toggle-tip`). `MenuSelect` `compact` = Hub split pane pickers.
 
 ## Pitfalls / non-regressions
 
@@ -131,4 +135,5 @@ Shared patterns (not separate files): **arm → check** confirm (`.action-confir
 ```bash
 ls frontend/src/components/*.vue frontend/src/components/ui/*.vue frontend/src/views/*.vue
 # After UI work: serve --dev, hard-refresh, exercise the touched pane.
+# 2026-11-19 Soft factor: create-bot modal, Hub split MenuSelect compact, npm run build OK.
 ```

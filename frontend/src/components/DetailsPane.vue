@@ -29,6 +29,24 @@
         <UiIcon name="memory" :size="16" />
       </template>
     </UiToggleRow>
+    <div class="toggle-row info-row has-icon thinking-row">
+      <span class="ui-toggle-main">
+        <UiIconBadge size="sm">
+          <UiIcon name="cpu" :size="16" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.thinking") }}</strong>
+          <small>{{ t("details.thinkingHint") }}</small>
+        </span>
+      </span>
+      <MenuSelect
+        field
+        :model-value="thinkingLevel"
+        :options="thinkingOptions"
+        :aria-label="t('details.thinking')"
+        @update:model-value="onThinking"
+      />
+    </div>
     <section class="bot-notebook" aria-live="polite">
       <div class="toggle-row info-row has-icon">
         <span class="ui-toggle-main">
@@ -49,39 +67,35 @@
           <UiIcon name="eye" :size="16" />
         </UiOrb>
       </div>
-      <Teleport to="body">
-        <div v-if="notebookOpen" class="modal-backdrop" @click.self="notebookOpen = false">
-          <div
-            class="modal notebook-modal"
-            role="dialog"
-            aria-modal="true"
-            :aria-label="t('details.notebook')"
-          >
-            <h2>{{ t("details.notebook") }}</h2>
-            <p v-if="notebookLoading" class="hint">{{ t("details.packageLoading") }}</p>
-            <p v-else-if="!notebook.length" class="hint">{{ t("details.notebookEmpty") }}</p>
-            <div v-else class="notebook-modal-body">
-              <div v-for="group in notebookGroups" :key="group.kind" class="bot-notebook-group">
-                <h4>{{ group.label }}</h4>
-                <ul>
-                  <li v-for="row in group.rows" :key="row.id">
-                    <template v-if="row.kind === 'note'">
-                      <strong>{{ row.title }}</strong>
-                      <p>{{ row.body }}</p>
-                    </template>
-                    <span v-else>{{ row.body }}</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            <div class="mcp-dialog-actions">
-              <button class="btn ghost" type="button" @click="notebookOpen = false">
-                {{ t("details.notebookClose") }}
-              </button>
-            </div>
+      <UiModal
+        :open="notebookOpen"
+        panel-class="notebook-modal"
+        :aria-label="t('details.notebook')"
+        @close="notebookOpen = false"
+      >
+        <h2>{{ t("details.notebook") }}</h2>
+        <p v-if="notebookLoading" class="hint">{{ t("details.packageLoading") }}</p>
+        <p v-else-if="!notebook.length" class="hint">{{ t("details.notebookEmpty") }}</p>
+        <div v-else class="notebook-modal-body">
+          <div v-for="group in notebookGroups" :key="group.kind" class="bot-notebook-group">
+            <h4>{{ group.label }}</h4>
+            <ul>
+              <li v-for="row in group.rows" :key="row.id">
+                <template v-if="row.kind === 'note'">
+                  <strong>{{ row.title }}</strong>
+                  <p>{{ row.body }}</p>
+                </template>
+                <span v-else>{{ row.body }}</span>
+              </li>
+            </ul>
           </div>
         </div>
-      </Teleport>
+        <div class="mcp-dialog-actions">
+          <UiButton variant="ghost" type="button" @click="notebookOpen = false">
+            {{ t("details.notebookClose") }}
+          </UiButton>
+        </div>
+      </UiModal>
     </section>
     <UiToggleRow
       :title="t('details.isManager')"
@@ -170,14 +184,34 @@ import { state } from "../store";
 import BotCompanion from "./BotCompanion.vue";
 import BotMcpGrants from "./BotMcpGrants.vue";
 import ManageMenu from "./ManageMenu.vue";
+import MenuSelect from "./MenuSelect.vue";
 import ModelPicker from "./ModelPicker.vue";
+import UiButton from "./ui/UiButton.vue";
 import UiIcon from "./ui/UiIcon.vue";
 import UiIconBadge from "./ui/UiIconBadge.vue";
+import UiModal from "./ui/UiModal.vue";
 import UiOrb from "./ui/UiOrb.vue";
 import UiToggleRow from "./ui/UiToggleRow.vue";
 
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
+
+const thinkingOptions = computed(() =>
+  THINKING_LEVELS.map((value) => ({
+    value,
+    label: t(`details.thinkingLevel.${value}`),
+  })),
+);
+
+const thinkingLevel = computed(() => {
+  const raw = props.bot?.thinking;
+  if (raw === false || raw === 0 || raw === "0") return "off";
+  if (raw === true || raw === 1 || raw === "1" || raw == null || raw === "") return "medium";
+  const s = String(raw).trim().toLowerCase();
+  return THINKING_LEVELS.includes(s) ? s : "medium";
+});
 
 const pkg = ref(null);
 const pkgLoading = ref(false);
@@ -362,6 +396,20 @@ async function toggleMemory(ev) {
   } catch (e) {
     if (i >= 0) state.bots[i] = { ...state.bots[i], memory_access: prev };
     ev.target.checked = !!prev;
+    alert(e.message);
+  }
+}
+
+async function onThinking(next) {
+  const level = String(next || "").trim().toLowerCase();
+  if (!THINKING_LEVELS.includes(level)) return;
+  const i = state.bots.findIndex((b) => b.name === props.bot.name);
+  const prev = i >= 0 ? state.bots[i].thinking : props.bot.thinking;
+  if (i >= 0) state.bots[i] = { ...state.bots[i], thinking: level };
+  try {
+    await api.patchBot(props.bot.name, { thinking: level });
+  } catch (e) {
+    if (i >= 0) state.bots[i] = { ...state.bots[i], thinking: prev };
     alert(e.message);
   }
 }

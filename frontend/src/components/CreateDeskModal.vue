@@ -1,61 +1,64 @@
 <template>
-  <div class="modal-backdrop" @click.self="onCancel">
-    <div class="modal desk-modal">
-      <h2>{{ t("desk.createTitle") }}</h2>
-      <p v-if="replacing && !job" class="field-hint" style="margin-top: -0.35rem; margin-bottom: 0.85rem">
-        {{ t("desk.replaceHint") }}
-      </p>
+  <UiModal
+    panel-class="desk-modal"
+    :aria-label="t('desk.createTitle')"
+    :close-on-backdrop="!(job && (job.state === 'pending' || job.state === 'running'))"
+    :close-on-escape="!(job && (job.state === 'pending' || job.state === 'running'))"
+    @close="onCancel"
+  >
+    <h2>{{ t("desk.createTitle") }}</h2>
+    <p v-if="replacing && !job" class="field-hint" style="margin-top: -0.35rem; margin-bottom: 0.85rem">
+      {{ t("desk.replaceHint") }}
+    </p>
 
-      <template v-if="!job">
-        <label class="choice" style="margin: 1rem 0">
-          <input v-model="internet" type="checkbox" />
-          <span>
-            <strong>{{ t("desk.internet") }}</strong>
-          </span>
-        </label>
+    <template v-if="!job">
+      <UiToggleRow
+        style="margin: 1rem 0"
+        :title="t('desk.internet')"
+        v-model="internet"
+      />
 
-        <p v-if="error" style="color: var(--danger)">{{ error }}</p>
-        <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
-          <button class="btn ghost" type="button" @click="onCancel">{{ t("create.cancel") }}</button>
-          <button class="btn primary" type="button" :disabled="busy" @click="start">
-            {{ t("desk.createSubmit") }}
-          </button>
-        </div>
-      </template>
+      <p v-if="error" style="color: var(--danger)">{{ error }}</p>
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
+        <UiButton variant="ghost" type="button" @click="onCancel">{{ t("create.cancel") }}</UiButton>
+        <UiButton variant="primary" type="button" :disabled="busy" @click="start">
+          {{ t("desk.createSubmit") }}
+        </UiButton>
+      </div>
+    </template>
 
-      <template v-else>
-        <div class="job-progress">
-          <p class="job-step">{{ currentStep }}</p>
-          <div class="job-progress-bar">
-            <div class="job-progress-fill" :style="{ width: `${job.progress || 0}%` }" />
-          </div>
-          <div class="job-meta">
-            <strong>{{ statusLabel }}</strong>
-            <span>{{ job.progress || 0 }}% · {{ elapsedLabel }}</span>
-          </div>
-          <p v-if="maybeStuck" class="job-stuck">{{ t("desk.stuckHint") }}</p>
-          <ul ref="logEl" class="job-log">
-            <li v-if="!(job.log || []).length" class="muted">{{ t("desk.waitingLogs") }}</li>
-            <li v-for="(line, i) in job.log || []" :key="i">{{ line }}</li>
-          </ul>
-          <p v-if="job.error" class="job-error">{{ job.error }}</p>
+    <template v-else>
+      <div class="job-progress">
+        <p class="job-step">{{ currentStep }}</p>
+        <div class="job-progress-bar">
+          <div class="job-progress-fill" :style="{ width: `${job.progress || 0}%` }" />
         </div>
-        <div style="display: flex; justify-content: flex-end; margin-top: 1rem; gap: 0.5rem">
-          <button
-            v-if="job.state === 'done' || job.state === 'error'"
-            class="btn primary"
-            type="button"
-            @click="close"
-          >
-            {{ t("ok") }}
-          </button>
-          <button v-else class="btn ghost" type="button" disabled>
-            {{ t("desk.working") }}
-          </button>
+        <div class="job-meta">
+          <strong>{{ statusLabel }}</strong>
+          <span>{{ job.progress || 0 }}% · {{ elapsedLabel }}</span>
         </div>
-      </template>
-    </div>
-  </div>
+        <p v-if="maybeStuck" class="job-stuck">{{ t("desk.stuckHint") }}</p>
+        <ul ref="logEl" class="job-log">
+          <li v-if="!(job.log || []).length" class="muted">{{ t("desk.waitingLogs") }}</li>
+          <li v-for="(line, i) in job.log || []" :key="i">{{ line }}</li>
+        </ul>
+        <p v-if="job.error" class="job-error">{{ job.error }}</p>
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 1rem; gap: 0.5rem">
+        <UiButton
+          v-if="job.state === 'done' || job.state === 'error'"
+          variant="primary"
+          type="button"
+          @click="close"
+        >
+          {{ t("ok") }}
+        </UiButton>
+        <UiButton v-else variant="ghost" type="button" disabled>
+          {{ t("desk.working") }}
+        </UiButton>
+      </div>
+    </template>
+  </UiModal>
 </template>
 
 <script setup>
@@ -63,6 +66,9 @@ import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { state } from "../store";
+import UiButton from "./ui/UiButton.vue";
+import UiModal from "./ui/UiModal.vue";
+import UiToggleRow from "./ui/UiToggleRow.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },
@@ -220,9 +226,6 @@ onUnmounted(stopPoll);
 </script>
 
 <style scoped>
-.desk-modal {
-  width: min(560px, calc(100vw - 2rem));
-}
 .choice {
   display: flex;
   gap: 0.65rem;

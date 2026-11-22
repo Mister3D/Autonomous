@@ -21,7 +21,7 @@ def fake_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(h))
     for k in list(os.environ):
         if k.startswith(("AUTONOMOUS_GROUNDER", "AUTONOMOUS_VERIFIER", "AUTONOMOUS_GROUNDING",
-                         "GROUNDER_", "AUTONOMOUS_LLM_API_KEY", "MISTER3D_API_KEY")):
+                         "GROUNDER_", "AUTONOMOUS_LLM_API_KEY")):
             monkeypatch.delenv(k, raising=False)
     p = h / ".pi" / "agent" / "models.json"
     p.parent.mkdir(parents=True)

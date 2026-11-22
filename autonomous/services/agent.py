@@ -482,7 +482,42 @@ def compaction_notice(record: dict[str, Any]) -> tuple[str, dict[str, Any]] | No
         meta[key] = int(value)
     if error:
         meta["error"] = error[:500]
+        err_l = error.lower()
+        if (
+            "chunked compaction recovery" in err_l
+            or "lowering the thinking" in err_l
+            or "réflexion" in err_l
+        ):
+            meta["hint"] = "lower_thinking"
+    details = result.get("details") if isinstance(result.get("details"), dict) else {}
+    passes = details.get("passes")
+    if isinstance(passes, bool) or not isinstance(passes, (int, float)):
+        passes = None
+    elif int(passes) > 1:
+        meta["passes"] = int(passes)
+        meta["chunked"] = True
+    if details.get("chunked") or details.get("recovery"):
+        meta["chunked"] = True
     return text, meta
+
+
+def compaction_card_reuse_id(messages: list[dict[str, Any]]) -> str | None:
+    """Reuse one compaction card across threshold→overflow failure storms.
+
+    Walk newest→oldest. If the latest compaction card is still open (running)
+    or failed/aborted, keep updating that same row instead of stacking cards.
+    A successful ``done`` card starts a fresh cycle next time.
+    """
+    for msg in reversed(messages):
+        meta = msg.get("meta") if isinstance(msg.get("meta"), dict) else {}
+        if meta.get("kind") != "compaction":
+            continue
+        status = str(meta.get("status") or "")
+        if status in ("error", "aborted", "running"):
+            mid = msg.get("id")
+            return str(mid) if mid else None
+        return None
+    return None
 
 
 class PiAgent:
@@ -577,6 +612,7 @@ class PiAgent:
             "tools_in_flight": 0,
             "review_due_count": None,
             "compaction_msg_id": None,
+            "compaction_fail_count": 0,
             # True once this LLM call has an open llm_turn card (extension or fallback).
             "llm_turn_ensured": False,
             # CONTINUE arrived after a gate abort — settle must resume the task.
@@ -693,20 +729,38 @@ class PiAgent:
             if notice is None:
                 return
             text, meta = notice
-            if meta.get("status") == "running":
+            status = meta.get("status")
+            if status == "running":
                 close_assistant()
             msg_id = state.get("compaction_msg_id")
             try:
-                if meta.get("status") == "running" or not msg_id:
+                if not msg_id:
+                    # One card for the whole threshold → overflow storm.
+                    try:
+                        recent = chat_svc.list_messages(bot, limit=40, home=home)
+                        msg_id = compaction_card_reuse_id(recent)
+                    except Exception:
+                        log.exception(
+                            "compaction card reuse lookup failed for %s", bot
+                        )
+                        msg_id = None
+                # Second failure in the same storm ≈ chunked recovery failed too.
+                fail_count = int(state.get("compaction_fail_count") or 0)
+                if status == "error":
+                    fail_count += 1
+                    state["compaction_fail_count"] = fail_count
+                    if fail_count >= 2:
+                        meta["hint"] = "lower_thinking"
+                elif status == "done":
+                    state["compaction_fail_count"] = 0
+                if msg_id:
+                    chat_svc.update_message(bot, msg_id, text, home=home, meta=meta)
+                else:
                     msg = chat_svc.create_message(
                         bot, text, role="system", meta=meta, home=home
                     )
-                    state["compaction_msg_id"] = (
-                        msg["id"] if meta.get("status") == "running" else None
-                    )
-                else:
-                    chat_svc.update_message(bot, msg_id, text, home=home, meta=meta)
-                    state["compaction_msg_id"] = None
+                    msg_id = msg["id"]
+                state["compaction_msg_id"] = msg_id if status == "running" else None
             except Exception:
                 log.exception("compaction notice failed for %s", bot)
 
@@ -973,9 +1027,9 @@ class PiAgent:
                 if not is_error:
                     pending = state.setdefault("pending_images_md", [])
                     found: list[str] = []
-                    # Desk captures stay on the tool row (ToolGroup). Only
-                    # files_share_image / MCP images are auto-embedded in the
-                    # assistant bubble — never vm_screenshot.
+                    # Desk captures (vm_screenshot): the model pastes share
+                    # markdown into its reply — do not host-auto-embed them.
+                    # Only files_share_image / MCP images are auto-embedded.
                     if tool_name == "files_share_image":
                         md = _extract_share_image_markdown(record.get("result"))
                         if md:
