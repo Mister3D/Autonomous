@@ -2,8 +2,8 @@
 
 **Status**: in place (chat streaming + vault + VM terminal)  
 **Key files**: `autonomous/services/{agent,pi_rpc,pi_status,chat,bots,terminal}.py`, `autonomous/pi_extensions/{batch,vault,vm,compaction}.ts`, `frontend/src/components/{SettingsMenu,SettingsModal,ChatPane}.vue`  
-**Last updated**: 2026-11-20 (chunked compaction only after Pi first-pass failure)  
-**Previously updated**: 2026-11-20 (replace Pi coding-assistant system preamble)
+**Last updated**: 2026-11-22 (⚠️ red card only for short host failures)  
+**Previously updated**: 2026-11-20 (chunked compaction only after Pi first-pass failure)
 
 ## User behaviour
 
@@ -96,7 +96,7 @@ Pi is **not** in the VMs. It's on the host.
 - Old DB with `agent_backend=null`: switch to `"pi"` via `PUT /settings` or Settings / CLI.
 - `GET /settings` must return the dotted keys (`guard.review_every`, etc.). Otherwise the Settings screen shows the defaults and the next automatic save overwrites them.
 - `PiRpcSession.start()` must **not** call `request()` under the same `threading.Lock` (non-reentrant → deadlock).
-- Local endpoint down (e.g. Ollama) or other hard failures → assistant content `⚠️ …` rendered as a **centred red card** (not a left bubble), same family as secret-leak / guard.
+- Local endpoint down (e.g. Ollama) or other hard failures → assistant content `⚠️ …` rendered as a **centred red card** (not a left bubble), same family as secret-leak / guard. Only **short** host failure lines (or `meta.error` / abort) count — a normal assistant reply that opens with `⚠️ **…**` for emphasis stays a left bubble (LeBonCoin false red card).
 - Never paste >`max_images_per_prompt` vision images into a single Pi prompt (otherwise 400 with many providers).
 - Stop kills the RPC process (stdin abort alone may stay stuck if the HTTP provider hangs).
 - **Stop**: `stop_run` closes in-progress cards, then does a delayed sweep (+1.5 s and +6 s) because a `tool_execution_start` already read by Pi just after the stop created an orphan "In progress" card (real case: `vault_type` stuck). The sweep goes back 400 messages (long series of grounding notes were hiding old cards). Tests: `tests/test_close_running_tools.py`.
