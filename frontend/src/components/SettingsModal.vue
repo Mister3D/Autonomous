@@ -1124,13 +1124,29 @@ function updateNetworkDrop(err) {
 function reloadAfterForcedUpdate() {
   forgetUpdateStatus();
   updateForceError.value = "";
-  // TEMP: keep the update log on screen so warnings can be copied (no auto-reload).
-  updateForcing.value = false;
-  const note =
-    "Auto-reload désactivé temporairement — copie le log ci-dessus, puis recharge la page.";
+  updateForcing.value = true;
+  const note = t("update.restarting");
   if (!updateForceLog.value.includes(note)) {
     updateForceLog.value = [...updateForceLog.value, note];
   }
+  const started = Date.now();
+  const tick = async () => {
+    if (Date.now() - started > 90000) {
+      window.location.reload();
+      return;
+    }
+    try {
+      const res = await fetch("/api/v1/health", { credentials: "include", cache: "no-store" });
+      if (res.ok || res.status === 401 || res.status === 403) {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      /* still restarting */
+    }
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 2000);
 }
 
 async function pollForcedUpdate() {

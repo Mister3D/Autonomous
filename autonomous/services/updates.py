@@ -559,11 +559,14 @@ def _stream_argv(
     home: Path | None,
     *,
     cwd: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> int:
     from autonomous.services import jobs as jobs_svc
 
     env = os.environ.copy()
     env.setdefault("DEBIAN_FRONTEND", "noninteractive")
+    if extra_env:
+        env.update(extra_env)
     jobs_svc.update_job(job_id, log_line=("$ " + " ".join(argv))[:500], home=home)
     proc = subprocess.Popen(
         argv,
@@ -711,10 +714,15 @@ def start_apply(*, home: Path | None = None, force: bool = False) -> dict[str, A
 
             jobs_svc.update_job(job["id"], progress=75, home=home)
             py = str(venv_python if venv_python.is_file() else sys.executable)
+            # setuptools still emits a harmless editable-install BuildBackendWarning;
+            # keep the update log free of packaging noise after the SPDX license fix.
             rc = _stream_argv(
                 job["id"],
                 [py, "-m", "pip", "install", "-q", "-e", str(root)],
                 home,
+                extra_env={
+                    "PYTHONWARNINGS": "ignore::BuildBackendWarning",
+                },
             )
             if rc != 0:
                 raise RuntimeError(f"pip install failed (exit {rc})")

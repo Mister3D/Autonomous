@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `autonomous/services/updates.py`, `autonomous/api/setup_routes.py` (`/setup/update*`), `frontend/src/components/SetupPanel.vue`, Settings → General  
-**Last updated**: 2026-11-22 (quiet Vite build during apply — no dual-import / chunk warnings)
+**Last updated**: 2026-11-22 (quiet pip/setuptools license warnings during apply)
 
 ## User behaviour
 
@@ -30,6 +30,7 @@
 - Do not allow channel / remote_url flips through `set_many` without the migration / confirm guards. Do not treat squashed ints 1–22 as `migrations_ahead` when the target tree contains `001_schema.sql`.
 - After apply, expect the HTTP process to die if systemd restart succeeds — the job log may truncate. The UI must **not** show `NetworkError`: on job `done` (or a fetch drop while applying), poll `/api/v1/health` then `location.reload()`.
 - Frontend build during apply (`npm run build`) must stay quiet: no Vite `api.js` dual static/dynamic import reporter, no chunk-size warning. `i18n.js` / `store.js` import `api` statically (`api.js` has no cycle back); `vite.config.js` sets `chunkSizeWarningLimit: 2000`.
+- Pip step: `project.license` must be an SPDX string (`AGPL-3.0-only`) with `license-files`, not a TOML table / License classifier — otherwise setuptools dumps long `BuildBackendWarning` blocks into the update log. The apply job also sets `PYTHONWARNINGS=ignore::BuildBackendWarning` for the remaining editable-install notice.
 - Branch names are validated (`[A-Za-z0-9._/-]`, no `..`); remote URLs must be `https://` / `ssh://` / `git@…` (`http://` and `git://` rejected).
 - Do not point `update.remote_url` at a repo you do not control.
 
