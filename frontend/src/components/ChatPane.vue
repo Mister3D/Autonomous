@@ -601,18 +601,16 @@
       <p v-if="retryFeedback" class="composer-retry-feedback">{{ retryFeedback }}</p>
     </div>
     <form class="composer" @submit.prevent="send">
-      <button
-        class="icon-btn"
-        type="button"
-        :aria-label="t('chat.attachFile')"
+      <UiIconButton
+        icon="plus"
+        size-variant="chrome"
+        button-class="composer-attach"
+        :icon-size="20"
+        :label="t('chat.attachFile')"
         :title="t('chat.attachFile')"
         :disabled="uploading"
         @click="openFilePicker"
-      >
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
+      />
       <div class="composer-main">
         <div v-if="pending.length" class="composer-atts">
           <div
@@ -777,6 +775,7 @@ import DeskRequestCard from "./DeskRequestCard.vue";
 import AgentResumeCard from "./AgentResumeCard.vue";
 import EventInstructionModal from "./EventInstructionModal.vue";
 import WorkingOrb from "./WorkingOrb.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 import {
   getComposerDraft,
   setComposerDraft,
