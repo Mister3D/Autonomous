@@ -2,7 +2,7 @@
 
 **Status**: in place  
 **Key files**: `frontend/src/{App,main,router,store,sync,api,i18n}.js|vue`, `frontend/src/views/*`, `frontend/src/components/**`  
-**Last updated**: 2026-11-19 (LLM default thinking select)
+**Last updated**: 2026-11-22 (composer attach + settings back → UiIconButton)
 
 ## Why this note exists
 
