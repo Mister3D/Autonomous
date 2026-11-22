@@ -23,6 +23,27 @@ def test_version_in_source():
     assert updates_svc.version_in_source("no version here") == ""
 
 
+def test_setuptools_log_filter_drops_editable_warning():
+    sample = [
+        "$ pip install -q -e /root/autonomous",
+        "  /tmp/pip-build-env-x/overlay/.../editable_wheel.py:354: BuildBackendWarning: Editable installation.",
+        "  !!",
+        "          ********************************************************************************",
+        "          Please be careful with folders in your working directory with the same",
+        "          name as your package as they may take precedence during imports.",
+        "          ********************************************************************************",
+        "  !!",
+        "    with strategy, WheelFile(wheel_path, \"w\") as wheel_obj:",
+        "Restarting the service…",
+    ]
+    filt = updates_svc._SetuptoolsLogFilter()
+    kept = [line for line in sample if not filt.omit(line)]
+    assert kept == [
+        "$ pip install -q -e /root/autonomous",
+        "Restarting the service…",
+    ]
+
+
 def test_default_channel_is_main(home):
     assert updates_svc.channel(home) == "main"
     assert updates_svc.remote_url(home) == ""
