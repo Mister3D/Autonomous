@@ -86,7 +86,9 @@ export default function (pi: ExtensionAPI) {
       "Call one MCP tool on the user's computer. Use the companion, server and tool names from mcp_list. " +
       "This bot can only call servers allowed in its details. " +
       "arguments_json is a JSON object string. The call runs on the companion PC, not in the VM. " +
-      "Pass companion when several computers expose the same server name.",
+      "Pass companion when several computers expose the same server name. " +
+      "Screenshots and other images come back as image content and are shown in the chat. " +
+      "Do not save them to the desktop, start a local web server, or re-encode them.",
     parameters: Type.Object({
       server: Type.String({ description: "MCP server name as shown by mcp_list." }),
       tool: Type.String({ description: "Tool name inside that server." }),
@@ -121,7 +123,29 @@ export default function (pi: ExtensionAPI) {
           error: true,
         });
       }
-      return textResult(String(res.data?.text || ""), { ok: true });
+      const images = Array.isArray(res.data?.images) ? res.data.images : [];
+      const markdowns: string[] = [];
+      const content: Array<
+        { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
+      > = [];
+      for (const img of images) {
+        const data = String(img?.data || "");
+        const mime = String(img?.mime || img?.mimeType || "");
+        const markdown = String(img?.markdown || "").trim();
+        if (data && mime.startsWith("image/")) {
+          content.push({ type: "image", data, mimeType: mime });
+        }
+        if (markdown.startsWith("![")) markdowns.push(markdown);
+      }
+      let text = String(res.data?.text || "");
+      if (!text && markdowns.length) text = "Image captured.";
+      if (markdowns.length) {
+        text +=
+          "\n\nThe image is already shown in the chat. Paste each markdown line exactly if you mention it:\n" +
+          markdowns.join("\n");
+      }
+      content.unshift({ type: "text", text });
+      return { content, details: { ok: true, images_md: markdowns } };
     },
   });
 

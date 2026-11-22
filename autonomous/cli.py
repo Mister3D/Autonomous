@@ -250,6 +250,46 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
     from autonomous.wsproxy import MuxServer
 
     app = create_app(home)
+    # Pi tools need this URL. Recovery below may start a session before the
+    # pid file exists; the in-process value covers that window.
+    from autonomous.services.pi_rpc import MANAGER, set_serve_api_base
+
+    api_host = host
+    if api_host in ("0.0.0.0", "::", "[::]"):
+        api_host = "127.0.0.1"
+    set_serve_api_base(f"http://{api_host}:{port}/api/v1")
+    try:
+        # Long LLM idle + no Pi auto-retry for every Autonomous install.
+        from autonomous.services.setup_config import ensure_pi_runtime_settings
+
+        if ensure_pi_runtime_settings():
+            print(
+                "[pi] applied runtime settings (httpIdleTimeoutMs=600000, retry.enabled=false)",
+                file=sys.stderr,
+            )
+            try:
+                MANAGER.stop_all()
+            except Exception as stop_exc:  # never block serve
+                print(f"[pi] stop_all after settings: {stop_exc}", file=sys.stderr)
+    except Exception as exc:  # never block serve
+        print(f"[pi] runtime settings failed: {exc}", file=sys.stderr)
+    try:
+        # Existing desks: ~/files must exist before recovered Pi sessions start.
+        desk_svc.ensure_files_aliases(home=home)
+    except Exception as exc:  # never block serve
+        print(f"[desk] ~/files alias failed: {exc}", file=sys.stderr)
+    try:
+        # Dev reloader / crash leaves bots.busy with no live Pi worker.
+        from autonomous.services import agent as agent_svc
+
+        recovered = agent_svc.recover_stale_runs(home=home)
+        if recovered:
+            print(
+                f"Recovered stale runs: {', '.join(recovered)}",
+                file=sys.stderr,
+            )
+    except Exception as exc:  # never block serve
+        print(f"[agent] stale-run recovery failed: {exc}", file=sys.stderr)
     scheduler_svc.start(home)
     try:  # compile the companion in the background (cached by source hash)
         from autonomous.services import companion_build as companion_build_svc
@@ -257,6 +297,12 @@ def _serve_loop(home: Path, host: str, port: int, *, manage_pid: bool) -> int:
         companion_build_svc.start_background(home)
     except Exception as exc:  # never block serve
         print(f"[companion] build not started: {exc}", file=sys.stderr)
+    try:  # desk image missing or docker/desktop sources changed
+        from autonomous.services import desk_image_build as desk_image_build_svc
+
+        desk_image_build_svc.start_background(home)
+    except Exception as exc:  # never block serve
+        print(f"[desk-image] build not started: {exc}", file=sys.stderr)
     print(t("serve.starting", host=host, port=port))
 
     def resolve_bot_port(bot: str) -> int | None:

@@ -15,35 +15,35 @@ Interface en anglais par défaut ; traductions françaises incluses.
 - Créer / gérer des bots (CLI = API = UI)
 - Chat persistant avec un agent Pi en streaming (outils, coffre, garde-fous) ; export PDF d’une discussion (noms d’outils, sans détail)
 - Terminal interactif (xterm.js + PTY) et bureau (XFCE + noVNC + Chrome)
-- Fichiers partagés sous `~/shared` (envoi / dossiers / téléchargement)
+- Fichiers privés de chaque bot sous `~/files` (envoi / dossiers / téléchargement)
 - Connexion web (utilisateur unique) + SSE en direct entre onglets
 - OpenAPI généré depuis les routes Flask (`/api/docs`, `/api/openapi.json`)
 
 ## Captures d’écran
 
-Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface anglaise :
+Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface française ([jeu anglais](docs/screenshots/en/)) :
 
 <p align="center">
-  <img src="docs/screenshots/01-discussion.png" alt="Le bot manager Atlas coordonne l’équipe dans le chat" width="820">
+  <img src="docs/screenshots/fr/01-discussion.png" alt="Le bot manager Atlas coordonne l’équipe dans le chat" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/04-pixel-screen.png" alt="Bureau du bot Pixel — Chrome via noVNC" width="820">
+  <img src="docs/screenshots/fr/04-pixel-screen.png" alt="Bureau du bot Pixel — Chrome via noVNC" width="820">
 </p>
 
 <details>
 <summary>Plus (inspecteur, digest, fichiers partagés)</summary>
 
 <p align="center">
-  <img src="docs/screenshots/02-discussion-inspector.png" alt="Atlas avec le panneau détails ouvert" width="820">
+  <img src="docs/screenshots/fr/02-discussion-inspector.png" alt="Atlas avec le panneau détails ouvert" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/03-nova-digest.png" alt="Nova rédige un digest ops" width="820">
+  <img src="docs/screenshots/fr/03-nova-digest.png" alt="Nova rédige un digest ops" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-harbor-files.png" alt="Harbor liste les fichiers de ~/shared" width="820">
+  <img src="docs/screenshots/fr/05-harbor-files.png" alt="Harbor liste les fichiers de ~/files" width="820">
 </p>
 
 </details>
@@ -61,6 +61,7 @@ Bots d’exemple (**Atlas**, **Nova**, **Pixel**, **Harbor**) dans l’interface
 Une seule commande (Debian/Ubuntu ; Fedora au mieux) :
 
 ```bash
+sudo apt-get update && sudo apt-get install -y curl
 curl -fsSL https://raw.githubusercontent.com/Mister3D/Autonomous/main/install.sh | sh
 ```
 
@@ -71,7 +72,7 @@ L'installeur vérifie les prérequis (Python ≥ 3.11 avec venv, git, curl, Node
 Tout le reste se configure dans l'interface web. Ouvrez <http://127.0.0.1:8787/> et connectez-vous : la page d'accueil liste ce qu'il reste à faire, avec pour chaque point un lien **Configurer** ou un bouton **Installer / Construire** (avec journal en direct) :
 
 - **Requis :** l'agent Pi, un modèle de langage (URL de base, clé d'API, un modèle qui accepte les images, avec un bouton **Tester**), Docker et l'image du bureau.
-- **Optionnel :** le grounding avec UI-TARS, (clics vérifiés par le LLM configuré) et l'application companion.
+- **Optionnel :** le grounding avec UI-TARS (clics vérifiés par le LLM configuré), l'application companion, et la recherche web (`pi install npm:pi-web-access`).
 
 La création de bot reste bloquée tant que tous les points requis ne sont pas prêts. La page reste accessible sur `/setup`. En bas de la checklist, **Lancer ma première conversation** reste grisé tant que le requis n’est pas prêt ; ensuite le bouton crée un bot si besoin et ouvre une conversation d’accueil (tour du produit + mémoire partagée).
 
@@ -114,7 +115,7 @@ Les variables d'environnement fonctionnent toujours et sont prioritaires sur les
 
 ## Companion
 
-`autonomous serve` compile le companion en arrière-plan — dans Docker s'il est disponible (image `autonomous-companion-builder` depuis `companion/build/Dockerfile` : `.exe` Windows + binaire Linux), sinon avec le `cargo` de l'hôte (mis en cache selon le hash des sources ; journal dans `$AUTONOMOUS_HOME/companion/build.log`). Téléchargez-le depuis **Settings → Companions** : <http://127.0.0.1:8787/settings/companions>. En repli sur le `cargo` de l'hôte sans `mingw-w64`, seule la cible de l'hôte est compilée. macOS n'est pas compilé par le serveur (lancez `cargo build --release` sur un Mac). L'option du compagnon **Garder les notifications à l'écran** fait rester les notifications Windows jusqu'à un clic ou leur fermeture.
+`autonomous serve` compile le companion en arrière-plan — dans Docker s'il est disponible (image `autonomous-companion-builder` depuis `companion/build/Dockerfile` : `.exe` Windows + binaire Linux), sinon avec le `cargo` de l'hôte (mis en cache selon le hash des sources ; journal dans `$AUTONOMOUS_HOME/companion/build.log`). Téléchargez-le depuis **Settings → Companions** : <http://127.0.0.1:8787/settings/companions>. Le fichier s'appelle `autonomous-companion-<version>.exe` (Linux sans `.exe`), et `<version>` est celle d'Autonomous. Dans le compagnon, **Lancer à l'ouverture de session** le démarre à la connexion (il a besoin du bureau, donc pas avant). En repli sur le `cargo` de l'hôte sans `mingw-w64`, seule la cible de l'hôte est compilée. macOS n'est pas compilé par le serveur (lancez `cargo build --release` sur un Mac). L'option du compagnon **Garder les notifications à l'écran** fait rester les notifications Windows jusqu'à un clic ou leur fermeture.
 
 ## Grounding (optionnel)
 

@@ -91,7 +91,8 @@ def count_tools_since_last_user(bot: str, *, home: Path | None = None) -> int:
     """Tool cards since the last user / webhook / cron message (turn anchor).
 
     Desk/vault resume must NOT reset this — only a new ``role=user`` bubble does
-    (composer, webhook, cron).
+    (composer, webhook, cron). A synthetic ``vm_wake`` card
+    (``counts_as_action`` false) does not count.
     """
     bots_svc.get_bot(bot, home=home)
     with get_db(home) as conn:
@@ -110,6 +111,7 @@ def count_tools_since_last_user(bot: str, *, home: Path | None = None) -> int:
             WHERE bot = ? AND conversation_id = 'main' AND role = 'event'
               AND created_at > ?
               AND json_extract(meta_json, '$.kind') = 'tool'
+              AND COALESCE(json_extract(meta_json, '$.counts_as_action'), 1) != 0
             """,
             (bot, since),
         ).fetchone()
@@ -125,6 +127,7 @@ def send_message(
     home: Path | None = None,
     trigger_agent: bool = True,
     prompt: str | None = None,
+    hold_until_idle: bool = False,
 ) -> dict[str, Any]:
     from autonomous.services import chat_attachments as attach_svc
     from autonomous.services.errors import ValidationError
@@ -172,6 +175,31 @@ def send_message(
     if role == "user" and agent_prompt and agent_prompt != content:
         # Keep a short bubble in the thread; run the longer prompt when drained.
         meta["agent_prompt"] = agent_prompt
+
+    from autonomous.services.agent import run_in_progress
+
+    row = bots_svc.get_bot(bot, home=home)
+    status = str(row.get("status") or "")
+    blocked = role == "user" and trigger_agent and bot_run_blocked(bot, home=home)
+    slot_held = role == "user" and trigger_agent and run_in_progress(bot)
+    already_queued = False
+    if role == "user" and trigger_agent:
+        already_queued = bool(list_queued_user_messages(bot, home=home))
+    # Stamp queued on INSERT when we already know the bubble will wait.
+    # While a human-response card is pending (status=waiting), keep the agent
+    # blocked on that card and park composer messages in the FIFO queue.
+    pre_queue = bool(
+        role == "user"
+        and trigger_agent
+        and (blocked or slot_held or already_queued)
+    )
+    if pre_queue:
+        meta["queued"] = True
+        # Onboarding follow-up: keep the row for the drain, but do not show
+        # the queue chrome (Send now stops the turn still running).
+        if hold_until_idle:
+            meta["hold"] = True
+
     with get_db(home) as conn:
         conn.execute(
             """
@@ -192,73 +220,98 @@ def send_message(
         "meta": meta,
         "created_at": now,
     }
-    BUS.publish("message.created", {"message": message}, bot=bot)
-    try:
-        from autonomous.services import search as search_svc
+    # Defer ``message.created`` until queue/start is decided so SSE never paints
+    # a normal blue bubble that later flips to « En file ».
+    defer_created = bool(role == "user" and trigger_agent)
+    created_published = False
 
-        search_svc.index_message(message, home=home)
-    except Exception:
-        pass
+    def _publish_created(msg: dict[str, Any]) -> dict[str, Any]:
+        nonlocal created_published
+        if created_published:
+            return msg
+        BUS.publish("message.created", {"message": msg}, bot=bot)
+        created_published = True
+        try:
+            from autonomous.services import search as search_svc
+
+            search_svc.index_message(msg, home=home)
+        except Exception:
+            pass
+        return msg
+
+    def _finish(msg: dict[str, Any]) -> dict[str, Any]:
+        if defer_created:
+            return _publish_created(msg)
+        return msg
+
+    if not defer_created:
+        _publish_created(message)
 
     if role == "user" and trigger_agent:
         from autonomous.services import botmail as botmail_svc
 
-        if botmail_svc.maybe_route_from_composer(
+        routed = botmail_svc.maybe_route_from_composer(
             bot, content, message_id=msg_id, home=home
-        ):
-            return message
-
-        # Agent already working → keep the bubble, run later (FIFO).
-        if bot_run_blocked(bot, home=home):
-            # Waiting on a vault form: a chat reply cancels the form and guides
-            # the agent (e.g. « validate on another device », not an OTP code).
-            # Do not park the message in the queue — that loses the intent if the
-            # the user later hits « Refuser » on the card.
-            row = bots_svc.get_bot(bot, home=home)
-            if (row.get("status") or "") == "waiting":
-                cancelled: list = []
-                try:
-                    from autonomous.services import vault as vault_svc
-
-                    cancelled = vault_svc.cancel_pending_for_human_message(
-                        bot, agent_prompt, home=home
+        )
+        if routed is not None:
+            if routed.get("skip_agent"):
+                if meta.get("queued"):
+                    clear_meta = dict(meta)
+                    clear_meta.pop("queued", None)
+                    return _finish(
+                        update_message(
+                            bot, msg_id, content, home=home, meta=clear_meta
+                        )
                     )
-                except Exception:
-                    cancelled = []
-                if not cancelled:
-                    try:
-                        from autonomous.services import approvals as approval_svc
+                return _finish(message)
+            # Dit/Demande : l’agent local rédige le message peer (pas de bypass).
+            agent_prompt = str(routed.get("agent_prompt") or agent_prompt)
+            # Keep route_intent fields if we later stamp queued=True.
+            meta = dict(meta)
+            meta.update(
+                {
+                    "kind": "botmail",
+                    "mail_kind": "route_intent",
+                    "mode": routed.get("mode"),
+                    "to_bot": routed.get("to_bot"),
+                    "link_bot": routed.get("to_bot"),
+                    "agent_prompt": agent_prompt,
+                }
+            )
+            if pre_queue:
+                meta["queued"] = True
+            message["meta"] = meta
 
-                        cancelled = approval_svc.cancel_pending_for_human_message(
-                            bot, agent_prompt, home=home
-                        )
-                    except Exception:
-                        cancelled = []
-                if not cancelled:
-                    try:
-                        from autonomous.services import clarifies as clarify_svc
-
-                        cancelled = clarify_svc.cancel_pending_for_human_message(
-                            bot, agent_prompt, home=home
-                        )
-                    except Exception:
-                        cancelled = []
-                if cancelled:
-                    return message
-            return _mark_queued(bot, msg_id, content, meta, home=home)
-
-        from autonomous.services.agent import run_in_progress
+        # Agent already working → always FIFO queue from the composer.
+        # Mid-run steer is reserved for botmail/peers — a rapid 7/8/9/10 must
+        # never let a later bubble jump into the live turn.
+        if blocked:
+            # Busy, waiting for a card, or desk creating: never cancel the card
+            # and never start a second agent turn from the composer.
+            if hold_until_idle:
+                meta["hold"] = True
+            return _finish(
+                _park_queued(bot, msg_id, content, meta, message, home=home)
+            )
 
         # Status can still say idle for a moment after a run has claimed the slot.
-        # Parking here avoids a second start_run that would drop the message.
-        if run_in_progress(bot):
-            return _mark_queued(bot, msg_id, content, meta, home=home)
+        if slot_held:
+            if hold_until_idle:
+                meta["hold"] = True
+            return _finish(
+                _park_queued(bot, msg_id, content, meta, message, home=home)
+            )
 
         started = _start_agent_for_user_message(
             bot, agent_prompt, stored, home=home, message_id=msg_id
         )
         if started == "busy":
-            return _mark_queued(bot, msg_id, content, meta, home=home)
+            if hold_until_idle:
+                meta["hold"] = True
+            return _finish(
+                _mark_queued(bot, msg_id, content, meta, home=home)
+            )
+        return _finish(message)
     return message
 
 
@@ -273,6 +326,24 @@ def _mark_queued(
     queued_meta = dict(meta)
     queued_meta["queued"] = True
     return update_message(bot, msg_id, content, home=home, meta=queued_meta)
+
+
+def _park_queued(
+    bot: str,
+    msg_id: str,
+    content: str,
+    meta: dict[str, Any],
+    message: dict[str, Any],
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Keep or stamp ``meta.queued`` (composer FIFO — no mid-run)."""
+    if meta.get("queued"):
+        if meta.get("mail_kind") == "route_intent":
+            return update_message(bot, msg_id, content, home=home, meta=meta)
+        message["meta"] = meta
+        return message
+    return _mark_queued(bot, msg_id, content, meta, home=home)
 
 
 def _start_agent_for_user_message(
@@ -321,15 +392,19 @@ def _start_agent_for_user_message(
 def list_queued_user_messages(
     bot: str, *, home: Path | None = None
 ) -> list[dict[str, Any]]:
-    """User bubbles still marked ``meta.queued`` (oldest first)."""
-    out: list[dict[str, Any]] = []
-    for msg in list_messages(bot, limit=200, home=home):
-        if msg.get("role") != "user":
-            continue
-        if (msg.get("meta") or {}).get("queued"):
-            out.append(msg)
-    out.sort(key=lambda m: m.get("created_at") or "")
-    return out
+    """User bubbles still marked ``meta.queued`` (oldest first, stable by id)."""
+    bots_svc.get_bot(bot, home=home)
+    with get_db(home) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM messages
+            WHERE bot = ? AND conversation_id = 'main' AND role = 'user'
+              AND json_extract(meta_json, '$.queued') = 1
+            ORDER BY created_at ASC, id ASC
+            """,
+            (bot,),
+        ).fetchall()
+    return [_decode(r) for r in rows]
 
 
 def clear_queued_flags(
@@ -370,6 +445,7 @@ def drain_queued_user_messages(bot: str, *, home: Path | None = None) -> bool:
     target = queued[0]
     meta = dict(target.get("meta") or {})
     meta.pop("queued", None)
+    meta.pop("hold", None)
     agent_text = (meta.get("agent_prompt") or target.get("content") or "").strip()
     # Stamp as "sent now" so the bubble lands after the previous turn in the UI.
     update_message(
@@ -622,6 +698,59 @@ def finalize_assistant(
     return update_message(bot, msg_id, content, home=home, meta=meta)
 
 
+def discard_message(
+    bot: str,
+    msg_id: str,
+    *,
+    home: Path | None = None,
+) -> bool:
+    """Delete a message (e.g. empty assistant placeholder) and broadcast ``message.deleted``."""
+    bots_svc.get_bot(bot, home=home)
+    with get_db(home) as conn:
+        cur = conn.execute(
+            "DELETE FROM messages WHERE id = ? AND bot = ?",
+            (msg_id, bot),
+        )
+        deleted = cur.rowcount > 0
+    if deleted:
+        BUS.publish("message.deleted", {"bot": bot, "id": msg_id}, bot=bot)
+        try:
+            from autonomous.services import search as search_svc
+
+            search_svc.remove_message(msg_id, home=home)
+        except Exception:
+            pass
+    return deleted
+
+
+def delete_queued_message(
+    bot: str,
+    msg_id: str,
+    *,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Remove a still-queued user/webhook bubble so it will never drain."""
+    from autonomous.services.errors import NotFound, ValidationError
+
+    bots_svc.get_bot(bot, home=home)
+    with get_db(home) as conn:
+        row = conn.execute(
+            "SELECT id, meta_json FROM messages WHERE id = ? AND bot = ?",
+            (msg_id, bot),
+        ).fetchone()
+    if not row:
+        raise NotFound("Message not found", code="message_not_found")
+    meta = json.loads(row["meta_json"] or "{}")
+    if not meta.get("queued"):
+        raise ValidationError(
+            "Only queued messages can be cancelled.",
+            code="not_queued",
+        )
+    if not discard_message(bot, msg_id, home=home):
+        raise NotFound("Message not found", code="message_not_found")
+    return {"ok": True, "message": "queued message deleted"}
+
+
 def stop_run(bot: str, home: Path | None = None) -> None:
     bots_svc.get_bot(bot, home=home)
     from autonomous.services.agent import get_agent
@@ -653,12 +782,12 @@ def stop_run(bot: str, home: Path | None = None) -> None:
 
 _INTERRUPT_TOOL_ERROR = "Session agent interrompue pendant l’attente d’approbation."
 _INTERRUPT_CARD = (
-    "La session agent s’est interrompue pendant l’attente d’approbation. "
-    "Cliquez Reprendre pour relancer l’agent."
+    "The agent session was interrupted while waiting for approval. "
+    "Click Resume to relaunch the agent."
 )
 _RESUME_PROMPT = (
-    "Reprends là où tu t’étais arrêté. Les autorisations de l’utilisateur déjà accordées "
-    "(coffre / bureau) restent valides — ne redemande pas inutilement."
+    "Continue from where you left off. User approvals already granted "
+    "(vault / desk) remain valid — do not ask again unnecessarily."
 )
 
 
@@ -725,14 +854,27 @@ def post_agent_interrupted(
 
 
 def mark_interrupted_after_wait(bot: str, *, home: Path | None = None) -> None:
-    """User resolved vault/desk but Pi session is dead → idle + Reprendre card."""
+    """User resolved vault/desk but Pi session is dead → idle then auto-resume.
+
+    Does not leave a manual Resume card: the system must continue without an
+    open browser. Falls back to a Resume card only if auto-retry cannot start.
+    """
     bots_svc.patch_bot(bot, {"status": "idle"}, home=home)
-    close_running_tools(bot, home=home)
-    post_agent_interrupted(bot, home=home)
+    close_running_tools(bot, home=home, hint_resume=False)
     try:
-        drain_queued_user_messages(bot, home=home)
+        drained = bool(drain_queued_user_messages(bot, home=home))
     except Exception:
-        pass
+        drained = False
+        log.exception("mark_interrupted: drain failed for %s", bot)
+    if drained:
+        return
+    try:
+        out = retry_unprocessed(bot, home=home)
+        if (out or {}).get("action") in ("resumed", "drained"):
+            return
+    except Exception:
+        log.exception("mark_interrupted: auto-retry failed for %s", bot)
+    post_agent_interrupted(bot, home=home)
 
 
 def _mark_resume_cards(bot: str, *, state: str, home: Path | None = None) -> int:
@@ -781,11 +923,257 @@ def resume_run(bot: str, home: Path | None = None) -> dict[str, Any]:
 
     prompt = _RESUME_PROMPT
     if last_user:
-        prompt = f"{_RESUME_PROMPT}\n\nTâche d’origine :\n{last_user}"
+        prompt = f"{_RESUME_PROMPT}\n\nOriginal task:\n{last_user}"
 
     backend = str(settings_svc.get("agent_backend", home=home, default="pi") or "pi")
     get_agent(backend, home=home).start_run(bot, prompt, home=home)
-    return {"ok": True}
+    return {"ok": True, "action": "resumed"}
+
+
+_ABORT_ASSISTANT_MARKERS = (
+    "⏹ Stopped.",
+    "⏹ Stopped",
+    "This operation was aborted",
+)
+
+
+def _assistant_turn_looks_failed(msg: dict[str, Any]) -> bool:
+    meta = msg.get("meta") or {}
+    if meta.get("streaming") or meta.get("aborted") or meta.get("error"):
+        return True
+    content = (msg.get("content") or "").strip()
+    if not content:
+        return True
+    if content.startswith("⚠️"):
+        return True
+    if content in _ABORT_ASSISTANT_MARKERS:
+        return True
+    return False
+
+
+def unfinished_user_turn(
+    bot: str, *, home: Path | None = None
+) -> dict[str, Any] | None:
+    """Last user bubble whose turn never got a successful assistant reply."""
+    msgs = list_messages(bot, limit=80, home=home)
+    last_user: dict[str, Any] | None = None
+    last_user_i = -1
+    for i in range(len(msgs) - 1, -1, -1):
+        m = msgs[i]
+        if m.get("role") != "user":
+            continue
+        if (m.get("meta") or {}).get("hidden_prompt"):
+            continue
+        if (m.get("meta") or {}).get("queued"):
+            continue
+        last_user = m
+        last_user_i = i
+        break
+    if last_user is None:
+        return None
+    saw_ok, tool_after = _assistant_and_trailing_tools(msgs[last_user_i + 1 :])
+    if tool_after:
+        # Preamble bubble, then tools — the turn is still open (a long
+        # vm_terminal_exec killed by the watchdog must be resumed).
+        return last_user
+    if saw_ok:
+        return None
+    return last_user
+
+
+def _assistant_and_trailing_tools(msgs: list[dict[str, Any]]) -> tuple[bool, bool]:
+    """(saw a successful assistant reply, a tool card follows that reply)."""
+    saw_ok = False
+    tool_after = False
+    for m in msgs:
+        role = m.get("role")
+        if role == "user":
+            break
+        if role == "assistant":
+            if _assistant_turn_looks_failed(m):
+                continue
+            saw_ok = True
+            tool_after = False
+            continue
+        meta = m.get("meta") or {}
+        if role == "event" and meta.get("kind") == "tool" and saw_ok:
+            tool_after = True
+    return saw_ok, tool_after
+
+
+def turn_ended_on_tool(bot: str, *, home: Path | None = None) -> dict[str, Any] | None:
+    """User turn whose last successful reply is followed by tool cards and no close."""
+    user = unfinished_user_turn(bot, home=home)
+    if user is None:
+        return None
+    msgs = list_messages(bot, limit=80, home=home)
+    last_user_i = -1
+    for i, m in enumerate(msgs):
+        if m.get("id") == user.get("id"):
+            last_user_i = i
+            break
+    if last_user_i < 0:
+        return None
+    _, tool_after = _assistant_and_trailing_tools(msgs[last_user_i + 1 :])
+    return user if tool_after else None
+
+
+_USER_STOP_MARKERS = (
+    "⏹ Stopped.",
+    "⏹ Stopped",
+)
+
+
+def _assistant_failure_is_user_stop(msg: dict[str, Any]) -> bool:
+    """True when the user (or GUARD:STOP) ended the turn on purpose."""
+    content = (msg.get("content") or "").strip()
+    if content in _USER_STOP_MARKERS or content.startswith("⏹ Stopped"):
+        return True
+    if "GUARD:STOP" in content:
+        return True
+    err = str((msg.get("meta") or {}).get("error") or "")
+    if "GUARD:STOP" in err:
+        return True
+    return False
+
+
+def _assistant_failure_is_retryable(msg: dict[str, Any]) -> bool:
+    """Recoverable infra/LLM failures — not a deliberate user stop."""
+    if _assistant_failure_is_user_stop(msg):
+        return False
+    meta = msg.get("meta") or {}
+    content = (msg.get("content") or "").strip()
+    err = str(meta.get("error") or "")
+    blob = f"{content}\n{err}".lower()
+    if content.startswith("⚠️") or meta.get("error") or meta.get("aborted"):
+        # Provider / RPC / abort leftovers — retry. Explicit user Stop excluded above.
+        if "this operation was aborted" in blob and "guard:stop" not in blob:
+            # Soft abort without a stop marker: still retryable (hung tool, etc.).
+            return True
+        return True
+    if not content:
+        return True
+    return False
+
+
+def retryable_failed_turn(
+    bot: str, *, home: Path | None = None
+) -> dict[str, Any] | None:
+    """Unfinished user turn whose last failure looks recoverable (timeout, ⚠️, …).
+
+    Returns the user message when the server should auto-``retry_unprocessed``.
+    Skips deliberate stops (⏹ Stopped / GUARD:STOP).
+    """
+    user = unfinished_user_turn(bot, home=home)
+    if user is None:
+        return None
+    msgs = list_messages(bot, limit=80, home=home)
+    last_user_i = -1
+    for i, m in enumerate(msgs):
+        if m.get("id") == user.get("id"):
+            last_user_i = i
+            break
+    if last_user_i < 0:
+        return user
+    for m in msgs[last_user_i + 1 :]:
+        if m.get("role") == "user":
+            break
+        if m.get("role") != "assistant":
+            continue
+        if _assistant_failure_is_user_stop(m):
+            return None
+        if _assistant_turn_looks_failed(m):
+            if not _assistant_failure_is_retryable(m):
+                return None
+            continue
+        return None
+    return user
+
+
+def pending_resume_card(bot: str, *, home: Path | None = None) -> dict[str, Any] | None:
+    for msg in reversed(list_messages(bot, limit=40, home=home)):
+        meta = msg.get("meta") or {}
+        if (
+            msg.get("role") == "event"
+            and meta.get("kind") == "agent_interrupted"
+            and meta.get("state") == "pending"
+        ):
+            return msg
+    return None
+
+
+def retry_unprocessed(bot: str, *, home: Path | None = None) -> dict[str, Any]:
+    """Relaunch unfinished work without wiping chat or rotating the Pi session.
+
+    Use after an LLM outage / stuck busy / queued webhook: soft-clears a dead
+    worker, drains the oldest queued user message, otherwise resumes the last
+    unfinished turn. Refuses while a real human wait (vault / approval / …) is open.
+    """
+    from autonomous.services import agent as agent_svc
+    from autonomous.services.errors import Conflict
+
+    row = bots_svc.get_bot(bot, home=home)
+    status = str(row.get("status") or "idle").strip()
+
+    if status == "waiting" and agent_svc.has_pending_human_wait(bot, home=home):
+        raise Conflict(
+            "L’agent attend encore votre réponse (coffre / approbation / bureau).",
+            code="waiting_for_user",
+        )
+
+    # A live Pi is stopped only from the UI (Working orb). Relancer must not
+    # abort it, however long the turn has already run. A slot with status
+    # idle is a leftover from a deleted bot or a dead worker — not a live turn.
+    if agent_svc.run_in_progress(bot):
+        if status != "idle":
+            return {"ok": True, "action": "live"}
+        agent_svc.clear_active_run(bot)
+
+    # Soft clear — keep pi_session_id so the conversation context stays intact.
+    agent_svc.clear_active_run(bot)
+    try:
+        MANAGER.abort(bot)
+    except Exception:
+        pass
+    try:
+        MANAGER.stop(bot)
+    except Exception:
+        pass
+    try:
+        close_running_tools(
+            bot,
+            error="Outil interrompu (relance).",
+            home=home,
+            hint_resume=False,
+        )
+    except Exception:
+        log.exception("retry: close_running_tools failed for %s", bot)
+    try:
+        agent_svc.abort_streaming_assistants(bot, home=home)
+    except Exception:
+        log.exception("retry: abort streaming failed for %s", bot)
+
+    if status in ("busy", "waiting"):
+        try:
+            bots_svc.patch_bot(bot, {"status": "idle"}, home=home)
+        except Exception:
+            log.exception("retry: idle patch failed for %s", bot)
+
+    queued = list_queued_user_messages(bot, home=home)
+    if queued:
+        started = drain_queued_user_messages(bot, home=home)
+        return {
+            "ok": True,
+            "action": "drained",
+            "queued": len(queued),
+            "started": bool(started),
+        }
+
+    if pending_resume_card(bot, home=home) or unfinished_user_turn(bot, home=home):
+        out = resume_run(bot, home=home)
+        return {**out, "action": "resumed"}
+
+    return {"ok": True, "action": "noop"}
 
 
 def clear_messages(bot: str, home: Path | None = None) -> int:
@@ -795,6 +1183,12 @@ def clear_messages(bot: str, home: Path | None = None) -> int:
 
     MANAGER.stop(bot)
     purge_pi_sessions(bot, home=home)
+    try:
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        llm_turns_svc.purge_turn_files(bot, home=home)
+    except Exception:
+        pass
     new_id = new_session_id(bot)
     bots_svc.patch_bot(bot, {"pi_session_id": new_id, "status": "idle"}, home=home)
     with get_db(home) as conn:

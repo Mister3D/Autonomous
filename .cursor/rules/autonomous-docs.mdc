@@ -8,8 +8,10 @@ alwaysApply: true
 Si l’humain dit (ou équivalent) « lis le readme dans docs » :
 
 1. Ouvre **`docs/README.md` en premier** et suis ses instructions.
-2. Puis `docs/AGENT.md` + fiches `docs/features/` utiles.
+2. Puis `docs/AGENT.md`.
+3. **Skim obligatoire** : [`docs/features/vue-components.md`](docs/features/vue-components.md) (catalogue Vue — shell, panes, cards, `ui/*`). Ne pas inventer de nouveaux composants sans l’avoir parcouru.
+4. Ensuite les fiches `docs/features/` utiles pour la demande.
 
 Si des **tâches ont déjà été données** dans le chat avant cette lecture : considère que tu as **du retard de documentation** — rattrape les fiches liées avant d’empiler du code au feeling.
 
-Après tout changement de comportement : mettre à jour `docs/features/` (voir `docs/README.md`).
+Après tout changement de comportement : mettre à jour `docs/features/` (voir `docs/README.md`). Nouveau / renommé / supprimé composant Vue → mettre à jour `vue-components.md`.

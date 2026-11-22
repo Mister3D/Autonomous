@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from autonomous.paths import bot_dir
+from autonomous.paths import bot_dir, bot_pi_dir
 from autonomous.services.errors import NotFound, ValidationError
 
 _DATA_URL = re.compile(
@@ -31,9 +31,9 @@ _MIME_BY_EXT = {
     ".gif": "image/gif",
 }
 
-# Soft UI/API cap for pasted data-URL images (still truncated to LLM max at send).
-MAX_IMAGE_ATTACHMENTS = 8
-MAX_BYTES = 8 * 1024 * 1024
+# Pasted images kept in the chat. The model receives a smaller copy (vision_fit).
+MAX_IMAGE_ATTACHMENTS = 16
+MAX_BYTES = 100 * 1024 * 1024
 _IMAGE_FILE_EXTS = frozenset(_MIME_BY_EXT.keys())
 
 
@@ -62,14 +62,69 @@ def max_images_per_prompt(
     if ref:
         lim = cfg_svc.resolve_model_limits(ref).get("max_images")
         if lim is not None:
-            return max(1, min(32, int(lim)))
+            cap = max(1, min(32, int(lim)))
+            return _tighten_vision_cap(cap, bot, home=home)
 
     raw = settings_svc.get("guard.max_images_per_prompt", home=home, default=2)
     try:
         n = int(raw)
     except (TypeError, ValueError):
         n = 2
-    return max(1, min(8, n))
+    cap = max(1, min(8, n))
+    return _tighten_vision_cap(cap, bot, home=home)
+
+
+def _tighten_vision_cap(cap: int, bot: str | None, *, home: Path | None) -> int:
+    learned = read_vision_cap(bot, home=home) if bot else None
+    if learned is None:
+        return cap
+    return min(cap, learned)
+
+
+def vision_cap_path(bot: str, home: Path | None = None) -> Path:
+    return bot_pi_dir(bot, home) / "vision_image_cap"
+
+
+def read_vision_cap(bot: str | None, *, home: Path | None = None) -> int | None:
+    """Tighter limit learned from a provider 'At most N image(s)' error."""
+    if not bot:
+        return None
+    try:
+        n = int(vision_cap_path(bot, home).read_text(encoding="utf-8").strip())
+    except (OSError, TypeError, ValueError):
+        return None
+    if n < 1 or n > 32:
+        return None
+    return n
+
+
+def write_vision_cap(bot: str, limit: int, *, home: Path | None = None) -> None:
+    n = max(1, min(32, int(limit)))
+    path = vision_cap_path(bot, home)
+    path.write_text(str(n), encoding="utf-8")
+
+
+def note_provider_image_limit(
+    bot: str,
+    model_ref: str | None,
+    limit: int,
+    *,
+    home: Path | None = None,
+) -> None:
+    """Remember a provider image cap for the next request and the next Pi start."""
+    from autonomous.services import settings as settings_svc
+
+    write_vision_cap(bot, limit, home=home)
+    try:
+        from autonomous.services import setup_config as cfg_svc
+
+        cfg_svc.remember_model_image_limit(model_ref or "", limit)
+    except Exception:
+        pass
+    try:
+        settings_svc.set_many({"guard.max_images_per_prompt": int(limit)}, home=home)
+    except Exception:
+        pass
 
 
 def _chown_bot(path: Path) -> None:
@@ -136,7 +191,7 @@ def _normalize_file_ref(
     *,
     home: Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a chat file already stored under ~/shared/upload/<uuid>/…"""
+    """Validate a chat file already stored under ~/files/upload/<uuid>/…"""
     from autonomous.services import files as files_svc
 
     name = str(item.get("name") or "").strip()
@@ -168,7 +223,7 @@ def normalize_attachments(
     *,
     home: Path | None = None,
 ) -> list[Any]:
-    """Normalize pasted images (URLs) and chat files (dicts under ~/shared/upload/)."""
+    """Normalize pasted images (URLs) and chat files (dicts under ~/files/upload/)."""
     raw = list(attachments or [])
     out: list[Any] = []
     image_count = 0
@@ -228,9 +283,9 @@ def prompt_with_files(
 ) -> str:
     """Append absolute paths so the host-side Pi agent can open chat uploads.
 
-    Never use ``~/shared`` here: Pi runs as the host user (often root), so
+    Never use ``~/files`` here: Pi runs as the host user (often root), so
     ``~`` expands to that user's home and gives ENOENT. Files live on the host under
-    ``data/bots/<bot>/home/`` (= ``/home/autonomous/shared`` inside the VM).
+    ``data/bots/<bot>/home/`` (= ``/home/autonomous/files`` inside the VM).
     """
     files = file_attachments(attachments)
     base = (content or "").strip()
@@ -242,7 +297,8 @@ def prompt_with_files(
     for f in files:
         name = f.get("name") or Path(str(f.get("path") or "")).name
         rel = str(f.get("path") or "").strip().replace("\\", "/")
-        vm_path = f"/home/autonomous/shared/{rel}" if rel else ""
+        # workspace is the shell cwd and the same private folder as ~/files.
+        vm_path = f"/home/autonomous/workspace/{rel}" if rel else ""
         host_path = ""
         if bot and rel:
             try:
@@ -255,7 +311,7 @@ def prompt_with_files(
             lines.append(
                 f"- {name}\n"
                 f"  • hôte (lecture fichiers Pi) : {host_path}\n"
-                f"  • VM (vm_terminal_exec) : {vm_path}"
+                f"  • VM (vm_terminal_exec, dossier privé ~/files) : {vm_path}"
             )
         elif host_path:
             lines.append(f"- {name} → {host_path}")
@@ -280,11 +336,18 @@ def resolve_file(bot: str, filename: str, *, home: Path | None = None) -> Path:
     return path
 
 
-def _pi_image(path: Path, mime: str) -> dict[str, Any]:
+def _pi_image(path: Path, mime: str) -> dict[str, Any] | None:
+    """Image block for the model. The chat file stays at full size."""
+    from autonomous.services.vision_fit import fit_image_path
+
+    fitted = fit_image_path(path, mime)
+    if fitted is None:
+        return None
+    data, out_mime = fitted
     return {
         "type": "image",
-        "data": base64.b64encode(path.read_bytes()).decode("ascii"),
-        "mimeType": mime,
+        "data": base64.b64encode(data).decode("ascii"),
+        "mimeType": out_mime,
     }
 
 
@@ -306,7 +369,10 @@ def collect_vision_candidates(
         path = attachments_dir(bot, home) / f"{stem}{ext}"
         if not path.is_file():
             continue
-        out.append((path.name, _pi_image(path, _MIME_BY_EXT[ext])))
+        image = _pi_image(path, _MIME_BY_EXT[ext])
+        if image is None:
+            continue
+        out.append((path.name, image))
     for f in file_attachments(attachments):
         rel = str(f.get("path") or "").strip().replace("\\", "/")
         name = str(f.get("name") or Path(rel).name)
@@ -319,7 +385,10 @@ def collect_vision_candidates(
             continue
         if not path.is_file():
             continue
-        out.append((name, _pi_image(path, _MIME_BY_EXT[ext])))
+        image = _pi_image(path, _MIME_BY_EXT[ext])
+        if image is None:
+            continue
+        out.append((name, image))
     return out
 
 

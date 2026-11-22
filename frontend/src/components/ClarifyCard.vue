@@ -1,24 +1,24 @@
 <template>
-  <div class="clarify-card" :class="state">
-    <header class="clarify-card-head">
+  <div class="chat-request-card clarify-card" :class="state">
+    <header class="chat-request-card-head clarify-card-head">
       <strong>{{ title }}</strong>
-      <span class="clarify-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state clarify-state">{{ stateLabel }}</span>
     </header>
     <p class="clarify-prompt">{{ prompt }}</p>
 
     <template v-if="pending">
       <p v-if="error" class="clarify-error">{{ error }}</p>
       <div v-if="choices.length" class="clarify-choices">
-        <button
+        <UiButton
           v-for="label in choices"
           :key="label"
           type="button"
-          class="btn clarify-choice"
+          class="clarify-choice"
           :disabled="busy"
           @click="submit({ choice: label })"
         >
           {{ label }}
-        </button>
+        </UiButton>
       </div>
       <form v-if="allowText" class="clarify-text" @submit.prevent="submitText">
         <p v-if="choices.length" class="clarify-or">{{ t("clarify.or") }}</p>
@@ -31,9 +31,9 @@
             :disabled="busy"
             :aria-label="t('clarify.placeholder')"
           />
-          <button type="submit" class="btn primary" :disabled="busy || !draft.trim()">
+          <UiButton variant="primary" type="submit" :disabled="busy || !draft.trim()">
             {{ t("clarify.send") }}
-          </button>
+          </UiButton>
         </div>
       </form>
     </template>
@@ -46,6 +46,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
 import { maybeContinueFirstChatPrefs } from "../firstChatPrefs";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -65,9 +66,18 @@ const choices = computed(() =>
   Array.isArray(meta.value.choices) ? meta.value.choices.filter(Boolean) : []
 );
 const allowText = computed(() => {
+  if (isLanguageChoice(meta.value.title, meta.value.prompt, choices.value)) return true;
   if (typeof meta.value.allow_text === "boolean") return meta.value.allow_text;
   return choices.value.length === 0;
 });
+
+function isLanguageChoice(title, prompt, labels) {
+  const blob = `${title || ""}\n${prompt || ""}\n${(labels || []).join("\n")}`.toLowerCase();
+  const asks = blob.includes("langue") || blob.includes("language");
+  const hasFr = blob.includes("français") || blob.includes("francais");
+  const hasEn = blob.includes("english") || blob.includes("anglais");
+  return asks && hasFr && hasEn;
+}
 
 const stateLabel = computed(() => {
   if (state.value === "answered") return t("clarify.answered");

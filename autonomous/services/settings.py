@@ -31,12 +31,23 @@ DEFAULTS: dict[str, Any] = {
     # Optional git remote URL for self-update (forks). Empty → use origin.
     "update.remote_url": "",
     # When false, public companion pairing (/devices/pair + pair-poll) is refused.
-    "companions.enabled": True,
+    "companions.enabled": False,
+    # Default Pi model ref (provider/id). The only model for new bots the Manager creates.
+    "bots.default_model": "",
 }
 
 # Removed product setting (was a Cursor test harness, not a feature).
 # Include the bad underscore key some PUTs wrote via Marshmallow attr names.
-_OBSOLETE_KEYS = ("guard.max_runtime_sec", "guard_max_runtime_sec")
+# Heavy gate moved to per-model ``autonomous.heavyGate`` in models.json.
+_OBSOLETE_KEYS = (
+    "guard.max_runtime_sec",
+    "guard_max_runtime_sec",
+    "llm.heavy_gate_enabled",
+    "llm.heavy_max_concurrent",
+    "llm.heavy_token_threshold",
+    # Moved to per-model ``autonomous.defaultThinking`` in models.json.
+    "bots.default_thinking",
+)
 
 
 def ensure_defaults(home: Path | None = None) -> None:
@@ -116,6 +127,14 @@ def set_many(values: dict[str, Any], home: Path | None = None) -> dict[str, Any]
                 from autonomous.services.cronutil import normalize_tz_setting
 
                 value = normalize_tz_setting(value)
+            if key == "locale":
+                code = str(value or "").strip().lower()
+                if code not in ("en", "fr"):
+                    raise ValidationError(
+                        "locale must be en or fr",
+                        code="invalid_locale",
+                    )
+                value = code
             conn.execute(
                 "INSERT INTO settings(key, value_json) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",

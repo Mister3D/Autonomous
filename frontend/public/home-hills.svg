@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 280" preserveAspectRatio="none" fill="none">
+  <defs>
+    <linearGradient id="back" x1="0" y1="0" x2="1" y2="0.35">
+      <stop offset="0%" stop-color="#c9a6e8"/>
+      <stop offset="48%" stop-color="#e3b0d4"/>
+      <stop offset="100%" stop-color="#e7c4b4"/>
+    </linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="1" y2="0.2">
+      <stop offset="0%" stop-color="#ddc4f2"/>
+      <stop offset="55%" stop-color="#f0c4d4"/>
+      <stop offset="100%" stop-color="#f0d2c4"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f3e4fb"/>
+      <stop offset="50%" stop-color="#fde0d0"/>
+      <stop offset="100%" stop-color="#f6e4d8"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#back)" d="M0 168C150 118 250 188 420 156C590 124 690 72 880 108C1070 144 1180 78 1440 112V280H0Z"/>
+  <path fill="url(#mid)" d="M0 196C180 150 340 214 540 186C740 158 860 118 1080 156C1240 184 1340 150 1440 168V280H0Z"/>
+  <path fill="url(#front)" d="M0 228C220 198 380 248 600 226C820 204 960 176 1180 214C1320 236 1380 214 1440 222V280H0Z"/>
+</svg>

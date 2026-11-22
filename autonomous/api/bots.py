@@ -7,9 +7,11 @@ from io import BytesIO
 from flask import g, request, send_file
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
+from marshmallow import Schema, fields
 
 from autonomous.models.schemas import (
     BotCreateSchema,
+    BotPackageUsageSchema,
     BotPatchSchema,
     BotSchema,
     BrowserClickSelectorSchema,
@@ -42,6 +44,7 @@ from autonomous.models.schemas import (
     DeskTypeSchema,
     FileContentSchema,
     FileEntrySchema,
+    FileMoveSchema,
     FileWriteSchema,
     FilesQuerySchema,
     GroundLocateResultSchema,
@@ -53,6 +56,9 @@ from autonomous.models.schemas import (
     BotMailDelegateSchema,
     BotMailPeerSchema,
     BotMailSendSchema,
+    HouseholdCreateSchema,
+    HouseholdDeleteCreateSchema,
+    HouseholdDeleteResolveSchema,
     MessageCreateSchema,
     ScheduleCreateSchema,
     SchedulePatchSchema,
@@ -63,8 +69,12 @@ from autonomous.models.schemas import (
     MessageListQuerySchema,
     MessageSchema,
     ReactionCreateSchema,
+    LlmTurnCreateSchema,
+    LlmHeavyGateAcquireSchema,
+    LlmHeavyGateReleaseSchema,
     NovncInfoSchema,
     OkSchema,
+    RetryUnprocessedSchema,
     ScreenshotCreateSchema,
     ScreenshotSchema,
     TerminalExecSchema,
@@ -84,13 +94,24 @@ from autonomous.services import grounding as ground_svc
 from autonomous.services import screenshot as shot_svc
 from autonomous.services import terminal as term_svc
 from autonomous.services import vault_inject as vault_inject_svc
-from autonomous.services.errors import AutonomousError, Forbidden
+from autonomous.i18n import t
+from autonomous.services.errors import AutonomousError, Forbidden, ValidationError
 from autonomous.services.events import sse_response
 
 
 def _abs_webhook_url(url_path: str) -> str:
-    root = (request.url_root or "").rstrip("/")
-    return f"{root}{url_path}"
+    """Absolute fire URL for display / agents.
+
+    Prefer ``AUTONOMOUS_PUBLIC_URL`` when set so we don't advertise
+    ``http://127.0.0.1`` (unreachable from outside) or plain ``http://`` behind a
+    TLS terminator that answers with a 301 and drops the Bearer on follow.
+    """
+    import os
+
+    public = (os.environ.get("AUTONOMOUS_PUBLIC_URL") or "").strip().rstrip("/")
+    root = public or (request.url_root or "").rstrip("/")
+    path = url_path if str(url_path).startswith("/") else f"/{url_path}"
+    return f"{root}{path}"
 
 
 def _with_webhook_url(row: dict) -> dict:
@@ -124,6 +145,9 @@ class BotList(MethodView):
             from autonomous.services import setup as setup_svc
 
             setup_svc.ensure_ready(g.home)
+            model = (data.get("model") or "").strip()
+            if not model:
+                raise ValidationError(t("bot.model_required"), code="model_required")
             return bots_svc.create_bot(
                 data["name"],
                 label=data.get("label"),
@@ -131,13 +155,23 @@ class BotList(MethodView):
                 internet=data.get("internet", True),
                 memory_access=data.get("memory_access", True),
                 is_manager=bool(data.get("is_manager", False)),
-                model=data.get("model"),
+                model=model,
+                thinking=data.get("thinking"),
                 avatar=data.get("avatar"),
                 avatar_color=data.get("avatar_color"),
                 home=g.home,
             )
         except AutonomousError as exc:
             _handle(exc)
+
+
+@blp.route("/token-usage")
+class BotTokenUsageHistory(MethodView):
+    def get(self):
+        """Daily cumulative token series for every living bot (Settings chart)."""
+        from autonomous.services import token_usage_history as usage_hist
+
+        return usage_hist.history(home=g.home)
 
 
 @blp.route("/<string:name>")
@@ -155,6 +189,8 @@ class BotDetail(MethodView):
     def patch(self, data, name):
         """Update bot fields."""
         try:
+            if "model" in data and not str(data.get("model") or "").strip():
+                raise ValidationError(t("bot.model_required"), code="model_required")
             return bots_svc.patch_bot(name, data, home=g.home)
         except AutonomousError as exc:
             _handle(exc)
@@ -226,6 +262,7 @@ class BotMessages(MethodView):
                 data.get("content") or "",
                 attachments=data.get("attachments") or [],
                 prompt=data.get("prompt"),
+                hold_until_idle=bool(data.get("hold")),
                 home=g.home,
             )
         except AutonomousError as exc:
@@ -237,6 +274,17 @@ class BotMessages(MethodView):
         try:
             n = chat_svc.clear_messages(name, home=g.home)
             return {"ok": True, "message": f"deleted {n}"}
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/messages/<string:message_id>")
+class BotMessageDetail(MethodView):
+    @blp.response(200, OkSchema)
+    def delete(self, name, message_id):
+        """Cancel a still-queued chat message (user / webhook / schedule)."""
+        try:
+            return chat_svc.delete_queued_message(name, message_id, home=g.home)
         except AutonomousError as exc:
             _handle(exc)
 
@@ -258,6 +306,85 @@ class BotReactions(MethodView):
             )
         except AutonomousError as exc:
             _handle(exc)
+
+
+@blp.route("/<string:name>/llm-turns")
+class BotLlmTurns(MethodView):
+    @blp.arguments(LlmTurnCreateSchema)
+    @blp.response(201, MessageSchema)
+    def post(self, data, name):
+        """Open a running LLM-turn card (Pi llm_trace extension, before each call)."""
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        try:
+            return llm_turns_svc.open_turn(
+                name,
+                request=data.get("request") or "",
+                request_file=data.get("request_file"),
+                request_kind=data.get("request_kind") or "provider",
+                model=data.get("model"),
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/llm-heavy-gate/acquire")
+class BotLlmHeavyGateAcquire(MethodView):
+    @blp.arguments(LlmHeavyGateAcquireSchema)
+    def post(self, data, name):
+        """Block until a large-LLM slot is free (Pi llm_heavy_gate extension)."""
+        from flask import jsonify
+
+        from autonomous.services import llm_heavy_gate as gate_svc
+
+        try:
+            out = gate_svc.acquire(
+                name,
+                int(data.get("tokens") or 0),
+                model=data.get("model"),
+                home=g.home,
+                wait_sec=data.get("wait_sec"),
+            )
+            return jsonify(out)
+        except AutonomousError as exc:
+            _handle(exc)
+            return None
+
+
+@blp.route("/<string:name>/llm-heavy-gate/release")
+class BotLlmHeavyGateRelease(MethodView):
+    @blp.arguments(LlmHeavyGateReleaseSchema)
+    def post(self, data, name):
+        """Release a large-LLM lease (idempotent)."""
+        from flask import jsonify
+
+        from autonomous.services import llm_heavy_gate as gate_svc
+
+        del name  # bot is recorded on the lease; any bot token may release its id
+        try:
+            return jsonify(gate_svc.release(data.get("lease_id")))
+        except AutonomousError as exc:
+            _handle(exc)
+            return None
+
+
+@blp.route("/<string:name>/llm-turns/<string:message_id>/<string:side>")
+class BotLlmTurnPayload(MethodView):
+    def get(self, name, message_id, side):
+        """Return the full request or response JSON for an llm_turn row."""
+        from flask import jsonify
+
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        try:
+            payload = llm_turns_svc.get_payload(
+                name, message_id, side=side, home=g.home
+            )
+            return jsonify(payload)
+        except AutonomousError as exc:
+            _handle(exc)
+            return None
 
 
 @blp.route("/<string:name>/chat/attachments/<string:filename>")
@@ -284,9 +411,9 @@ class ChatAttachmentFile(MethodView):
 @blp.route("/<string:name>/chat/files")
 class ChatFileUpload(MethodView):
     @blp.response(201, ChatFileAttachmentSchema)
-    @blp.doc(summary="Upload a chat file into ~/shared/upload/<uuid>/")
+    @blp.doc(summary="Upload a chat file into ~/files/upload/<uuid>/")
     def post(self, name):
-        """Multipart field ``file`` → stored under ~/shared/upload/<uuid>/<name>."""
+        """Multipart field ``file`` → stored under ~/files/upload/<uuid>/<name>."""
         if "file" not in request.files:
             abort(400, message="Missing file field")
         up = request.files["file"]
@@ -319,15 +446,36 @@ class BotMailTell(MethodView):
     @blp.arguments(BotMailSendSchema)
     @blp.response(201, OkSchema)
     def post(self, data, name):
-        """Send a one-way message to another bot (Dit à @…)."""
+        """Send a one-way message to another bot (Dit à @…).
+
+        Optional ``attachments`` copy files into the peer's mail-inbox staging.
+        Managers may set ``expect_reply`` to wrap the body as an async delegation
+        (same footer as ``/mail/delegate``) — one mail path for files + callback.
+        """
         try:
-            bots_svc.get_bot(name, home=g.home)
+            me = bots_svc.get_bot(name, home=g.home)
+            content = data.get("content") or ""
+            attachments = data.get("attachments") or None
+            expect_reply = data.get("expect_reply")
+            if expect_reply is not None and str(expect_reply).strip() != "":
+                if not me.get("is_manager"):
+                    raise Forbidden(
+                        "Only a Manager bot can set expect_reply on tell.",
+                        code="manager_required",
+                    )
+                content = botmail_svc.format_delegate_content(
+                    manager_slug=name,
+                    task=content,
+                    expect_reply=expect_reply,
+                    has_attachments=bool(attachments),
+                )
             item = botmail_svc.tell(
                 name,
                 data["to"],
-                data["content"],
+                content,
                 home=g.home,
                 origin="api",
+                attachments=attachments,
             )
             return {"ok": True, "message": item["id"]}
         except AutonomousError as exc:
@@ -339,18 +487,23 @@ class BotMailDelegate(MethodView):
     @blp.arguments(BotMailDelegateSchema)
     @blp.response(201, OkSchema)
     def post(self, data, name):
-        """Manager: assign a task without waiting; peer must Dit-à back to relaunch."""
+        """Manager: assign a task without waiting; peer must Dit-à back to relaunch.
+
+        Sugar over ``/mail/tell`` with ``expect_reply``. For files, use ``/mail/tell``
+        with ``attachments`` (+ optional ``expect_reply``) — do not invent a second path.
+        """
         try:
             me = bots_svc.get_bot(name, home=g.home)
             if not me.get("is_manager"):
                 raise Forbidden(
-                    "Seul un bot Manager peut déléguer.",
+                    "Only a Manager bot can delegate.",
                     code="manager_required",
                 )
             content = botmail_svc.format_delegate_content(
                 manager_slug=name,
                 task=data["task"],
                 expect_reply=data.get("expect_reply"),
+                has_attachments=False,
             )
             item = botmail_svc.tell(
                 name,
@@ -360,6 +513,93 @@ class BotMailDelegate(MethodView):
                 origin="api",
             )
             return {"ok": True, "message": item["id"]}
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/models")
+class BotHouseholdModels(MethodView):
+    def get(self, name):
+        """Manager: list Pi models usable when creating bots."""
+        try:
+            from autonomous.services import household as household_svc
+
+            household_svc.require_manager(name, home=g.home)
+            models = household_svc.list_available_models(home=g.home)
+            return {
+                "default_model": household_svc.default_model(home=g.home),
+                "models": models,
+            }
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/bots")
+class BotHouseholdCreate(MethodView):
+    @blp.arguments(HouseholdCreateSchema)
+    def post(self, data, name):
+        """Manager: create one or more bots. Model is always Settings → LLM default."""
+        try:
+            from autonomous.services import household as household_svc
+
+            created = household_svc.create_bots(
+                name, data.get("bots") or [], home=g.home
+            )
+            return {"ok": True, "created": created}
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/delete-requests")
+class BotHouseholdDeleteRequests(MethodView):
+    @blp.arguments(HouseholdDeleteCreateSchema)
+    def post(self, data, name):
+        """Manager: show a checkbox delete card and wait (tool polls)."""
+        try:
+            from autonomous.services import household as household_svc
+
+            return household_svc.create_delete_request(
+                name,
+                bots=data.get("bots") or [],
+                prompt=data.get("prompt") or "",
+                title=data.get("title") or "",
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/household/delete-requests/<string:request_id>")
+class BotHouseholdDeleteRequestItem(MethodView):
+    def get(self, name, request_id):
+        """Poll a household delete request (Manager token)."""
+        try:
+            from autonomous.services import household as household_svc
+
+            household_svc.require_manager(name, home=g.home)
+            req = household_svc.get_delete_request(request_id, home=g.home)
+            if req.get("bot") != name:
+                raise Forbidden("Not your delete request", code="bot_token_forbidden")
+            return req
+        except AutonomousError as exc:
+            _handle(exc)
+
+    @blp.arguments(HouseholdDeleteResolveSchema)
+    def post(self, data, name, request_id):
+        """Confirm (with checked bots) or deny a household delete card."""
+        try:
+            from autonomous.services import household as household_svc
+
+            # Session / admin resolve from the UI; Manager token may also poll.
+            req = household_svc.get_delete_request(request_id, home=g.home)
+            if req.get("bot") != name:
+                raise Forbidden("Not your delete request", code="bot_token_forbidden")
+            return household_svc.resolve_delete_request(
+                request_id,
+                action=data.get("action") or "",
+                selected=data.get("bots"),
+                home=g.home,
+            )
         except AutonomousError as exc:
             _handle(exc)
 
@@ -375,9 +615,10 @@ class BotMailAsk(MethodView):
             return botmail_svc.ask(
                 name,
                 data["to"],
-                data["content"],
+                data.get("content") or "",
                 home=g.home,
                 origin="api",
+                attachments=data.get("attachments") or None,
             )
         except AutonomousError as exc:
             _handle(exc)
@@ -542,6 +783,17 @@ class BotResume(MethodView):
             _handle(exc)
 
 
+@blp.route("/<string:name>/retry")
+class BotRetryUnprocessed(MethodView):
+    @blp.response(200, RetryUnprocessedSchema)
+    def post(self, name):
+        """Relaunch queued / unfinished work after an LLM outage (keeps chat + Pi session)."""
+        try:
+            return chat_svc.retry_unprocessed(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
 @blp.route("/<string:name>/events")
 class BotEvents(MethodView):
     @blp.doc(
@@ -556,6 +808,19 @@ class BotEvents(MethodView):
             _handle(exc)
 
         return sse_response(name)
+
+
+@blp.route("/<string:name>/package")
+class BotPackage(MethodView):
+    @blp.response(200, BotPackageUsageSchema)
+    def get(self, name):
+        """Disk footprint for this bot (VM layer + ~/files + chat + Pi session)."""
+        from autonomous.services import bot_package as package_svc
+
+        try:
+            return package_svc.package_usage(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
 
 
 @blp.route("/<string:name>/desk")
@@ -632,6 +897,21 @@ class DeskDestroy(MethodView):
         """Destroy desktop container (async job)."""
         try:
             return desk_svc.destroy(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/desk/activity")
+class DeskActivity(MethodView):
+    @blp.response(200, DeskSchema)
+    def post(self, name):
+        """Reset the auto-sleep clock. Does not wake a sleeping desk."""
+        try:
+            bot = bots_svc.get_bot(name, home=g.home)
+            desk = dict(bot.get("desk") or {"state": "absent"})
+            if desk.get("state") == "running":
+                desk_svc.touch_activity(name, home=g.home)
+            return desk
         except AutonomousError as exc:
             _handle(exc)
 
@@ -735,6 +1015,22 @@ class TerminalExec(MethodView):
             )
         except AutonomousError as exc:
             _handle(exc)
+
+
+@blp.route("/<string:name>/tools/cancel")
+class ToolCancel(MethodView):
+    @blp.response(200, OkSchema)
+    def post(self, name):
+        """Stop the VM command in flight. Does not stop the Pi agent."""
+        try:
+            bots_svc.get_bot(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+        cancelled = term_svc.cancel_running_command(name)
+        return {
+            "ok": True,
+            "message": "cancelled" if cancelled else "idle",
+        }
 
 
 @blp.route("/<string:name>/vault/inject")
@@ -1096,7 +1392,7 @@ class BotFiles(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, FileEntrySchema(many=True))
     def get(self, query, name):
-        """List files under the bot ~/shared directory."""
+        """List files under the bot ~/files directory."""
         try:
             return files_svc.list_dir(name, query.get("path") or ".", home=g.home)
         except AutonomousError as exc:
@@ -1105,7 +1401,7 @@ class BotFiles(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, OkSchema)
     def delete(self, query, name):
-        """Delete a file or directory under ~/shared."""
+        """Delete a file or directory under ~/files."""
         try:
             files_svc.delete_path(name, query.get("path") or "", home=g.home)
             return {"ok": True}
@@ -1116,7 +1412,7 @@ class BotFiles(MethodView):
 @blp.route("/<string:name>/files/mkdir")
 class BotFileMkdir(MethodView):
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Create a directory under ~/shared")
+    @blp.doc(summary="Create a directory under ~/files")
     def post(self, name):
         """Create a directory. JSON body: ``{ "path": ".", "name": "dossier" }``."""
         body = request.get_json(silent=True) or {}
@@ -1130,13 +1426,31 @@ class BotFileMkdir(MethodView):
             _handle(exc)
 
 
+@blp.route("/<string:name>/files/move")
+class BotFileMove(MethodView):
+    @blp.arguments(FileMoveSchema)
+    @blp.response(200, FileEntrySchema)
+    @blp.doc(summary="Move a file or folder within ~/files")
+    def post(self, body, name):
+        """Move ``src`` into directory ``dest`` (basename preserved)."""
+        try:
+            return files_svc.move_path(
+                name,
+                body.get("src") or "",
+                body.get("dest") or ".",
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
 @blp.route("/<string:name>/files/upload")
 class BotFileUpload(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Upload a file into ~/shared")
+    @blp.doc(summary="Upload a file into ~/files")
     def post(self, query, name):
-        """Upload a multipart file into the given directory (default: ~/shared root)."""
+        """Upload a multipart file into the given directory (default: ~/files root)."""
         if "file" not in request.files:
             abort(400, message="Missing file field")
         up = request.files["file"]
@@ -1157,7 +1471,7 @@ class BotFileUpload(MethodView):
 @blp.route("/<string:name>/files/download")
 class BotFileDownload(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
-    @blp.doc(summary="Download a file from ~/shared")
+    @blp.doc(summary="Download a file from ~/files")
     def get(self, query, name):
         """Download a single file."""
         try:
@@ -1172,7 +1486,7 @@ class BotFileDownload(MethodView):
 @blp.route("/<string:name>/files/raw")
 class BotFileRaw(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
-    @blp.doc(summary="Serve a ~/shared file inline (images in chat)")
+    @blp.doc(summary="Serve a ~/files file inline (images in chat)")
     def get(self, query, name):
         """Inline file bytes (no Content-Disposition attachment)."""
         try:
@@ -1188,7 +1502,7 @@ class BotFileRaw(MethodView):
 @blp.route("/<string:name>/files/share")
 class BotFileShare(MethodView):
     @blp.response(200)
-    @blp.doc(summary="Build markdown to embed a ~/shared image in the assistant reply")
+    @blp.doc(summary="Build markdown to embed a ~/files image in the assistant reply")
     def post(self, name):
         """JSON ``{path, caption?}`` → ``{markdown, url, …}`` (agent pastes markdown in text)."""
         body = request.get_json(silent=True) or {}
@@ -1209,7 +1523,7 @@ class BotFileShare(MethodView):
 @blp.route("/<string:name>/files/attach")
 class BotFileAttach(MethodView):
     @blp.response(200)
-    @blp.doc(summary="Attach a non-image ~/shared file to the assistant reply")
+    @blp.doc(summary="Attach a non-image ~/files file to the assistant reply")
     def post(self, name):
         """JSON ``{path}`` → download card on the assistant bubble (PDF, zip, … — not images)."""
         body = request.get_json(silent=True) or {}
@@ -1222,11 +1536,30 @@ class BotFileAttach(MethodView):
             _handle(exc)
 
 
+@blp.route("/<string:name>/files/claim-mail")
+class BotFileClaimMail(MethodView):
+    @blp.response(200, FileEntrySchema)
+    @blp.doc(summary="Move a staged inter-bot mail attachment into ~/files")
+    def post(self, name):
+        """JSON ``{path, dest}`` — ``path`` under ``.autonomous/mail-inbox/…``."""
+        body = request.get_json(silent=True) or {}
+        path = (body.get("path") or "").strip()
+        dest = (body.get("dest") or "").strip()
+        if not path or not dest:
+            abort(400, message="Missing path or dest")
+        try:
+            return files_svc.claim_mail_attachment(
+                name, path, dest, home=g.home
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
 @blp.route("/<string:name>/files/content")
 class BotFileContent(MethodView):
     @blp.arguments(FilesQuerySchema, location="query")
     @blp.response(200, FileContentSchema)
-    @blp.doc(summary="Read a UTF-8 text file under ~/shared (agent)")
+    @blp.doc(summary="Read a UTF-8 text file under ~/files (agent)")
     def get(self, query, name):
         """Return text content of a file (no host shell needed)."""
         try:
@@ -1236,7 +1569,7 @@ class BotFileContent(MethodView):
 
     @blp.arguments(FileWriteSchema)
     @blp.response(200, FileEntrySchema)
-    @blp.doc(summary="Write a UTF-8 text file under ~/shared (agent)")
+    @blp.doc(summary="Write a UTF-8 text file under ~/files (agent)")
     def put(self, body, name):
         """Create or overwrite a text file. JSON: ``{path, content}``."""
         try:
@@ -1285,5 +1618,80 @@ class BotMcpGrantDelete(MethodView):
 
         try:
             return devices_svc.revoke_bot_mcp(name, grant_id, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+class NotebookEntrySchema(Schema):
+    id = fields.Str()
+    kind = fields.Str()
+    title = fields.Str()
+    body = fields.Str()
+    created_at = fields.Str()
+    updated_at = fields.Str()
+
+
+class NotebookWriteSchema(Schema):
+    kind = fields.Str(required=True)
+    body = fields.Str(required=True)
+    title = fields.Str(load_default="")
+    id = fields.Str(load_default="")
+
+
+class NotebookOkSchema(Schema):
+    ok = fields.Bool()
+
+
+@blp.route("/<string:name>/notebook")
+class BotNotebook(MethodView):
+    @blp.response(200, NotebookEntrySchema(many=True))
+    @blp.doc(summary="This bot's notebook: orders, open lines, notes")
+    def get(self, name):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            return notebook_svc.list_entries(name, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+    @blp.arguments(NotebookWriteSchema)
+    @blp.response(200, NotebookEntrySchema)
+    @blp.doc(summary="Save or update one notebook entry (agent, immediate)")
+    def post(self, data, name):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            return notebook_svc.remember(
+                name,
+                kind=str(data.get("kind") or ""),
+                body=str(data.get("body") or ""),
+                title=str(data.get("title") or ""),
+                entry_id=str(data.get("id") or ""),
+                home=g.home,
+            )
+        except AutonomousError as exc:
+            _handle(exc)
+
+
+@blp.route("/<string:name>/notebook/<string:entry_id>")
+class BotNotebookEntry(MethodView):
+    @blp.response(200, NotebookEntrySchema)
+    @blp.doc(summary="Read one notebook entry")
+    def get(self, name, entry_id):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            return notebook_svc.get_entry(name, entry_id, home=g.home)
+        except AutonomousError as exc:
+            _handle(exc)
+
+    @blp.response(200, NotebookOkSchema)
+    @blp.doc(summary="Remove one notebook entry")
+    def delete(self, name, entry_id):
+        from autonomous.services import notebook as notebook_svc
+
+        try:
+            notebook_svc.close_entry(name, entry_id, home=g.home)
+            return {"ok": True}
         except AutonomousError as exc:
             _handle(exc)

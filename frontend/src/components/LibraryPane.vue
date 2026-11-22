@@ -1,21 +1,28 @@
 <template>
   <div
     class="library"
-    :class="{ 'is-drag': dragging }"
-    @dragenter.prevent="onDragEnter"
-    @dragover.prevent="onDragOver"
-    @dragleave.prevent="onDragLeave"
-    @drop.prevent="onDrop"
+    :class="{ 'is-drag': panelDragging }"
+    @dragenter.prevent="onPanelDragEnter"
+    @dragover.prevent="onPanelDragOver"
+    @dragleave.prevent="onPanelDragLeave"
+    @drop.prevent="onDropAt(path, $event)"
   >
     <div class="files-head">
-      <nav class="files-crumb" aria-label="shared">
-        <button
+      <nav class="files-crumb" aria-label="files">
+      <button
           type="button"
           class="crumb root"
-          :class="{ active: path === '.' }"
-          title="~/shared"
-          aria-label="~/shared"
+          :class="{
+            active: path === '.',
+            'drop-over': dropOver === '.',
+          }"
+          title="~/files"
+          aria-label="~/files"
           @click="goRoot"
+          @dragenter.prevent.stop="onTargetEnter('.')"
+          @dragover.prevent.stop="onTargetOver('.')"
+          @dragleave.prevent.stop="onTargetLeave('.')"
+          @drop.prevent.stop="onDropAt('.', $event)"
         >
           <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3.5 9.5V7.2A1.7 1.7 0 0 1 5.2 5.5h4.1l1.6 1.7h7.9A1.7 1.7 0 0 1 20.5 9v1" />
@@ -27,41 +34,55 @@
           <button
             type="button"
             class="crumb"
-            :class="{ active: i === crumbs.length - 1 }"
+            :class="{
+              active: i === crumbs.length - 1,
+              'drop-over': dropOver === seg.path,
+            }"
+            :title="seg.name"
             @click="goPath(seg.path)"
+            @dragenter.prevent.stop="onTargetEnter(seg.path)"
+            @dragover.prevent.stop="onTargetOver(seg.path)"
+            @dragleave.prevent.stop="onTargetLeave(seg.path)"
+            @drop.prevent.stop="onDropAt(seg.path, $event)"
           >
             {{ seg.name }}
           </button>
         </template>
       </nav>
       <div class="files-actions">
-        <button
-          class="btn file-action icon-only"
+        <UiButton
+          class="file-action"
+          icon-only
           type="button"
           :disabled="busy"
           :title="t('files.mkdir')"
           :aria-label="t('files.mkdir')"
           @click="startMkdir"
         >
-          <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 9.2V7.1A1.6 1.6 0 0 1 5.1 5.5h4l1.5 1.6h8.3A1.6 1.6 0 0 1 20.5 8.7v1" />
-            <path d="M3.5 10h17l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.3H6.2a1.6 1.6 0 0 1-1.6-1.3L3.5 10Z" />
-            <path d="M12 12.2v5M9.5 14.7h5" />
-          </svg>
-        </button>
-        <button
-          class="btn file-action icon-only"
+          <template #icon>
+            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.5 9.2V7.1A1.6 1.6 0 0 1 5.1 5.5h4l1.5 1.6h8.3A1.6 1.6 0 0 1 20.5 8.7v1" />
+              <path d="M3.5 10h17l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.3H6.2a1.6 1.6 0 0 1-1.6-1.3L3.5 10Z" />
+              <path d="M12 12.2v5M9.5 14.7h5" />
+            </svg>
+          </template>
+        </UiButton>
+        <UiButton
+          class="file-action"
+          icon-only
           type="button"
           :disabled="busy"
           :title="uploading ? t('files.uploading') : t('files.upload')"
           :aria-label="uploading ? t('files.uploading') : t('files.upload')"
           @click="pickFiles"
         >
-          <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 15.5V5.5M8.5 9 12 5.5 15.5 9" />
-            <path d="M5 16.5v1.3A1.7 1.7 0 0 0 6.7 19.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
-          </svg>
-        </button>
+          <template #icon>
+            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15.5V5.5M8.5 9 12 5.5 15.5 9" />
+              <path d="M5 16.5v1.3A1.7 1.7 0 0 0 6.7 19.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
+            </svg>
+          </template>
+        </UiButton>
         <input
           ref="fileInput"
           type="file"
@@ -87,12 +108,12 @@
         :disabled="uploading"
         @keydown.esc.prevent="cancelMkdir"
       />
-      <button class="btn primary" type="submit" :disabled="uploading || !mkdirName.trim()">
+      <UiButton variant="primary" type="submit" :disabled="uploading || !mkdirName.trim()">
         {{ t("ok") }}
-      </button>
-      <button class="btn" type="button" :disabled="uploading" @click="cancelMkdir">
+      </UiButton>
+      <UiButton type="button" :disabled="uploading" @click="cancelMkdir">
         {{ t("files.cancel") }}
-      </button>
+      </UiButton>
     </form>
 
     <p class="files-hint">{{ t("files.sharedHint") }}</p>
@@ -107,7 +128,15 @@
       <span>{{ t("files.empty") }}</span>
     </div>
     <ul v-else class="file-list">
-      <li v-if="path !== '.'" class="file-row">
+      <li
+        v-if="path !== '.'"
+        class="file-row"
+        :class="{ 'drop-over': dropOver === parentPath }"
+        @dragenter.prevent.stop="onTargetEnter(parentPath)"
+        @dragover.prevent.stop="onTargetOver(parentPath)"
+        @dragleave.prevent.stop="onTargetLeave(parentPath)"
+        @drop.prevent.stop="onDropAt(parentPath, $event)"
+      >
         <button class="file-name" type="button" @click="goUp">
           <span class="file-ico is-up" aria-hidden="true">
             <svg class="fi" viewBox="0 0 24 24">
@@ -117,8 +146,33 @@
           <span class="file-label">..</span>
         </button>
       </li>
-      <li v-for="e in entries" :key="e.path" class="file-row">
-        <button class="file-name" type="button" :title="e.name" @click="open(e)">
+      <li
+        v-for="e in entries"
+        :key="e.path"
+        class="file-row"
+        :class="{
+          'drop-over': dropOver === e.path,
+          dragging: dragSrc === e.path,
+        }"
+        :draggable="true"
+        @dragstart="onEntryDragStart(e, $event)"
+        @dragend="onEntryDragEnd"
+        @dragenter.prevent.stop="onRowDragEnter(e, $event)"
+        @dragover.prevent.stop="onRowDragOver(e, $event)"
+        @dragleave.prevent.stop="onTargetLeave(e.path)"
+        @drop.prevent.stop="onRowDrop(e, $event)"
+      >
+        <button
+          class="file-name"
+          type="button"
+          :class="{ 'tip-open': nameTip === e.path }"
+          :aria-label="fileTitle(e)"
+          @click="open(e)"
+          @pointerenter="nameTip = e.path"
+          @pointerleave="nameTip = ''"
+          @focus="nameTip = e.path"
+          @blur="nameTip = ''"
+        >
           <span class="file-ico" :class="e.is_dir ? 'is-dir' : 'is-file'" aria-hidden="true">
             <svg v-if="e.is_dir" class="fi" viewBox="0 0 24 24">
               <path d="M3.5 9.5V7.2A1.7 1.7 0 0 1 5.2 5.5h4.1l1.6 1.7h7.9A1.7 1.7 0 0 1 20.5 9v1" />
@@ -130,36 +184,33 @@
             </svg>
           </span>
           <span class="file-label">{{ e.name }}</span>
-          <span v-if="!e.is_dir && e.size != null" class="file-size">{{ formatSize(e.size) }}</span>
+          <span
+            v-if="nameTip === e.path"
+            class="file-row-tip"
+            role="tooltip"
+          >{{ e.name }}</span>
         </button>
+        <span
+          v-if="e.size != null"
+          class="file-size"
+        >{{ formatSize(e.size) }}</span>
         <div class="file-ops">
-          <a
-            v-if="!e.is_dir"
-            class="file-icon-btn"
-            :href="api.downloadUrl(bot.name, e.path)"
-            target="_blank"
-            rel="noopener"
-            :title="t('files.download')"
-            :aria-label="t('files.download')"
-          >
-            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v10M8.5 11.5 12 15l3.5-3.5" />
-              <path d="M5 17.5v1.3A1.7 1.7 0 0 0 6.7 20.5h10.6a1.7 1.7 0 0 0 1.7-1.7v-1.3" />
-            </svg>
-          </a>
-          <button
-            class="file-icon-btn danger"
-            type="button"
+          <UiActionConfirm
+            v-if="armedDelete === e.path"
+            button-class="ui-icon-btn is-file"
+            :disabled="busy"
+            @confirm="confirmDelete(e)"
+          />
+          <UiIconButton
+            v-else
+            icon="trash"
+            danger
+            size-variant="file"
+            :label="t('files.delete')"
             :title="t('files.delete')"
-            :aria-label="t('files.delete')"
-            @click="remove(e)"
-          >
-            <svg class="fi" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 7.5h14" />
-              <path d="M9.5 7.5V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
-              <path d="M8 7.5l.7 11a1.4 1.4 0 0 0 1.4 1.3h4.8a1.4 1.4 0 0 0 1.4-1.3l.7-11" />
-            </svg>
-          </button>
+            :disabled="busy"
+            @click="armDelete(e)"
+          />
         </div>
       </li>
     </ul>
@@ -167,9 +218,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import { state } from "../store";
+import UiActionConfirm from "./ui/UiActionConfirm.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
+
+const INTERNAL_MIME = "application/x-autonomous-file";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
@@ -178,13 +235,20 @@ const entries = ref([]);
 const loading = ref(false);
 const uploading = ref(false);
 const busy = computed(() => loading.value || uploading.value);
-const dragging = ref(false);
+const panelDragging = ref(false);
+const dropOver = ref("");
+const dragSrc = ref("");
 const error = ref("");
 const fileInput = ref(null);
 const mkdirOpen = ref(false);
 const mkdirName = ref("");
 const mkdirInput = ref(null);
+const armedDelete = ref("");
+/** Custom hover tip (full name) — never browser ``title``. */
+const nameTip = ref("");
 let dragDepth = 0;
+let reloadTimer = 0;
+let loadGen = 0;
 
 const crumbs = computed(() => {
   if (!path.value || path.value === ".") return [];
@@ -198,55 +262,118 @@ const crumbs = computed(() => {
   return out;
 });
 
+const parentPath = computed(() => {
+  if (path.value === "." || !path.value.includes("/")) return ".";
+  return path.value.split("/").slice(0, -1).join("/") || ".";
+});
+
 function formatSize(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  const bytes = Number(n);
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-async function load() {
-  loading.value = true;
-  error.value = "";
-  try {
-    entries.value = await api.listFiles(props.bot.name, path.value);
-  } catch (e) {
-    entries.value = [];
-    error.value = e.message || String(e);
-  } finally {
-    loading.value = false;
+function fileTitle(e) {
+  const name = String(e?.name || "");
+  if (e?.size == null) return name;
+  const size = formatSize(e.size);
+  return size ? `${name} — ${size}` : name;
+}
+
+async function load({ quiet = false } = {}) {
+  const gen = ++loadGen;
+  if (!quiet) {
+    loading.value = true;
+    error.value = "";
   }
+  try {
+    const next = await api.listFiles(props.bot.name, path.value);
+    if (gen !== loadGen) return;
+    entries.value = next;
+  } catch (e) {
+    if (gen !== loadGen) return;
+    if (!quiet) {
+      entries.value = [];
+      error.value = e.message || String(e);
+    }
+  } finally {
+    if (!quiet && gen === loadGen) loading.value = false;
+  }
+}
+
+/** Debounce live refreshes (SSE bursts) so the list does not thrash. */
+function scheduleReload() {
+  clearTimeout(reloadTimer);
+  reloadTimer = window.setTimeout(() => {
+    load({ quiet: true });
+  }, 250);
+}
+
+function download(e) {
+  const url = api.downloadUrl(props.bot.name, e.path);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = e.name || "";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function clearTips() {
+  armedDelete.value = "";
+  nameTip.value = "";
 }
 
 function open(e) {
+  clearTips();
   if (e.is_dir) {
     path.value = e.path;
     load();
+    return;
   }
+  download(e);
 }
 
 function goRoot() {
   path.value = ".";
+  clearTips();
   load();
 }
 
 function goPath(p) {
   path.value = p || ".";
+  clearTips();
   load();
 }
 
 function goUp() {
-  if (path.value === "." || !path.value.includes("/")) path.value = ".";
-  else path.value = path.value.split("/").slice(0, -1).join("/") || ".";
+  path.value = parentPath.value;
+  clearTips();
   load();
 }
 
-async function remove(e) {
+function armDelete(e) {
+  armedDelete.value = armedDelete.value === e.path ? "" : e.path;
+}
+
+async function confirmDelete(e) {
+  if (armedDelete.value !== e.path) return;
   error.value = "";
+  uploading.value = true;
   try {
     await api.deleteFile(props.bot.name, e.path);
-    await load();
+    armedDelete.value = "";
+      await load();
   } catch (err) {
     error.value = err.message || String(err);
+  } finally {
+    uploading.value = false;
   }
 }
 
@@ -285,36 +412,144 @@ function pickFiles() {
 async function onFileInput(ev) {
   const files = [...(ev.target.files || [])];
   ev.target.value = "";
-  if (files.length) await uploadFiles(files);
+  if (files.length) await uploadFiles(path.value, files);
 }
 
-function onDragEnter() {
+function onPanelDragEnter() {
   dragDepth += 1;
-  dragging.value = true;
+  panelDragging.value = true;
 }
 
-function onDragOver() {
-  dragging.value = true;
+function onPanelDragOver() {
+  panelDragging.value = true;
 }
 
-function onDragLeave() {
+function onPanelDragLeave() {
   dragDepth = Math.max(0, dragDepth - 1);
-  if (dragDepth === 0) dragging.value = false;
+  if (dragDepth === 0) {
+    panelDragging.value = false;
+    dropOver.value = "";
+  }
 }
 
-async function onDrop(ev) {
+function onTargetEnter(target) {
+  dropOver.value = target;
+  panelDragging.value = true;
+}
+
+function onTargetOver(target) {
+  dropOver.value = target;
+  panelDragging.value = true;
+}
+
+function onTargetLeave(target) {
+  if (dropOver.value === target) dropOver.value = "";
+}
+
+function onEntryDragStart(e, ev) {
+  dragSrc.value = e.path;
+  armedDelete.value = "";
+  try {
+    ev.dataTransfer.setData(INTERNAL_MIME, e.path);
+    ev.dataTransfer.setData("text/plain", e.path);
+    ev.dataTransfer.effectAllowed = "move";
+  } catch {
+    /* some browsers reject custom types until drop */
+  }
+}
+
+function onEntryDragEnd() {
+  dragSrc.value = "";
+  dropOver.value = "";
+  panelDragging.value = false;
   dragDepth = 0;
-  dragging.value = false;
-  const files = [...(ev.dataTransfer?.files || [])];
-  if (files.length) await uploadFiles(files);
 }
 
-async function uploadFiles(files) {
+function parentOf(p) {
+  if (!p || p === ".") return ".";
+  if (!p.includes("/")) return ".";
+  return p.split("/").slice(0, -1).join("/") || ".";
+}
+
+function isInvalidMove(src, destDir) {
+  if (!src) return true;
+  if (src === destDir) return true;
+  if (parentOf(src) === (destDir || ".")) return true;
+  if (destDir && destDir !== "." && (destDir === src || destDir.startsWith(`${src}/`))) {
+    return true;
+  }
+  return false;
+}
+
+function readDropPayload(ev) {
+  // Snapshot before any await — DataTransfer is cleared after the drop handler yields.
+  const files = [...(ev?.dataTransfer?.files || [])].filter(
+    (f) => f && (f.size > 0 || String(f.name || "").trim())
+  );
+  let internal = "";
+  try {
+    internal = ev?.dataTransfer?.getData(INTERNAL_MIME) || "";
+  } catch {
+    internal = "";
+  }
+  if (!internal && dragSrc.value && !files.length) internal = dragSrc.value;
+  return { files, internal };
+}
+
+function onRowDragEnter(e, _ev) {
+  onTargetEnter(e.is_dir ? e.path : path.value);
+}
+
+function onRowDragOver(e, _ev) {
+  onTargetOver(e.is_dir ? e.path : path.value);
+}
+
+function onRowDrop(e, ev) {
+  // OS files on a file row → upload into the current folder (not swallowed).
+  // Internal drag onto a folder → move; onto a file → ignore.
+  const { files, internal } = readDropPayload(ev);
+  if (internal) {
+    if (e.is_dir) return onDropAt(e.path, ev, { files, internal });
+    dragSrc.value = "";
+    dropOver.value = "";
+    panelDragging.value = false;
+    return;
+  }
+  if (files.length) {
+    return onDropAt(e.is_dir ? e.path : path.value, ev, { files, internal: "" });
+  }
+}
+
+async function onDropAt(destDir, ev, prefetched = null) {
+  dragDepth = 0;
+  panelDragging.value = false;
+  dropOver.value = "";
+  const dest = destDir || ".";
+  const { files, internal } = prefetched || readDropPayload(ev);
+  dragSrc.value = "";
+  if (internal) {
+    if (isInvalidMove(internal, dest)) return;
+    error.value = "";
+    uploading.value = true;
+    try {
+      await api.moveFile(props.bot.name, internal, dest);
+      await load();
+    } catch (err) {
+      error.value = err.message || String(err);
+    } finally {
+      uploading.value = false;
+    }
+    return;
+  }
+  if (files.length) await uploadFiles(dest, files);
+}
+
+async function uploadFiles(destDir, files) {
   uploading.value = true;
   error.value = "";
   try {
     for (const file of files) {
-      await api.uploadFile(props.bot.name, path.value, file);
+      await api.uploadFile(props.bot.name, destDir || ".", file);
     }
     await load();
   } catch (err) {
@@ -328,10 +563,26 @@ watch(
   () => props.bot.name,
   () => {
     path.value = ".";
+    clearTips();
     cancelMkdir();
     load();
   }
 );
 
-onMounted(load);
+watch(
+  () => state.filesFeed,
+  (feed) => {
+    if (!feed || feed.bot !== props.bot.name) return;
+    scheduleReload();
+  }
+);
+
+onMounted(() => {
+  load();
+});
+
+onUnmounted(() => {
+  clearTimeout(reloadTimer);
+  loadGen += 1;
+});
 </script>

@@ -1,19 +1,19 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "autonomous"
-version = "0.1.0"
+version = "0.1.58"
 description = "Autonomous bot hub — Vue + Flask + SQLite + Docker desktop VMs"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "AGPL-3.0-only" }
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
 authors = [{ name = "Mister3D" }]
 urls = { Homepage = "https://github.com/Mister3D/Autonomous", Repository = "https://github.com/Mister3D/Autonomous", Issues = "https://github.com/Mister3D/Autonomous/issues" }
 keywords = ["bots", "agents", "docker", "flask", "vue"]
 classifiers = [
-  "License :: OSI Approved :: GNU Affero General Public License v3",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",

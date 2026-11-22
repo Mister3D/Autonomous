@@ -20,8 +20,13 @@ log = logging.getLogger("autonomous.pi_rpc")
 
 EventHandler = Callable[[dict[str, Any]], None]
 
+# Set by ``serve`` before stale-run recovery, so the first Pi of this process
+# can call the API even though ``serve.pid`` is not written yet.
+_SERVE_API_BASE: str | None = None
+
 _EXTENSIONS_DIR = Path(__file__).resolve().parent.parent / "pi_extensions"
 _PI_EXTENSIONS = (
+    _EXTENSIONS_DIR / "batch.ts",
     _EXTENSIONS_DIR / "vault.ts",
     _EXTENSIONS_DIR / "vm.ts",
     _EXTENSIONS_DIR / "files.ts",
@@ -31,9 +36,98 @@ _PI_EXTENSIONS = (
     _EXTENSIONS_DIR / "chat_search.ts",
     _EXTENSIONS_DIR / "react.ts",
     _EXTENSIONS_DIR / "memory.ts",
+    _EXTENSIONS_DIR / "notebook.ts",
+    # Chunked summary with overlap — avoids one-shot "token cap" compaction failures.
+    _EXTENSIONS_DIR / "compaction.ts",
     _EXTENSIONS_DIR / "approval.ts",
     _EXTENSIONS_DIR / "clarify.ts",
     _EXTENSIONS_DIR / "companion.ts",
+    _EXTENSIONS_DIR / "vision_budget.ts",
+    # After vision_budget so the size estimate matches the trimmed payload.
+    _EXTENSIONS_DIR / "llm_heavy_gate.ts",
+    # After vision_budget so the request preview matches what is actually sent.
+    _EXTENSIONS_DIR / "llm_trace.ts",
+)
+
+# Replaces Pi's default "You are a coding assistant running inside pi…" preamble
+# (``--system-prompt``). Domain rules stay in ``--append-system-prompt``.
+_BASE_SYSTEM_PROMPT = (
+    "You are a helpful autonomous companion running inside Autonomous. "
+    "Help the user with everyday work: browsing the web, using desktop apps, "
+    "managing files, coordinating with other bots, remembering preferences, "
+    "and answering questions. You have a private virtual desktop and tools — "
+    "use them when the task needs action, not only prose. Coding is one "
+    "possible task among many, not your default role. Be clear and concise. "
+    "Prefer doing the work over explaining how to do it."
+)
+
+_BATCH_SYSTEM_HINT = (
+    "TOOL BATCHES — several tools in one response. "
+    "Default habit: when you already know the next 2+ tool arguments, emit "
+    "them together in the SAME response. Do not burn one model turn per tool "
+    "when the arguments are already fixed. They run, then you are called once "
+    "with every result. There is no model call between tools of that response. "
+    "Choose the mode. "
+    "Parallel (default): independent calls whose arguments you already know and "
+    "that do not need each other's output (two lists, two lookups, two reads). "
+    "Emit them together and do not call batch_sequential. They start at the "
+    "same time. "
+    "Sequential: the calls must not overlap, and you already know every "
+    "argument (install then launch; mkdir then write; command N then N+1 when "
+    "both strings are already known). Emit those calls together and also call "
+    "batch_sequential once in that same response. They run one after another, "
+    "still with one model call after the batch. batch_sequential does not let "
+    "a later call read an earlier result. "
+    "Do not batch a step that needs a result you do not have yet (a click that "
+    "needs coordinates from a snapshot, a command that needs the previous "
+    "output). Emit one tool and wait. Never call batch_sequential alone. "
+    "\"One tool call per command\" (or \"do not put several commands in the "
+    "same shell\") means each vm_terminal_exec has a single command string — "
+    "it does NOT mean one tool call per model turn. Pack many such calls plus "
+    "batch_sequential in one response when the arguments are known. "
+    "When the user asks for many separate command-tool invocations whose "
+    "arguments you already know, emit a LARGE sequential batch (tens of calls "
+    "when safe) with batch_sequential. Resume the same way after GUARD:CONTINUE."
+)
+
+_APPROACH_SYSTEM_HINT = (
+    "When a task does not work, change method. Do not loop on the same "
+    "technique. "
+    "1. Start with the standard method for that kind of work: the documented "
+    "API, the normal user path, the ordinary command. "
+    "2. If that method fails — the same error, the same result, or no "
+    "progress — stop repeating it. Try a less conventional but still "
+    "legitimate alternative: another tool, another entry point, another "
+    "order of steps. "
+    "3. If that alternative fails too, try one inventive approach. Stay "
+    "inside the rules of this prompt (no host shell, no leaked secrets, no "
+    "invented URLs, no apt/pip install to bypass a website, no reload loop). "
+    "Installing normal software inside the bot's own VM with sudo is allowed "
+    "and is not an 'inventive bypass'. "
+    "Two failed attempts of the same method are enough to move to the next "
+    "level. In one sentence, tell the user what failed and what you will "
+    "try next. Do not ask permission to switch method."
+)
+
+# Generic throughput — any long tool sequence, not a specific benchmark.
+_THROUGHPUT_SYSTEM_HINT = (
+    "Throughput: prefer tool batches over turn-by-turn tools whenever arguments "
+    "are already known (see TOOL BATCHES). Everyday example: installing a "
+    "desktop app then launching it — if both command strings are fixed, emit "
+    "install + launch in one sequential batch (batch_sequential), then observe. "
+    "When the user asks for many successive similar tool calls (each call its "
+    "own step — do not merge several requested steps into one shell string if "
+    "they forbade that), move fast with LARGE batch_sequential groups and "
+    "almost no chat chatter; no vm_look / screenshot / narration between "
+    "trivial identical-pattern commands unless something failed. The "
+    "command-execution tool is always ``vm_terminal_exec`` — never invent a "
+    "``bash`` / ``shell`` / ``run`` tool name. Size each pack to finish just "
+    "before the next GUARD review milestone (or the end of the task) — tools "
+    "still queued after the milestone are aborted and must be retried. After "
+    "a GUARD:CONTINUE token, resume from the first step that has no "
+    "successful result (do not skip), in the same turn when possible. Prefer "
+    "the shortest correct path for any task; do not pad the run with "
+    "optional checks."
 )
 
 _APPROVAL_SYSTEM_HINT = (
@@ -42,7 +136,11 @@ _APPROVAL_SYSTEM_HINT = (
     "to ask first (e.g. before a command). It shows a chat card and BLOCKS until "
     "the user clicks or writes in chat. On refuse: do not proceed. On accept: "
     "continue. If the tool returns human_redirect / cancelled with a chat message, "
-    "follow that guidance (not a hard refusal)."
+    "follow that guidance (not a hard refusal). "
+    "Do NOT ask_approval for ordinary work inside the bot's own VM "
+    "(installing a package, opening an app, editing files there). That computer "
+    "is yours — act. Inventing a missing permission and asking the user to "
+    "'authorize apt' is forbidden."
 )
 
 _MEMORY_SYSTEM_HINT = (
@@ -57,7 +155,27 @@ _MEMORY_SYSTEM_HINT = (
     "(e.g. « always ask approval before running a command »), safety/ops rules. "
     "browse = situational / nice-to-know details looked up when relevant — "
     "likes, food, address, hobbies, trivia (e.g. favourite_food=raclette). "
-    "If unsure: browse. Newly approved core facts apply on the next conversation."
+    "If unsure: browse. Newly approved core facts apply on the next conversation. "
+    "Per-bot lasting rules, unfinished work, and setup notes go to the bot "
+    "notebook (notebook_remember), not here."
+)
+
+_NOTEBOOK_SYSTEM_HINT = (
+    "Bot notebook — private to THIS bot. It survives compaction. "
+    "On each new message the host appends the current standing orders, "
+    "open lines, and note titles. Do not paste that block yourself. "
+    "notebook_remember(kind, title, body) saves immediately, no confirm card. "
+    "kind=order: a lasting rule the user stated (\"always check the proxy is on\"). "
+    "One short sentence. Pass a stable title and reuse it to update the same rule. "
+    "kind=open: one short line of work still unfinished "
+    "(\"Server: the nginx update is still to do\"). "
+    "Write it before you leave that subject. notebook_close(id) when it is done. "
+    "kind=note: a decision or a setup to keep months later (title + body). "
+    "Titles are listed every turn; notebook_get(id) returns the body. "
+    "notebook_list shows every id. "
+    "When the user asks what was left to do, answer from the open lines. "
+    "Do not store secrets. Household facts (name, tastes, rules for every bot) "
+    "stay on memory_propose."
 )
 
 _CHAT_SEARCH_SYSTEM_HINT = (
@@ -68,38 +186,82 @@ _CHAT_SEARCH_SYSTEM_HINT = (
 )
 
 _FILES_SYSTEM_HINT = (
-    "Bot files (~/shared = ~/workspace, same as the Files inspector): use "
+    "Bot files (~/files, private to THIS bot — other bots cannot see them; "
+    "same folder as ~/workspace and the Files inspector): use "
     "files_list, files_read, files_write, files_mkdir, files_delete, "
-    "files_share_image, files_attach. "
+    "files_share_image, files_attach, files_claim_mail. "
     "These work WITHOUT host bash and WITHOUT a running desk. "
+    "Always use the name ~/files (or ~/workspace in the shell). "
+    "Never use the path ~/shared or /home/autonomous/shared in commands, tool "
+    "arguments, or replies. A directory with that old name may still be visible; "
+    "ignore it. It is not shared with other bots. "
     "IMAGES (mandatory): call files_share_image(path) for each file, then paste the "
     "EXACT returned markdown line (![](/api/v1/bots/…/files/raw?path=…)) into your reply. "
     "FORBIDDEN: inventing image URLs, external http(s) links, or guessing paths — "
     "those break the chat. Only the markdown from files_share_image works. "
     "PDF/zip/other non-preview files: files_attach(path) → download card on the reply. "
+    "When the user asks you to download or generate a file into their files, "
+    "put it under ~/files (workspace), then report the exact path (and "
+    "files_attach when it helps). For a named public-domain work without a URL, "
+    "find a legitimate source (web search or browser address-bar search) then "
+    "download — do not invent a login bypass. "
     "Do NOT use attachments for images. Do NOT request a screen desk or vm_screenshot "
     "just to show a workspace image. "
     "Do NOT overwrite images with files_write. "
+    "Inter-bot mail files land under .autonomous/mail-inbox/<id>/ — place them with "
+    "files_claim_mail(path, dest) wherever you want in ~/files. "
     "There is no host bash: shell commands run in the bot VM via vm_terminal_exec."
 )
 
 _BOTMAIL_SYSTEM_HINT = (
-    "Inter-bot mail: bot_tell(to, content) sends a one-way message; "
-    "bot_ask(to, content) asks and WAITS for a reply (blocks this run). "
-    "The user may also type « Dit à @name … » or « Demande à @name … » in chat. "
-    "When you receive « [Question de @x] », answer clearly in your next message; "
-    "the answer is forwarded to @x. When you receive « [@x a répondu] » or a "
-    "« Dit à » from a peer, continue with that information."
+    "Inter-bot mail — mention ≠ send. Writing « @name » (or naming a bot) only "
+    "CITES them in this chat; it does NOT deliver anything. To collaborate you "
+    "need an explicit user instruction (action verb + bot + precise ask), e.g. "
+    "« Demande à X de faire Y… », or a standing rule you were given "
+    "(« quand un mail d’achat arrive, donne-le à @achat »). Then you MUST call "
+    "bot_tell / bot_ask (Managers: bot_tell with expect_reply for async workers). "
+    "ONE way to give a peer a file: bot_tell / bot_ask attachments=[paths under YOUR ~/files]. "
+    "The host copies them into the peer's private mail-inbox (they place them with "
+    "files_claim_mail). There is no folder shared between bots. "
+    "bot_tell = one-way async; bot_ask = ask and WAIT for a reply (blocks this "
+    "run). Confirming transmission is NOT the end of the task. If the user said "
+    "« rapporte-moi sa réponse ici », prefer bot_ask (or follow up when the "
+    "reply arrives). If they said they will continue in the peer’s chat, Tell "
+    "is enough. "
+    "CRITICAL — content must be a self-contained brief for the peer: they do "
+    "NOT see this chat. Include objective, relevant facts, files/constraints, "
+    "expected result — not merely the user’s last sentence. Address them as "
+    "« tu »; never forward a relative clause (« si elle fait du poney » → "
+    "« Est-ce que tu fais du poney ? »). Mixed chat (« toi aussi… » + @peer): "
+    "answer the human; contact the peer ONLY if clearly asked, and send only "
+    "what concerns them. "
+    "Inter-bot mail does not grant new rights and does not replace user "
+    "approval (vault / ask_approval / external send). "
+    "When you receive a peer message (Ask/Tell/reply), treat that body alone "
+    "under your own instructions; your answer to an Ask is forwarded back. "
+    "LANGUAGE: the peer message and your reply to the user stay in the "
+    "language of the conversation (the user's language, or the language of "
+    "the mail you just received). One language only — do not mix French and "
+    "English, and do not switch to English because these instructions are "
+    "in English. Do not paste English tool results into that text."
 )
 
 _MANAGER_SYSTEM_HINT = (
-    "MANAGER / ORCHESTRATOR: you may list peers with bot_list and assign work with "
-    "bot_delegate(to, task, expect_reply?). "
+    "MANAGER / ORCHESTRATOR: list peers with bot_list. "
     "CRITICAL: you do NOT stay waiting for workers. Never use bot_ask for orchestration. "
-    "bot_delegate sends the task AND tells the worker to relaunch you with "
-    "« Dit à @you … » when finished (success or failure). After bot_delegate, continue "
-    "other work or idle; when their Dit arrives, you are relaunched automatically. "
-    "Formulate every multi-bot plan around that callback — do not poll or block."
+    "ONE mail tool for workers: bot_tell(to, content, attachments?, expect_reply?). "
+    "Set expect_reply so the worker relaunches you with « Tell @you … » when done "
+    "(success or failure). Put files in the SAME bot_tell via attachments=['path/…'] "
+    "(copied to their mail-inbox staging; they use files_claim_mail). "
+    "Do NOT paste file contents when a ~/files path exists. "
+    "Do NOT use a second channel for files. bot_delegate is text-only sugar "
+    "(no attachments) — prefer bot_tell when files or a callback matter. "
+    "After sending, continue other work or idle; when their Dit arrives, you are "
+    "relaunched automatically — do not poll or block. "
+    "Household: create bots with bot_create({ bots:[{name}, …] }). "
+    "To delete bots, call bot_delete({ bots:[…], prompt? }) — it shows a checkbox card "
+    "(all checked by default) and BLOCKS until the user confirms or cancels. "
+    "Never delete yourself."
 )
 
 def _events_system_hint(home) -> str:
@@ -130,7 +292,14 @@ def _events_system_hint(home) -> str:
         "(token not in the URL; GET is rejected). "
         "A fire injects a user chat message (queued if busy). Only you create schedules and webhooks "
         "(schedule_create / webhook_create). The user pauses, resumes and deletes them "
-        "in the Events inspector — there is no create form there."
+        "in the Events inspector — there is no create form there. "
+        "Self-relaunch: if this turn cannot finish the work and it must continue later "
+        "(a site is down, a wait is longer than this turn, you told the user you will retry), "
+        "create that schedule yourself with schedule_create. Do not ask permission. "
+        "An echo or a comment in the shell is not a schedule. "
+        "Use recurring=false for a one-shot retry, and put in the instruction the state "
+        "and the exact next step so the later run can continue alone. "
+        "Then tell the user the Next fire time returned by the tool."
     )
 
 _CLARIFY_SYSTEM_HINT = (
@@ -160,10 +329,12 @@ _REACT_SYSTEM_HINT = (
 
 _VISION_SYSTEM_HINT = (
     "Vision budget: the LLM accepts only a small number of images per prompt "
-    "(often 2). Autonomous already caps attached vision images. If many image "
+    "(often 2). Autonomous already caps attached vision images, and before each "
+    "model call it drops older screenshot pixels from the transcript so a long "
+    "session cannot exceed that limit. The pictures stay in the chat. If you "
+    "need a screen that was omitted, take a fresh screenshot. If many image "
     "files are listed, analyze at most that many per turn, then continue on the "
-    "remaining paths in later turns — never pack every image into one prompt. "
-    "Prefer paths + sequential turns over bulk vision."
+    "remaining paths in later turns — never pack every image into one prompt."
 )
 
 _VAULT_SYSTEM_HINT = """\
@@ -171,51 +342,69 @@ VAULT (secrets are global, encrypted, and NEVER shown to you)
 - By default you have access to nothing. Call vault_catalog first: if an entry matches the site (label/origin), call request_vault_access(entry_id) and wait for the user. Only if none exists use request_credentials / request_login / request_secret.
 - A grant returns entry_id and the public fields (username, …), never the password. vault_granted lists what you already have: the account identity is its "user: …" — read it there, never invent an account or e-mail.
 - Secrets reach the page only through vault_type(entry_id, field) into an already-focused field. Everything non-secret (username, search text) goes through vm_type. Never put a secret in the username field, never invent a password or key.
-- NEVER reveal vault secrets in chat (quote / spell / hint), even on auth failure. Continue answering the task without the secret. If the user pastes a password, API key or token into the chat: call report_user_secret SILENTLY as your FIRST action — zero assistant text before or after (do not name the tool, do not say you will call it, do not explain). Do NOT put the secret in the tool args. Then stop and wait. Never invent passwords from memory. Never put a secret in a shell command the user can read.
+- NEVER reveal vault secrets in chat (quote / spell / hint), even on auth failure. Continue answering the task without the secret. If the user pastes a password, API key, or long-lived token into the chat: call report_user_secret SILENTLY as your FIRST action — zero assistant text before or after (do not name the tool, do not say you will call it, do not explain). Do NOT put the secret in the tool args. Then stop and wait. Never invent passwords from memory. Never put a secret in a shell command the user can read.
+- Exception — temporary authentication codes: a one-time password, security code, 2FA / OTP, or other short-lived login code that arrived in a mail, SMS, or webhook payload is not a vault secret. Write it in the chat exactly as received (the digits) so the user can use it. Do not call report_user_secret for it, do not redact it, and do not store it in the vault. Passwords, API keys, long-lived tokens, and anything already in the vault stay hidden.
 - Full login procedure: see LOGIN in the desktop section."""
 
 _VM_SYSTEM_HINT = """\
 DESKTOP & BROWSER (server-side; works without the web UI open)
 
 == 1. Desk and shell ==
-- Two desk modes: terminal (shell only) and screen (GUI). vm_request_desk(mode) WAITS for the user; call nothing else meanwhile. Ask for screen only for GUI work (browser, clicks, drags). Check state with vm_desk_status. If the desk is down, ask the user once.
-- Shell work: vm_terminal_exec (cwd /home/autonomous/workspace). Bot files (~/shared): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for a terminal VM and waits. Never invent command output. There is no host bash on the Autonomous server: the agent cannot run commands on the host machine.
-- Chrome is already started by the screen desk: check with browser_tabs, then browser_navigate. Only if no Chrome exists: `setsid bot-chrome 'https://…' >/dev/null 2>&1 &` (it never exits: never run it in the foreground, never start a second Chrome).
+- One VM per bot: a full computer (terminal, screen, browser, files). vm_request_desk() WAITS for the user; call nothing else meanwhile. Check state with vm_desk_status. If the desk is down, ask the user once. When you describe the desk, stop after that sentence. Do not add a remark about modes, tabs, or choosing between a terminal and a screen.
+- Shell work: vm_terminal_exec (cwd /home/autonomous/workspace, the same private folder as ~/files). Bot files (~/files, this bot only): files_*. Any command whose output you need (date, curl, ping, and the rest) is vm_terminal_exec — if there is no desk it asks the user for the VM and waits. Never invent command output. There is no host bash on the Autonomous server: the agent cannot run commands on the host machine.
+- This VM is yours. User ``autonomous`` has passwordless sudo (``sudo -n``). Install desktop apps and packages with ``sudo apt-get update`` / ``sudo apt-get install -y …`` (or ``sudo pip``) whenever the task needs them — do not invent a permission barrier, do not claim you lack the right, do not ask the user to "authorize apt". A bare ``apt-get`` without sudo fails with lock errors; that is not a policy block — retry with ``sudo``. The only gate for starting the desk is vm_request_desk; after that, act.
+- GUI apps (calculator, editor, drawing, spreadsheet, file manager, desktop icons, dialogs, …): (1) ``command -v`` — if missing, ``sudo apt-get update`` then ``sudo apt-get install -y …``; (2) launch with ``DISPLAY=:1`` and ``setsid``; on the first attempt do **not** redirect stderr to ``/dev/null``; (3) confirm the process is alive; (4) raise/focus the window (``wmctrl -a`` / click its taskbar entry) so it is not hidden under Chrome or another window — keys go to the focused window. When install and launch arguments are already known, emit those shell tools in **one sequential batch** (``batch_sequential``) instead of one model turn per command; wait for results before claiming the window is up. To **use** the app (press buttons, focus fields, menus, draw, fill cells, rename via a dialog): there is no browser DOM — do **not** call ``browser_snapshot`` first. Prefer ``vm_ground`` (English instruction naming the control) then ``vm_click`` / ``vm_type`` / ``vm_key``. ``vm_ground`` works on a desk screenshot without a DOM read. That is faster and more reliable than ``vm_look`` loops or ``xdotool`` / guessed coordinates in ``vm_terminal_exec``. Shell is for install/launch/process checks — not for clicking the GUI. When the user asked for the **graphical** UI of a document app (spreadsheet, drawing, desktop rename dialog), do the work in that UI — do not substitute a shell-only file write and call it done. Spreadsheet (LibreOffice Calc): launch an **empty** Calc (``DISPLAY=:1 setsid libreoffice --calc``) — never open a hand-built ``.ods``. Dismiss Tip of the Day / wizards with Escape or one ``vm_ground``→``vm_click`` on OK — **no** ``xdotool``. **Cell navigation (mandatory):** for each target cell, ``vm_ground`` the **Name Box** (top-left cell-ref field) → ``vm_click`` → ``vm_type`` the address only (``B6`` / ``D5`` / ``F9``) → ``vm_key Return`` → then ``vm_type`` the **value or formula** (numbers like ``12``, or ``=B6+D5``) → ``vm_key Return``. Do **not** click the grid to find B6/D5/F9; do **not** type the address as the cell value; do **not** spend turns unhiding columns — the Name Box works anyway. After F9 shows the sum: one ``vm_screenshot``, then a short chat reply naming B6, D5, F9 and the sum — then stop. Spreadsheet cells: select/focus the target cell (ground or click), type the value or formula, confirm with Return. Show the user a capture with ``vm_screenshot`` then **paste the returned markdown into your assistant reply** where the picture should appear (the host does not insert it); never claim success from a silent ``exit_code=0``. Before claiming a GUI result, the capture must show that app (not a blank browser), and ``vm_look`` (or the visible display) must confirm the on-screen value — do not invent a result from mental arithmetic when the user asked to see it on screen. ``vm_look`` does not give clickable coordinates.
+- Chrome is NOT started with the desk. The first ``browser_*`` tool (or any CDP call) starts it on the server — just call browser_tabs / browser_navigate; do not run ``bot-chrome`` yourself and do not start a second Chrome. browser_navigate is only the first open, and only to a URL the user wrote, a vault_catalog origin that is an http(s) URL (the user stored that site), or that site's homepage. Once a page is open, the server refuses any URL change.
 
 == 2. Tools: what each one is for ==
-- READ the page (no side effects), from best to last resort: browser_snapshot (controls with screen=x,y, in_viewport, overlays, [FOCUSED], [filled N chars]) > browser_text > browser_links(query) > browser_html. browser_frames_snapshot for widgets and forms inside iframes (returns center_screen / bbox_screen).
-- WAIT: browser_wait_load after any click, submit, redirect or Chrome launch (bounded, returns as soon as loaded; on timed_out=true carry on). Never `sleep N` to wait for a page.
-- SEE: vm_look returns a text description of the screen (text, errors, blockers, form state). Use it when the DOM tools are empty or inconclusive, after an action whose result you cannot read, and ALWAYS before telling the user what went wrong (never quote an error you did not read). Its coordinates are guesses: NEVER use them. vm_screenshot is for the user chat only.
-- ACT with real VNC input: vm_click, vm_drag, vm_type, vm_scroll (dy>0 = down), vm_key. Avoid browser_scroll / browser_click_selector on anti-bot pages (no real wheel/pointer events).
-- LOCATE what the DOM cannot give (canvas, images, native dialogs): vm_ground(English description, action_hint=<gesture>), slow (~10 s), returns geometry only.
+- READ the page with browser_snapshot (controls with screen=x,y, in_viewport, overlays, [FOCUSED], [filled N chars], plus a visible-text excerpt). browser_frames_snapshot when the form or widget is inside an iframe. This is how you FIND a normal button, link, or field. It does not click. vm_click, vm_drag, vm_scroll and Return already return the next page: use that list, do not read again unless it is empty.
+- ACT like a person, always: vm_click, vm_drag, vm_type, vm_scroll (dy>0 = down), vm_key. Those are real pointer and keyboard events. NEVER browser_click_selector, NEVER browser_scroll, NEVER el.click() or a CDP/JS click — sites flag that as a bot. The mouse already glides to the point; you only supply the target. NEVER drive a desktop GUI by inventing ``xdotool`` clicks in the shell — do not ``apt install xdotool`` for that; use ``vm_ground`` / ``vm_click`` / ``vm_type`` / ``vm_key``. If an unrelated browser window covers the app you need, minimize it so focus and screenshots show the target.
+- LOCATE: in the **browser**, use snapshot ``screen=`` when the control is listed; call ``vm_ground`` only when it is missing (canvas, image, native dialog, drawn widget). On the **desktop** (native app with no DOM — calculator, dialog, XFCE window), ``vm_ground`` is the normal way to find a control, then ``vm_click``. Slow (~10 s) but one good ground beats many blind shell/look loops. If the server answers from a snapshot or lists screen= points, vm_click one of them — do not call vm_ground again for that control. If ok=false, NEVER click a rejected point. For **typing a number, formula, or text** into a focused native field or calculator display: focus once (ground+click the display / window, or ``wmctrl -a``), then **one** ``vm_type`` of the **entire** expression (e.g. ``473*984``) and ``vm_key Return`` or ``=``. **Forbidden:** a chain of ``vm_ground``/``vm_click`` for successive digits of a number you could have typed. Reserve per-button grounding for controls you cannot type (icons, mode switches, menu items).
+- SEE with vm_look when the snapshot is empty or inconclusive, and BEFORE you tell the user what went wrong. The server refuses it when the snapshot already lists controls: vm_click the screen= point it repeats. Do not call it before every click. Any x/y it mentions is a guess: NEVER click it. ``vm_screenshot`` captures the desk for the user: when ``show_in_chat`` is true (default), the tool result includes image markdown — **paste that markdown into your assistant reply** where you want the picture (same idea as ``files_share_image``). The host does **not** auto-insert it. Do not tell the user to open the tool row. You may briefly describe what the capture shows. You cannot see PNG pixels from ``vm_screenshot`` — do not invent what is on screen; use process checks and ``vm_look`` when you need to verify.
+- WAIT: browser_wait_load only after the first open, and only if that result has no page. A click, drag or Return already waited. Never `sleep N`. The server does not run a short sleep. Do not call browser_text when the page excerpt is already in the result.
+- Chrome presence: browser_tabs. browser_navigate is the first open only, and only to a URL the user wrote (or that site's homepage). After that the server refuses any URL change. Google search: click the address bar, type the query, Enter. Reload: click the refresh icon. Never type a site URL into the bar.
+- Do not write your own CDP, websocket, Runtime.evaluate, in-page fetch(), curl, or wget against the site. Do not mash Backspace or reload a form because [filled N chars] surprised you: one vm_look, then move on.
 
 == 3. Action loop (any website, no site-specific recipes) ==
-1. NAVIGATE BY CONTROLS, NOT BY GUESSED URLs. Start from the site's homepage. Never type a URL you have not SEEN (on screen, or returned by browser_links / a snapshot): guessed paths and sub-domains (/account, /orders, /mescommandes…) lead to 404s, certificate errors and anti-bot flags, and waste your time. Reach every goal by clicking visible menus, account/profile controls and links. If a menu is not in the DOM snapshot, open it with a click (account / profile / hamburger control in the header; vm_look tells you what is there, vm_ground locates it), then snapshot again and read its links. Never bypass a browser security warning: go back.
-2. Observe: first browser_snapshot of a page WITHOUT query. It reports 'BLOCKING OVERLAY' (with its buttons) and '[COVERED by …]' controls. Dismiss overlays first (cookie/consent banners, modals). Native dialogs are not in the DOM: vm_look, vm_ground + vm_click, or vm_key Return. A click that changes nothing = suspect an overlay first.
-3. Decide the gesture (left_click | right_click | double | drag), then WHERE:
-   - control in the DOM: use its screen=x,y from browser_snapshot / browser_frames_snapshot directly (exact and fast; vm_ground only if it is [COVERED]). Off-screen (in_viewport=false): vm_scroll until visible.
-   - not in the DOM: vm_ground. If ok=false, NEVER click the rejected point (it is usually another control, e.g. a « send me a code » button): re-observe, try browser_frames_snapshot, reword, or scroll.
-   Only click a control whose label matches your intent.
-4. Execute the one matching tool (click → vm_click, drag → vm_drag), then VERIFY with a fresh snapshot/text. Nothing changed → change approach; never repeat the same action more than twice.
-5. Text fields: click the field, then vm_type; check browser_snapshot shows [filled N chars] rather than retyping blindly or switching to another login method.
-6. Verification widgets (checkbox, slider, puzzle, retry button) are ordinary UI. browser_navigate / browser_wait_load print a « SLIDE-TO-VERIFY WIDGET » line with the exact vm_drag(x, y, x2, y2): do that ONE drag at once (no vm_look / vm_ground first), then browser_wait_load. Otherwise find the widget with browser_frames_snapshot WITHOUT query (cross-origin iframes included). Buttons/checkboxes → vm_click. Sliders → ONE vm_drag from the handle's center to the far end of its track (never click a track, never aim at a point you guessed). Verify with browser_wait_load / browser_snapshot (vm_look if unclear); if a retry control or a fresh widget appears, use it at once; at most 2 attempts, then step back.
+1. ULTIMATE — DO NOT CHANGE THE URL. browser_navigate exists only for the first open, and only to a URL the user wrote, a vault origin that is an http(s) URL, or that site's homepage. Once a page is open the server refuses every URL change, including a reload and a guessed path (/account, /user, /orders, /mylibrary…). Move by clicking, and take the shortest path: if the target is already on screen, click it; do not detour. A Google search, when you actually need one, is the address bar (click it, type the query, Enter) — never a site URL. A reload is one click on the refresh icon. Never curl / wget / fetch a URL. Never bypass a browser security warning: go back.
+2. Observe with browser_snapshot (no query) before the first click. It reports BLOCKING OVERLAY and [COVERED]. Dismiss that overlay first, with vm_click on its screen= point. A click that changes nothing: snapshot again, then vm_look if the DOM still explains nothing.
+3. If the control is in the snapshot, in view, and not [COVERED]: vm_click its screen=x,y (or vm_drag for a slider). Off-screen (in_viewport=false): vm_scroll until it is visible, then snapshot again. If it is NOT in the DOM: vm_ground, then the matching gesture. Only a control whose label matches your intent.
+4. The gesture result IS the next page (controls and visible text). If that text already states what the user asked, answer now and stop. Otherwise vm_click the next screen= point from it. Call browser_snapshot or browser_text only if that read is empty or missing the fact you need. vm_look only if the read is empty. Nothing changed → change approach; never repeat the same action more than twice.
+5. Text fields: vm_click the field's screen= point, then vm_type. The next gesture's page shows [filled N chars]. Do not retype or switch login method because the counter looks wrong — look once.
+6. Verification widgets: if a « SLIDE-TO-VERIFY WIDGET » line prints exact vm_drag coordinates, do that ONE drag (real mouse), then snapshot. Otherwise frames_snapshot for a checkbox/button screen= point, or vm_ground if the widget is only drawn. At most 2 attempts, then step back.
 
 == 4. Block pages ==
 A page that only says access is restricted / denied / unusual traffic, with NO widget to act on (a verification widget is NOT a block page: act on it), is a decision about your browsing SESSION (cookies, state), not a puzzle.
-- Do not reload in a loop. Do not curl/wget that site from the VM, write your own CDP/websocket/input scripts, or pip/apt install anything.
-- Recovery, ONLY once vm_look confirms such a page: browser_reset_session (forgets cookies/cache/storage = a fresh visitor), browser_navigate to the homepage, start over (you are logged out: log in again). A block right after a verification widget is a failed attempt, not the end: a reset gives a fresh widget, so do the widget again. If the next page is blocked again, use your SECOND reset; do not report failure before both resets were used. Only then stop and report exactly what you saw and tried.
+- Do not reload in a loop. Do not curl/wget that site from the VM, write your own CDP/websocket/input scripts, or apt/pip-install tooling to scrape or bypass that site. (Installing normal apps in the VM for other tasks is fine — see Desk and shell.)
+- A failed verification widget is one more try on that same widget (snapshot, or one vm_ground if it is only drawn, then one gesture). Do NOT browser_reset_session after a widget: wiping cookies throws the attempt away.
+- browser_reset_session ONLY once vm_look shows a page with nothing to click that says access is denied. Then click the refresh icon and start over (you are logged out). At most ONCE. If it is still that page, stop and report exactly what you saw. Do not browser_navigate to a new URL.
 
 == 5. LOGIN ==
-vault_catalog → request_vault_access → click the username field (screen=x,y from the snapshot) → vm_type the username from the grant → click the password field → vault_type (password only) → submit → browser_wait_load → browser_text to see where you landed.
+vault_catalog → request_vault_access → browser_snapshot → vm_click the username field's screen= point → vm_type the username from the grant → vm_click the password field's screen= point (use the page that click returned) → vault_type (password only) → vm_click the submit button's screen= point. That click returns the next page. vm_look only if that read is empty. If a field is not in the snapshot, vm_ground it instead of guessing.
 - Prefer the password path; do not ask the site to send a code unless no password path exists.
-- If a one-time code is sent by e-mail/SMS: request_credentials with fields [{id:'otp',label:'Code',secret:true}] (secret=true is required), wait for approval, then vm_type it. Never invent a code.
+- If a one-time code is sent by e-mail/SMS and it is not already in this conversation: request_credentials with fields [{id:'otp',label:'Code',secret:true}] (secret=true is required), wait for approval, then vm_type it. Never invent a code. If that code is already in a mail or webhook payload here, vm_type those digits — do not ask for them again (showing them in chat is the VAULT exception, not a secret leak).
 - If the page asks to approve on another device / push notification (no code to type): do NOT open an OTP vault form — tell the user in chat and wait (browser_wait_load / vm_look). If a vault tool returns human_redirect / cancelled with their message, follow that guidance; it is not a refusal.
 
-FORBIDDEN: inventing passwords or codes, quoting/revealing any secret in chat, site-specific hacks, bypass scripts."""
+FORBIDDEN: changing the URL after the first open (the server rejects it), inventing a URL, typing a site URL into the address bar, inventing passwords or codes, quoting/revealing a vault secret in chat (a temporary code already in a mail or webhook is not one — see VAULT), site-specific hacks, bypass scripts."""
 
+
+
+def set_serve_api_base(base: str | None) -> None:
+    """Remember this process's API URL before ``serve.pid`` exists.
+
+    ``recover_stale_runs`` starts Pi at the beginning of ``serve``. The pid
+    file is written later. Without this, that first session has no
+    ``AUTONOMOUS_API_BASE`` and every tool answers
+    « Autonomous API not configured for this Pi session ».
+    """
+    global _SERVE_API_BASE
+    text = (base or "").strip().rstrip("/")
+    _SERVE_API_BASE = text or None
 
 
 def _serve_api_base(home: Path | None = None) -> str | None:
+    if _SERVE_API_BASE:
+        return _SERVE_API_BASE
     path = serve_pid_path(home or default_home())
     if not path.is_file():
         return None
@@ -250,6 +439,11 @@ def _pi_session_env(bot: str, home: Path | None = None) -> dict[str, str]:
     env["AUTONOMOUS_TOKEN"] = token
     env["AUTONOMOUS_BOT"] = bot
     env["AUTONOMOUS_HOME"] = str(root)
+    from autonomous.services import chat_attachments as attach_svc
+
+    env["AUTONOMOUS_MAX_IMAGES"] = str(
+        attach_svc.max_images_per_prompt(home=root, bot=bot)
+    )
     return env
 
 
@@ -291,6 +485,12 @@ class PiRpcSession:
         with self._lock:
             if self.alive:
                 return
+            try:
+                from autonomous.services.setup_config import ensure_pi_runtime_settings
+
+                ensure_pi_runtime_settings()
+            except Exception:
+                log.exception("ensure_pi_runtime_settings failed before Pi start")
             binary = resolve_pi_bin()
             if not binary:
                 raise PiRpcError("Pi is not installed")
@@ -298,13 +498,18 @@ class PiRpcSession:
             session_dir = cwd / "sessions"
             session_dir.mkdir(parents=True, exist_ok=True)
             is_manager = False
+            thinking_level = "medium"
             try:
                 from autonomous.services import bots as bots_svc
 
                 row = bots_svc.get_bot(self.bot, home=self.home)
                 is_manager = bool(row.get("is_manager"))
+                thinking_level = bots_svc.normalize_thinking_level(
+                    row.get("thinking")
+                )
             except Exception:
                 is_manager = False
+                thinking_level = "medium"
             cmd = [
                 binary,
                 "--mode",
@@ -326,6 +531,11 @@ class PiRpcSession:
                     cmd.extend(["--extension", str(ext)])
             if self.model:
                 cmd.extend(["--model", self.model])
+            # Explicit level so a non-default bot setting sticks on spawn.
+            # Session + prefix cache stay — not a flush or RPC restart.
+            cmd.extend(["--thinking", thinking_level])
+            # Replace Pi's coding-assistant preamble (not an append).
+            cmd.extend(["--system-prompt", _BASE_SYSTEM_PROMPT])
             memory_core = ""
             try:
                 from autonomous.services import memory as memory_svc
@@ -339,6 +549,9 @@ class PiRpcSession:
                 p
                 for p in (
                     memory_core,
+                    _BATCH_SYSTEM_HINT,
+                    _THROUGHPUT_SYSTEM_HINT,
+                    _APPROACH_SYSTEM_HINT,
                     _VAULT_SYSTEM_HINT,
                     _FILES_SYSTEM_HINT,
                     _VM_SYSTEM_HINT,
@@ -346,6 +559,7 @@ class PiRpcSession:
                     _MANAGER_SYSTEM_HINT if is_manager else "",
                     _events_system_hint(self.home),
                     _MEMORY_SYSTEM_HINT,
+                    _NOTEBOOK_SYSTEM_HINT,
                     _APPROVAL_SYSTEM_HINT,
                     _CLARIFY_SYSTEM_HINT,
                     _CHAT_SEARCH_SYSTEM_HINT,
@@ -411,7 +625,12 @@ class PiRpcSession:
                     waiter["event"].set()
                 self._pending.clear()
 
-    def request(self, command_type: str, timeout: float = 30.0, **fields: Any) -> dict[str, Any]:
+    def request(
+        self,
+        command_type: str,
+        timeout: float | None = 30.0,
+        **fields: Any,
+    ) -> dict[str, Any]:
         if not self.alive:
             raise PiRpcError("Pi session is not running")
         req_id = fields.pop("id", None) or str(uuid.uuid4())
@@ -422,7 +641,11 @@ class PiRpcSession:
             self._pending[req_id] = slot
         try:
             self._write(payload)
-            if not event.wait(timeout):
+            # timeout=None waits until Pi answers, the process exits, or the
+            # user clicks Stop (that unblocks the waiter). No clock kills Pi.
+            if timeout is None:
+                event.wait()
+            elif not event.wait(timeout):
                 raise PiRpcError(f"Pi RPC timeout on {command_type}")
             if slot["error"]:
                 raise PiRpcError(str(slot["error"]))
@@ -437,13 +660,19 @@ class PiRpcSession:
         *,
         images: list[dict[str, Any]] | None = None,
         streaming_behavior: str | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
+        # ACK only (preflight). No deadline: compaction / a long turn must not
+        # end the agent. The user stops it from the UI, which unblocks this wait.
         fields: dict[str, Any] = {"message": message}
         if images:
             fields["images"] = images
         if streaming_behavior:
             fields["streamingBehavior"] = streaming_behavior
-        return self.request("prompt", timeout=30.0, **fields)
+        # None means no deadline. float(None) is what posted
+        # « float() argument must be a string or a real number, not 'NoneType' ».
+        wait = None if timeout is None else float(timeout)
+        return self.request("prompt", timeout=wait, **fields)
 
     def steer(self, message: str) -> dict[str, Any]:
         """Queue a steering message (delivered after current tool turn, before next LLM call)."""
@@ -470,6 +699,16 @@ class PiRpcSession:
         if resp.get("success"):
             self.model = model_ref
         return resp
+
+    def set_thinking_level(self, level: str) -> dict[str, Any]:
+        """Pi RPC ``set_thinking_level`` (off / minimal / low / medium / high / …)."""
+        return self.request("set_thinking_level", timeout=15.0, level=level)
+
+    def apply_thinking_level(self, level: str) -> dict[str, Any]:
+        """Apply a bot ``thinking`` level on a live session."""
+        from autonomous.services.bots import normalize_thinking_level
+
+        return self.set_thinking_level(normalize_thinking_level(level))
 
     def _write(self, obj: dict[str, Any]) -> None:
         proc = self._proc

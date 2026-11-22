@@ -1,6 +1,7 @@
 /**
  * Inter-bot messaging tools for Pi (Dit / Demande à @bot).
- * Managers: bot_list + bot_delegate (async, peer must relaunch).
+ * Managers: bot_list + bot_delegate (async, peer must relaunch),
+ * plus household bot_create / bot_delete / bot_models.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -140,9 +141,9 @@ export default function (pi: ExtensionAPI) {
     name: "bot_delegate",
     label: "Delegate to bot",
     description:
-      "MANAGER ONLY: assign a task to another bot WITHOUT waiting. "
-      + "The message tells them to relaunch you with « Dit à @you … » when done. "
-      + "Continue other work; when their Dit arrives, you are relaunched.",
+      "MANAGER ONLY: text-only async task (no files). Same as bot_tell with expect_reply. "
+      + "To send files to a worker, use bot_tell(to, content, attachments=[…], expect_reply=…) "
+      + "— that is the ONLY way to attach files. Do not invent another channel.",
     parameters: Type.Object({
       to: Type.String({ description: "Worker bot name (with or without @)" }),
       task: Type.String({ description: "What the worker must do" }),
@@ -182,11 +183,213 @@ export default function (pi: ExtensionAPI) {
         );
       }
       return textResult(
-        `Task delegated to @${to} (async). `
+        `Task delegated to @${to} (async, no files). `
           + `You are NOT waiting — keep going. `
-          + `They will relaunch you with « Dit à @${cfg.bot} … » when finished.`,
+          + `They will relaunch you with « Tell @${cfg.bot} … » when finished. `
+          + `Need to send files? Use bot_tell with attachments (+ expect_reply).`,
         { inbox_id: res.data?.message },
       );
+    },
+  });
+
+  pi.registerTool({
+    name: "bot_models",
+    label: "List models",
+    description:
+      "MANAGER ONLY: list Pi models (provider/id refs).",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const cfg = apiConfig();
+      if (!cfg) {
+        return textResult("Bot mail API not configured.");
+      }
+      const res = await api(
+        "GET",
+        `/bots/${encodeURIComponent(cfg.bot)}/household/models`,
+      );
+      if (!res.ok) {
+        const msg =
+          res.data?.message || res.data?.error || `HTTP ${res.status}`;
+        return textResult(
+          `Cannot list models: ${msg}`
+            + (res.status === 403 ? " (Manager flag required.)" : ""),
+        );
+      }
+      const models = Array.isArray(res.data?.models) ? res.data.models : [];
+      if (!models.length) {
+        return textResult("No models listed by Pi right now.");
+      }
+      const lines = models.slice(0, 80).map((m: any) => {
+        const ref = m.ref || `${m.provider}/${m.id}`;
+        const label = m.label && m.label !== m.id ? ` — ${m.label}` : "";
+        return `- ${ref}${label}`;
+      });
+      const more =
+        models.length > 80 ? `\n…and ${models.length - 80} more.` : "";
+      return textResult(lines.join("\n") + more);
+    },
+  });
+
+  pi.registerTool({
+    name: "bot_create",
+    label: "Create bots",
+    description:
+      "MANAGER ONLY: create one or more Autonomous bots. "
+      + "Pass bots:[{name}]. Does not create another Manager.",
+    parameters: Type.Object({
+      bots: Type.Array(
+        Type.Object({
+          name: Type.String({ description: "Display name (spaces OK)" }),
+        }),
+        { minItems: 1 },
+      ),
+    }),
+    execute: async (_id, params) => {
+      const cfg = apiConfig();
+      if (!cfg) {
+        return textResult("Bot mail API not configured.");
+      }
+      const bots = Array.isArray(params.bots) ? params.bots : [];
+      const res = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/household/bots`,
+        { bots },
+      );
+      if (!res.ok) {
+        const msg =
+          res.data?.message || res.data?.error || `HTTP ${res.status}`;
+        return textResult(
+          `bot_create failed: ${msg}`
+            + (res.status === 403
+              ? " (Manager flag required.)"
+              : ""),
+        );
+      }
+      const created = Array.isArray(res.data?.created) ? res.data.created : [];
+      if (!created.length) {
+        return textResult("bot_create: nothing created.");
+      }
+      const lines = created.map(
+        (b: any) =>
+          `- @${b.name}`
+          + (b.label && b.label !== b.name ? ` (${b.label})` : ""),
+      );
+      return textResult(
+        `Created ${created.length} bot(s):\n` + lines.join("\n"),
+        { created },
+      );
+    },
+  });
+
+  pi.registerTool({
+    name: "bot_delete",
+    label: "Delete bots",
+    description:
+      "MANAGER ONLY: propose deleting bots via a chat card with a checklist "
+      + "(all checked by default). BLOCKS until the user confirms or cancels. "
+      + "Pass the bot names to offer; the user may uncheck some before confirming. "
+      + "You may include yourself; if confirmed, this run and your workspace end immediately.",
+    parameters: Type.Object({
+      bots: Type.Array(Type.String({ description: "Bot slug or @name" }), {
+        minItems: 1,
+      }),
+      prompt: Type.Optional(
+        Type.String({ description: "Why these bots should be deleted" }),
+      ),
+      title: Type.Optional(Type.String({ description: "Card title" })),
+    }),
+    execute: async (_id, params, signal) => {
+      const cfg = apiConfig();
+      if (!cfg) {
+        return textResult("Bot mail API not configured.");
+      }
+      const bots = Array.isArray(params.bots)
+        ? params.bots.map((b: any) => String(b || "").replace(/^@/, ""))
+        : [];
+      const body: Json = { bots };
+      if (params.prompt != null && String(params.prompt).trim()) {
+        body.prompt = String(params.prompt).trim();
+      }
+      if (params.title != null && String(params.title).trim()) {
+        body.title = String(params.title).trim();
+      }
+      const created = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/household/delete-requests`,
+        body,
+      );
+      if (!created.ok) {
+        const msg =
+          created.data?.message
+          || created.data?.error
+          || `HTTP ${created.status}`;
+        return textResult(
+          `bot_delete failed: ${msg}`
+            + (created.status === 403 ? " (Manager flag required.)" : ""),
+        );
+      }
+      let req = created.data as Json;
+      if (req.state && req.state !== "pending") {
+        const deleted = Array.isArray((req.result as Json)?.deleted)
+          ? ((req.result as Json).deleted as string[])
+          : [];
+        return textResult(
+          req.state === "confirmed"
+            ? `User confirmed. Deleted: ${deleted.join(", ") || "(none)"}.`
+            : `Delete request ${req.state}.`,
+          { request_id: req.id, state: req.state, deleted },
+        );
+      }
+
+      while (true) {
+        if (signal?.aborted) {
+          return textResult("bot_delete aborted before the user responded.", {
+            request_id: req.id,
+            state: "aborted",
+            error: true,
+          });
+        }
+        try {
+          await sleep(1500, signal);
+        } catch {
+          return textResult("bot_delete aborted before the user responded.", {
+            request_id: req.id,
+            state: "aborted",
+            error: true,
+          });
+        }
+        const polled = await api(
+          "GET",
+          `/bots/${encodeURIComponent(cfg.bot)}/household/delete-requests/${req.id}`,
+        );
+        if (!polled.ok) continue;
+        req = polled.data as Json;
+        if (req.state && req.state !== "pending") {
+          const result = (req.result as Json) || {};
+          const deleted = Array.isArray(result.deleted)
+            ? (result.deleted as string[])
+            : [];
+          if (result.human_redirect || req.state === "cancelled") {
+            return textResult(
+              "User skipped the buttons and wrote in chat (not a hard refusal). "
+                + `Follow their message: ${result.message || result.guidance || ""}`,
+              { request_id: req.id, state: req.state, deleted },
+            );
+          }
+          if (req.state === "denied") {
+            return textResult(
+              "User cancelled the delete card. No bots were deleted.",
+              { request_id: req.id, state: req.state, deleted: [] },
+            );
+          }
+          const errs = Array.isArray(result.errors) ? result.errors : [];
+          return textResult(
+            `User confirmed. Deleted: ${deleted.join(", ") || "(none)"}.`
+              + (errs.length ? ` Errors: ${errs.join("; ")}` : ""),
+            { request_id: req.id, state: req.state, deleted, errors: errs },
+          );
+        }
+      }
     },
   });
 
@@ -194,29 +397,77 @@ export default function (pi: ExtensionAPI) {
     name: "bot_tell",
     label: "Tell bot",
     description:
-      "Send a one-way message to another bot (like « Dit à @name … »). Does not wait for a reply. "
-      + "Managers assigning work should prefer bot_delegate (adds relaunch instructions).",
+      "Send a one-way async message to another bot (like « Tell @name … »). Does not wait. "
+      + "Mentioning @name in chat text is NOT enough — call this tool only when the user "
+      + "(or a standing instruction) explicitly asks you to contact them. "
+      + "Confirming delivery is not the end of the task. "
+      + "content = a self-contained brief for the peer (they lack this chat): objective, "
+      + "relevant facts, constraints, expected result — not the user's raw last sentence. "
+      + "FILES (only way): attachments = paths under YOUR private ~/files; host copies them into "
+      + "the peer's .autonomous/mail-inbox staging — they place them with files_claim_mail. "
+      + "Do not paste file contents when a workspace path exists. "
+      + "Managers: for async work + callback, set expect_reply (adds « Tell @you … » footer). "
+      + "Same call carries attachments — do not use a second tool for files. "
+      + "Address them as tu/you. Write content in the conversation language only "
+      + "(do not mix French and English).",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name (without or with @)" }),
-      content: Type.String({ description: "Message body" }),
+      content: Type.String({
+        description:
+          "Self-contained brief for the peer, in the conversation language only. Not a raw user fragment.",
+      }),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Optional relative paths under YOUR private ~/files to send (copied to peer staging)",
+        }),
+      ),
+      expect_reply: Type.Optional(
+        Type.String({
+          description:
+            "Manager only: ask the peer to Tell @you back with this summary when done "
+            + "(async delegation footer). Use with or without attachments.",
+        }),
+      ),
     }),
     execute: async (_id, params) => {
       const cfg = apiConfig();
       if (!cfg) {
         return textResult("Bot mail API not configured.");
       }
-      const res = await api("POST", `/bots/${encodeURIComponent(cfg.bot)}/mail/tell`, {
+      const attachments = Array.isArray(params.attachments)
+        ? params.attachments.map((p) => String(p || "").trim()).filter(Boolean)
+        : [];
+      const body: Record<string, unknown> = {
         to: String(params.to || "").replace(/^@/, ""),
         content: String(params.content || ""),
-      });
+      };
+      if (attachments.length) body.attachments = attachments;
+      if (params.expect_reply != null && String(params.expect_reply).trim()) {
+        body.expect_reply = String(params.expect_reply).trim();
+      }
+      const res = await api(
+        "POST",
+        `/bots/${encodeURIComponent(cfg.bot)}/mail/tell`,
+        body,
+      );
       if (!res.ok) {
         return textResult(
           `bot_tell failed: ${res.data?.message || res.data?.error || res.status}`,
         );
       }
+      const peer = String(params.to).replace(/^@/, "");
+      const bits: string[] = [];
+      if (attachments.length) {
+        bits.push(
+          `${attachments.length} file${attachments.length > 1 ? "s" : ""} attached`,
+        );
+      }
+      if (body.expect_reply) bits.push("async callback requested");
+      const extra = bits.length ? ` (${bits.join(", ")})` : "";
       return textResult(
-        `Message queued/delivered to @${String(params.to).replace(/^@/, "")}.`,
-        { inbox_id: res.data?.message },
+        `Message queued/delivered to @${peer}${extra}.`,
+        { inbox_id: res.data?.message, attachments },
       );
     },
   });
@@ -225,12 +476,26 @@ export default function (pi: ExtensionAPI) {
     name: "bot_ask",
     label: "Ask bot",
     description:
-      "Ask another bot a question and WAIT for its answer (blocks this run). "
+      "Ask another bot and WAIT for its answer (blocks this run). Use when the user "
+      + "wants the peer’s reply brought back here (« rapporte-moi sa réponse »). "
       + "Managers MUST NOT use this for orchestration — use bot_delegate instead "
-      + "(async + peer relaunches you). Prefer bot_ask only for short sync Q&A when not a manager.",
+      + "(async + peer relaunches you with Tell @). "
+      + "Mentioning @name is NOT enough; need an explicit ask. "
+      + "content = self-contained brief/question the peer can act on without this chat, "
+      + "in the conversation language only (do not mix French and English). "
+      + "Structure example, not a language: « si elle fait du poney » → « Est-ce que tu fais du poney ? ».",
     parameters: Type.Object({
       to: Type.String({ description: "Target bot name" }),
-      content: Type.String({ description: "Question" }),
+      content: Type.String({
+        description:
+          "Self-contained brief/question for the peer, in the conversation language only. Not a raw user fragment.",
+      }),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Optional relative paths under YOUR private ~/files to send with the question",
+        }),
+      ),
       timeout_sec: Type.Optional(
         Type.Number({
           description: "Max wait seconds (default 600)",
@@ -245,14 +510,22 @@ export default function (pi: ExtensionAPI) {
       if (await isManager(cfg)) {
         return textResult(
           "You are a Manager: do NOT use bot_ask (blocking). "
-            + "Call bot_delegate(to, task) so the peer relaunches you with Dit à when done.",
+            + "Call bot_delegate(to, task) so the peer relaunches you with Tell @ when done.",
         );
       }
       const to = String(params.to || "").replace(/^@/, "");
+      const attachments = Array.isArray(params.attachments)
+        ? params.attachments.map((p) => String(p || "").trim()).filter(Boolean)
+        : [];
+      const askBody: Record<string, unknown> = {
+        to,
+        content: String(params.content || ""),
+      };
+      if (attachments.length) askBody.attachments = attachments;
       const created = await api(
         "POST",
         `/bots/${encodeURIComponent(cfg.bot)}/mail/ask`,
-        { to, content: String(params.content || "") },
+        askBody,
       );
       if (!created.ok) {
         return textResult(

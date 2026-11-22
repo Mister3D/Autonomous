@@ -1,13 +1,17 @@
 /**
- * Cross-tab sync: one EventSource to /api/v1/events + BroadcastChannel
- * so all open tabs (up to many) see bot create / run / notifications.
+ * Live sync via EventSource ``/api/v1/events``.
+ *
+ * Every open tab connects its own stream — do **not** rebroadcast SSE on
+ * BroadcastChannel. That used to apply ``message.delta`` twice (same tab echo
+ * + peer tabs that also have EventSource) and duplicated streamed tokens until
+ * a hard refresh reloaded the clean DB text.
  */
 import { api } from "./api";
 import { state, pushNotification, applyEvent } from "./store";
 
-const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("autonomous") : null;
-
 let es = null;
+let reconnectTimer = 0;
+let catchupHandler = null;
 
 function onEvent(ev) {
   let data = {};
@@ -21,24 +25,35 @@ function onEvent(ev) {
     window.dispatchEvent(new CustomEvent("autonomous-focus", { detail: data }));
   }
   applyEvent(envelope);
-  if (channel) {
-    channel.postMessage(envelope);
-  }
 }
 
-export function startGlobalSync() {
-  if (channel) {
-    channel.onmessage = (msg) => {
-      // Ignore echoes from this tab if we already applied; still apply for other tabs' local actions
-      applyEvent(msg.data, { fromBroadcast: true });
-    };
+function forceReconnect() {
+  if (es) {
+    try {
+      es.close();
+    } catch {
+      /* ignore */
+    }
+    es = null;
   }
+  clearTimeout(reconnectTimer);
+  reconnectTimer = window.setTimeout(() => {
+    connectEvents({ force: true });
+  }, 1200);
 }
 
-export function connectEvents() {
+export function connectEvents({ force = false } = {}) {
   // Navigation calls this on every route. Tearing the stream down each time
   // aborts the in-flight GET and the console fills with ERR_EMPTY_RESPONSE.
-  if (es && es.readyState !== EventSource.CLOSED) return;
+  if (!force && es && es.readyState !== EventSource.CLOSED) return;
+  if (es) {
+    try {
+      es.close();
+    } catch {
+      /* ignore */
+    }
+    es = null;
+  }
   es = new EventSource("/api/v1/events", { withCredentials: true });
   const types = [
     "ping",
@@ -48,6 +63,7 @@ export function connectEvents() {
     "message.created",
     "message.delta",
     "message.updated",
+    "message.deleted",
     "message.cleared",
     "pi.status",
     "desk.updated",
@@ -59,17 +75,39 @@ export function connectEvents() {
     "webhook.updated",
     "webhook.deleted",
     "vault.user_secret_report",
+    "files.changed",
     "ui.focus",
   ];
   for (const t of types) {
     es.addEventListener(t, onEvent);
   }
   es.onerror = () => {
-    // Browser reconnects automatically for EventSource
+    // Native EventSource retries while CONNECTING; if the socket is fully
+    // CLOSED (proxy kill / idle drop), force a new one — otherwise the tab
+    // can sit forever with a frozen chat while the server keeps working.
+    if (es && es.readyState === EventSource.CLOSED) {
+      forceReconnect();
+    }
   };
+  if (!catchupHandler) {
+    catchupHandler = () => {
+      if (document.visibilityState !== "visible") return;
+      if (es && es.readyState === EventSource.CLOSED) {
+        forceReconnect();
+      }
+      window.dispatchEvent(new CustomEvent("autonomous-sse-catchup"));
+    };
+    document.addEventListener("visibilitychange", catchupHandler);
+  }
 }
 
 export function disconnectEvents() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+  if (catchupHandler) {
+    document.removeEventListener("visibilitychange", catchupHandler);
+    catchupHandler = null;
+  }
   if (es) {
     es.close();
     es = null;

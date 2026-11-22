@@ -1,8 +1,8 @@
 <template>
-  <div class="memory-card" :class="state">
-    <header class="memory-card-head">
+  <div class="chat-request-card memory-card" :class="state">
+    <header class="chat-request-card-head memory-card-head">
       <strong>{{ title }}</strong>
-      <span class="memory-state">{{ stateLabel }}</span>
+      <span class="chat-request-card-state memory-state">{{ stateLabel }}</span>
     </header>
     <p v-if="meta.reason" class="memory-reason">{{ meta.reason }}</p>
     <p class="memory-meta-line">
@@ -19,13 +19,19 @@
 
     <template v-if="pending">
       <p v-if="error" class="memory-error">{{ error }}</p>
-      <div class="memory-actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="resolve('deny')">
+      <div class="chat-request-card-actions memory-actions">
+        <UiButton variant="ghost" type="button" :disabled="busy" @click="resolve('deny')">
           {{ t("memory.deny") }}
-        </button>
-        <button type="button" class="btn primary memory-confirm" :disabled="busy" @click="resolve('approve')">
+        </UiButton>
+        <UiButton
+          variant="primary"
+          type="button"
+          class="memory-confirm"
+          :disabled="busy"
+          @click="resolve('approve')"
+        >
           {{ t("memory.confirm") }}
-        </button>
+        </UiButton>
       </div>
     </template>
     <p v-else class="memory-resolved">{{ resolvedText }}</p>
@@ -36,6 +42,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   message: { type: Object, required: true },

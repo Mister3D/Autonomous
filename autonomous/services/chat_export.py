@@ -28,15 +28,21 @@ _HIDDEN_TOOLS = frozenset(
         "webhook_delete",
         "files_share_image",
         "files_attach",
+        "files_claim_mail",
         "memory_propose",
         "memory_list",
         "memory_get",
         "memory_search",
+        "notebook_list",
+        "notebook_get",
+        "notebook_remember",
+        "notebook_close",
         "ask_approval",
         "ask_clarify",
         "report_user_secret",
         "chat_search",
         "react",
+        "vm_request_desk",
     }
 )
 

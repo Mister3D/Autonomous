@@ -29,11 +29,36 @@ def test_create_list_delete(auth_client):
     assert auth_client.get("/api/v1/bots").json == []
 
 
+def test_create_without_model_rejected(auth_client):
+    """Explicit empty model → création refusée (UI + API)."""
+    for payload in (
+        {"name": "No Model Bot", "model": ""},
+        {"name": "No Model Bot", "model": "   "},
+    ):
+        r = auth_client.post("/api/v1/bots", json=payload)
+        assert r.status_code in (400, 422), (payload, r.status_code, r.data)
+
+
+def test_patch_cannot_clear_model(auth_client):
+    r = auth_client.post("/api/v1/bots", json={"name": "Keep Model"})
+    assert r.status_code == 201
+    name = r.json["name"]
+    assert r.json.get("model")
+    for body in ({"model": ""}, {"model": "   "}):
+        bad = auth_client.patch(f"/api/v1/bots/{name}", json=body)
+        assert bad.status_code in (400, 422), (body, bad.status_code, bad.data)
+    still = auth_client.get(f"/api/v1/bots/{name}")
+    assert still.status_code == 200
+    assert still.json.get("model")
+    auth_client.delete(f"/api/v1/bots/{name}")
+
+
 def test_create_freeform_name_slugifies(auth_client):
     r = auth_client.post("/api/v1/bots", json={"name": "Bad Name"})
     assert r.status_code == 201
     assert r.json["name"] == "bad-name"
     assert r.json["label"] == "Bad Name"
+    assert r.json.get("model") == "test/provider:fixture"
     auth_client.delete("/api/v1/bots/bad-name")
 
 
@@ -74,10 +99,30 @@ def test_invalid_name(auth_client):
     assert r.status_code in (400, 422)
 
 
+def test_patch_thinking_level(auth_client):
+    r = auth_client.post("/api/v1/bots", json={"name": "Think Bot"})
+    assert r.status_code == 201
+    name = r.json["name"]
+    assert r.json.get("thinking") == "medium"
+    off = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": "off"})
+    assert off.status_code == 200
+    assert off.json.get("thinking") == "off"
+    high = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": "high"})
+    assert high.status_code == 200
+    assert high.json.get("thinking") == "high"
+    # Legacy bool still accepted
+    legacy = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": False})
+    assert legacy.status_code == 200
+    assert legacy.json.get("thinking") == "off"
+    bad = auth_client.patch(f"/api/v1/bots/{name}", json={"thinking": "ultra"})
+    assert bad.status_code in (400, 422)
+    auth_client.delete(f"/api/v1/bots/{name}")
+
+
 def test_bearer_auth(client, bearer_headers):
     r = client.post(
         "/api/v1/bots",
-        json={"name": "tok"},
+        json={"name": "tok", "model": "test/provider:fixture"},
         headers=bearer_headers,
     )
     assert r.status_code == 201

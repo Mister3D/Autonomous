@@ -160,8 +160,52 @@ def friendly_label(provider: str, model_id: str, *, names: dict[str, str] | None
     return short
 
 
+def parse_model_list(text: str) -> list[dict[str, Any]]:
+    """Parse `pi --list-models` table rows.
+
+    Columns after the model id, when present: context, max output, thinking, images.
+    """
+    if "No models available" in text:
+        return []
+    names = _names_from_models_json()
+    models: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        raw = line.rstrip()
+        if not raw.strip() or _LIST_HEADER.match(raw.strip()):
+            continue
+        if raw.strip().startswith("Use /login"):
+            continue
+        parts = raw.split()
+        if len(parts) < 2:
+            continue
+        provider = parts[0]
+        if provider.lower() == "provider":
+            continue
+        context = max_output = thinking = images = ""
+        if len(parts) >= 6 and parts[-1] in ("yes", "no") and parts[-2] in ("yes", "no"):
+            images, thinking, max_output, context = parts[-1], parts[-2], parts[-3], parts[-4]
+            model_id = " ".join(parts[1:-4])
+        else:
+            model_id = " ".join(parts[1:])
+        if not model_id:
+            continue
+        models.append(
+            {
+                "provider": provider,
+                "id": model_id,
+                "ref": f"{provider}/{model_id}",
+                "label": friendly_label(provider, model_id, names=names),
+                "context": context,
+                "max_output": max_output,
+                "thinking": thinking == "yes",
+                "images": images == "yes",
+            }
+        )
+    return models
+
+
 def list_models(bin_path: str | None = None) -> list[dict[str, Any]]:
-    """Parse `pi --list-models` into [{provider, id, ref, label}, …]."""
+    """Parse `pi --list-models` into [{provider, id, ref, label, …}, …]."""
     binary = bin_path or resolve_pi_bin()
     if not binary:
         return []
@@ -176,31 +220,7 @@ def list_models(bin_path: str | None = None) -> list[dict[str, Any]]:
     except (OSError, subprocess.TimeoutExpired):
         return []
     text = (proc.stdout or "") + "\n" + (proc.stderr or "")
-    if "No models available" in text:
-        return []
-    names = _names_from_models_json()
-    models: list[dict[str, Any]] = []
-    for line in text.splitlines():
-        raw = line.rstrip()
-        if not raw.strip() or _LIST_HEADER.match(raw.strip()):
-            continue
-        if raw.strip().startswith("Use /login"):
-            continue
-        parts = raw.split()
-        if len(parts) < 2:
-            continue
-        provider, model_id = parts[0], parts[1]
-        if provider.lower() == "provider":
-            continue
-        models.append(
-            {
-                "provider": provider,
-                "id": model_id,
-                "ref": f"{provider}/{model_id}",
-                "label": friendly_label(provider, model_id, names=names),
-            }
-        )
-    return models
+    return parse_model_list(text)
 
 
 def status() -> dict[str, Any]:

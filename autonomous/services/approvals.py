@@ -200,33 +200,6 @@ def resolve_request(
     )
 
 
-def cancel_pending_for_human_message(
-    bot: str,
-    content: str,
-    *,
-    home: Path | None = None,
-) -> list[dict[str, Any]]:
-    """Cancel pending approvals when the user writes in chat (not a hard deny)."""
-    pending = list_pending_for_bot(bot, home=home)
-    if not pending:
-        return []
-    note = (content or "").strip()
-    result = {
-        "ok": False,
-        "cancelled": True,
-        "human_redirect": True,
-        "message": note,
-        "guidance": (
-            "User skipped the Accept/Refuse buttons and wrote in chat. "
-            f"Follow their message: {note}"
-        ),
-    }
-    out: list[dict[str, Any]] = []
-    for req in pending:
-        out.append(_finalize(req, state="cancelled", result=result, home=home))
-    return out
-
-
 def _resume_or_unstick(bot: str, *, home: Path | None = None) -> None:
     bot_row = bots_svc.get_bot(bot, home=home)
     if bot_row.get("status") not in ("waiting", "busy"):

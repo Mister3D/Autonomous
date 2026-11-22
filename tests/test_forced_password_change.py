@@ -74,6 +74,27 @@ def test_change_password_unlocks_api(client, home):
     assert client.get("/api/v1/bots").status_code == 200
 
 
+def test_voluntary_password_change_from_settings(client, home):
+    """Logged-in operator can rotate the password without a must-change flag."""
+    auth_mod.set_password(home, "old-password-ok")
+    assert client.post("/api/v1/auth/login", json={"password": "old-password-ok"}).status_code == 200
+    assert not must_change_password_path(home).exists()
+
+    bad = client.post(
+        "/api/v1/auth/password",
+        json={"current_password": "wrong", "new_password": "brand-new-pw"},
+    )
+    assert bad.status_code == 401
+
+    ok = client.post(
+        "/api/v1/auth/password",
+        json={"current_password": "old-password-ok", "new_password": "brand-new-pw"},
+    )
+    assert ok.status_code == 200
+    assert client.post("/api/v1/auth/login", json={"password": "brand-new-pw"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"password": "old-password-ok"}).status_code == 401
+
+
 def test_admin_bearer_bypasses_password_gate(client, home):
     auth_mod.mark_password_must_change(home)
     token = auth_mod.read_token(home)

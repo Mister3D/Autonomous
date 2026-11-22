@@ -1,4 +1,4 @@
-"""Inter-bot Dit / Demande messaging."""
+"""Inter-bot Tell / Ask messaging."""
 
 from __future__ import annotations
 
@@ -8,45 +8,208 @@ from autonomous.services import chat as chat_svc
 
 
 def test_parse_route():
+    assert botmail_svc.parse_route("Tell @bob hello") == {
+        "mode": "tell",
+        "target": "bob",
+        "body": "hello",
+    }
+    assert botmail_svc.parse_route("Tell @bob: hi there")["mode"] == "tell"
+    ask = botmail_svc.parse_route("Ask @alice what time is it?")
+    assert ask["mode"] == "ask"
+    assert ask["target"] == "alice"
+    assert "time" in ask["body"]
+    assert botmail_svc.parse_route("hello") is None
+
+
+def test_parse_route_french_aliases():
+    """FR Dit/Demande remain valid composer aliases."""
     assert botmail_svc.parse_route("Dit à @bob salut") == {
         "mode": "tell",
         "target": "bob",
         "body": "salut",
     }
-    assert botmail_svc.parse_route("Dis à @bob: hello")["mode"] == "tell"
     ask = botmail_svc.parse_route("Demande à @alice quelle heure est-il ?")
     assert ask["mode"] == "ask"
     assert ask["target"] == "alice"
-    assert "heure" in ask["body"]
-    assert botmail_svc.parse_route("bonjour") is None
+
+
+def test_reformulate_peer_message_ask():
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "if she is ready", mode="ask"
+        )
+        == "Are you ready ?"
+    )
+    assert (
+        botmail_svc.reformulate_peer_message("if you like tea", mode="ask")
+        == "Do you like tea ?"
+    )
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "what time is it?", mode="ask"
+        )
+        == "what time is it?"
+    )
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "if she is ready", mode="ask", continuation=True
+        )
+        == "if she is ready"
+    )
+
+
+def test_reformulate_peer_message_tell():
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "that she is late", mode="tell"
+        )
+        == "You are late"
+    )
+
+
+def test_reformulate_peer_message_french_alias():
+    assert (
+        botmail_svc.reformulate_peer_message(
+            "si elle fait du poney", mode="ask"
+        )
+        == "Est-ce que tu fais du poney ?"
+    )
+
+
+def test_composer_ask_is_route_intent_not_auto_mail(auth_client, home):
+    """Ask @x starts the local agent — does not auto-forward to the peer."""
+    auth_client.post("/api/v1/bots", json={"name": "manager"})
+    auth_client.post("/api/v1/bots", json={"name": "lol"})
+    r = auth_client.post(
+        "/api/v1/bots/manager/messages",
+        json={"content": "Ask @lol if she rides horses"},
+    )
+    assert r.status_code == 201
+    mgr = auth_client.get("/api/v1/bots/manager/messages").json
+    user = [m for m in mgr if m.get("role") == "user"][-1]
+    meta = user.get("meta") or {}
+    assert meta.get("mail_kind") == "route_intent"
+    assert meta.get("to_bot") == "lol"
+    assert meta.get("mode") == "ask"
+    assert "agent_prompt" in meta
+    assert "bot_ask" in meta["agent_prompt"]
+    assert "One language only" in meta["agent_prompt"]
+    lol = auth_client.get("/api/v1/bots/lol/messages").json
+    assert not any(
+        (m.get("meta") or {}).get("kind") == "botmail" for m in lol
+    )
 
 
 def test_tell_delivers_when_idle(home):
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    botmail_svc.tell("alice", "bob", "salut bob", home=home, origin="test")
+    botmail_svc.tell("alice", "bob", "hello bob", home=home, origin="test")
     msgs = chat_svc.list_messages("bob", home=home)
     assert any(
         m["role"] == "system"
         and m["meta"].get("mail_kind") == "tell"
-        and "salut bob" in m["content"]
+        and "hello bob" in m["content"]
         for m in msgs
     )
+    # Sender sees a Sent card with the peer-facing body.
+    alice = chat_svc.list_messages("alice", home=home)
+    sent = [
+        m
+        for m in alice
+        if m["role"] == "system"
+        and (m.get("meta") or {}).get("mail_kind") == "outgoing"
+        and (m.get("meta") or {}).get("direction") == "sent"
+    ]
+    assert sent, alice
+    assert "hello bob" in sent[-1]["content"]
+    assert sent[-1]["meta"].get("to_bot") == "bob"
+    assert sent[-1]["meta"].get("link_message_id")
 
 
-def test_tell_queues_when_busy(home):
+def test_tell_delivers_card_when_busy(home):
+    """Busy recipient still gets the received card (mid-run steer best-effort)."""
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
     bots_svc.patch_bot("bob", {"status": "busy"}, home=home)
-    botmail_svc.tell("alice", "bob", "plus tard", home=home, origin="test")
-    assert not any(
-        m["role"] == "system" and "plus tard" in (m.get("content") or "")
+    botmail_svc.tell("alice", "bob", "later", home=home, origin="test")
+    assert any(
+        m["role"] == "system" and "later" in (m.get("content") or "")
         for m in chat_svc.list_messages("bob", home=home)
     )
-    bots_svc.patch_bot("bob", {"status": "idle"}, home=home)
-    botmail_svc.on_run_finished("bob", assistant_content="done", home=home)
-    assert any(
-        m["role"] == "system" and "plus tard" in m["content"]
+
+
+def test_tell_with_attachments_stages_for_peer(home):
+    from pathlib import Path
+
+    from autonomous.services import files as files_svc
+
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    files_svc.write_text("alice", "brief/note.txt", "hello peer\n", home=home)
+    item = botmail_svc.tell(
+        "alice",
+        "bob",
+        "Voici le brief.",
+        home=home,
+        origin="test",
+        attachments=["brief/note.txt"],
+    )
+    atts = (item.get("meta") or {}).get("attachments") or []
+    assert len(atts) == 1
+    staging = atts[0]["path"]
+    assert staging.startswith(".autonomous/mail-inbox/")
+    assert staging.endswith("note.txt")
+    staged = files_svc.resolve("bob", staging, home=home)
+    assert staged.is_file()
+    assert staged.read_text(encoding="utf-8") == "hello peer\n"
+
+    bob_msgs = chat_svc.list_messages("bob", home=home)
+    recv = [
+        m
+        for m in bob_msgs
+        if m["role"] == "system" and (m.get("meta") or {}).get("mail_kind") == "tell"
+    ]
+    assert recv
+    recv_atts = (recv[-1].get("meta") or {}).get("attachments") or []
+    assert recv_atts and recv_atts[0]["name"] == "note.txt"
+
+    alice_msgs = chat_svc.list_messages("alice", home=home)
+    sent = [
+        m
+        for m in alice_msgs
+        if (m.get("meta") or {}).get("mail_kind") == "outgoing"
+    ]
+    assert sent and (sent[-1].get("meta") or {}).get("attachments")
+
+    claimed = files_svc.claim_mail_attachment(
+        "bob", staging, "inbox/from-alice/note.txt", home=home
+    )
+    assert claimed["path"] == "inbox/from-alice/note.txt"
+    assert files_svc.resolve("bob", claimed["path"], home=home).read_text(
+        encoding="utf-8"
+    ) == "hello peer\n"
+    assert not Path(staged).exists()
+
+
+def test_tell_attachment_missing_fails(home):
+    from autonomous.services.errors import NotFound
+
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    try:
+        botmail_svc.tell(
+            "alice",
+            "bob",
+            "oops",
+            home=home,
+            origin="test",
+            attachments=["nope/missing.txt"],
+        )
+        assert False, "expected NotFound"
+    except NotFound:
+        pass
+    assert not any(
+        (m.get("meta") or {}).get("kind") == "botmail"
         for m in chat_svc.list_messages("bob", home=home)
     )
 
@@ -54,16 +217,16 @@ def test_tell_queues_when_busy(home):
 def test_ask_reply_relaunches_asker(home):
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    ask = botmail_svc.ask("alice", "bob", "quelle heure ?", home=home, origin="test")
+    ask = botmail_svc.ask("alice", "bob", "what time is it?", home=home, origin="test")
     assert ask["state"] == "open"
     bob_msgs = chat_svc.list_messages("bob", home=home)
     assert any(m["meta"].get("mail_kind") == "ask" for m in bob_msgs)
 
-    botmail_svc.on_run_finished("bob", assistant_content="Il est 15h.", home=home)
+    botmail_svc.on_run_finished("bob", assistant_content="It is 3pm.", home=home)
 
     ask2 = botmail_svc.get_ask(ask["id"], home=home)
     assert ask2["state"] == "answered"
-    assert ask2["answer"] == "Il est 15h."
+    assert ask2["answer"] == "It is 3pm."
 
     alice_msgs = chat_svc.list_messages("alice", home=home)
     answered = [
@@ -72,13 +235,12 @@ def test_ask_reply_relaunches_asker(home):
         if m["role"] == "system" and m["meta"].get("mail_kind") == "ask_answered"
     ]
     assert answered, alice_msgs
-    assert answered[-1]["content"].strip() == "Il est 15h."
-    assert "envoyé un message" not in answered[-1]["content"].lower()
+    assert answered[-1]["content"].strip() == "It is 3pm."
+    assert "sent me a message" not in answered[-1]["content"].lower()
     assert answered[-1]["meta"].get("from_bot") == "bob"
     assert answered[-1]["meta"].get("direction") == "received"
-    # No fake user bubble « [@bot a répondu] ».
     assert not any(
-        m["role"] == "user" and "a répondu" in (m.get("content") or "")
+        m["role"] == "user" and "replied" in (m.get("content") or "").lower()
         for m in alice_msgs
     )
 
@@ -88,7 +250,7 @@ def test_old_received_preamble_stripped(home):
     bots_svc.create_bot("bob", home=home)
     chat_svc.create_message(
         "bob",
-        "@alice m’a envoyé un message :\nsalut",
+        "@alice m’a envoyé un message :\nhello",
         role="system",
         meta={
             "kind": "botmail",
@@ -99,25 +261,28 @@ def test_old_received_preamble_stripped(home):
         home=home,
     )
     msgs = chat_svc.list_messages("bob", home=home)
-    assert msgs[-1]["content"] == "salut"
+    botmail_svc.strip_received_preamble("bob", msgs, home=home)
+    hit = [m for m in msgs if m["role"] == "system"][-1]
+    assert hit["content"].strip() == "hello"
+    assert "envoyé" not in hit["content"].lower()
 
 
-def test_ask_reply_marks_sent_bubble(home):
+def test_outgoing_stamp_on_asker_reply(home):
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    botmail_svc.ask("alice", "bob", "quelle heure ?", home=home, origin="test")
-    sent = chat_svc.create_message(
-        "bob", "@alice, il est 16h30.", role="assistant", home=home
-    )
-    botmail_svc.on_run_finished(
-        "bob", assistant_content="@alice, il est 16h30.", home=home
-    )
-    bubble = next(
-        m for m in chat_svc.list_messages("bob", home=home) if m["id"] == sent["id"]
-    )
-    assert bubble["meta"].get("direction") == "sent"
-    assert bubble["meta"].get("mail_kind") == "outgoing"
-    assert bubble["meta"].get("to_bot") == "alice"
+    botmail_svc.ask("alice", "bob", "what time is it?", home=home, origin="test")
+    # Real runs leave an assistant bubble; stamp it as the outgoing ask reply.
+    chat_svc.create_message("bob", "It is 3pm.", role="assistant", home=home)
+    botmail_svc.on_run_finished("bob", assistant_content="It is 3pm.", home=home)
+    bob = chat_svc.list_messages("bob", home=home)
+    out = [
+        m
+        for m in bob
+        if m["role"] == "assistant"
+        and (m.get("meta") or {}).get("direction") == "sent"
+    ]
+    assert out, bob
+    assert out[-1]["meta"].get("to_bot") == "alice"
     alice = [
         m
         for m in chat_svc.list_messages("alice", home=home)
@@ -127,40 +292,36 @@ def test_ask_reply_marks_sent_bubble(home):
     assert alice[-1]["meta"].get("from_bot") == "bob"
 
 
-def test_composer_demande_routes(auth_client, home):
+def test_composer_ask_routes_via_agent_intent(auth_client, home):
     auth_client.post("/api/v1/bots", json={"name": "alice"})
     auth_client.post("/api/v1/bots", json={"name": "bob"})
     r = auth_client.post(
         "/api/v1/bots/alice/messages",
-        json={"content": "Demande à @bob combien font 2+2 ?"},
+        json={"content": "Ask @bob what is 2+2?"},
     )
     assert r.status_code == 201
-    bob = auth_client.get("/api/v1/bots/bob/messages").json
-    assert any(
-        m.get("role") == "system"
-        and "2+2" in (m.get("content") or "")
-        and m.get("meta", {}).get("mail_kind") == "ask"
-        for m in bob
-    )
     alice = auth_client.get("/api/v1/bots/alice/messages").json
-    # Pas d’accusé « J’ai envoyé… » — seulement la bulle user Dit/Demande.
+    user = [m for m in alice if m.get("role") == "user"][-1]
+    assert (user.get("meta") or {}).get("mail_kind") == "route_intent"
+    assert (user.get("meta") or {}).get("to_bot") == "bob"
+    bob = auth_client.get("/api/v1/bots/bob/messages").json
+    assert not any((m.get("meta") or {}).get("mail_kind") == "ask" for m in bob)
     assert not any(
-        "J’ai envoyé" in (m.get("content") or "") or "J'ai envoyé" in (m.get("content") or "")
+        "I sent" in (m.get("content") or "") or "J’ai envoyé" in (m.get("content") or "")
         for m in alice
     )
-    assert not any(m.get("meta", {}).get("mail_kind") == "ask_sent" for m in alice)
 
 
 def test_composer_unknown_bot(auth_client):
     auth_client.post("/api/v1/bots", json={"name": "solo"})
     r = auth_client.post(
         "/api/v1/bots/solo/messages",
-        json={"content": "Dit à @inconnu hello"},
+        json={"content": "Tell @unknown hello"},
     )
     assert r.status_code == 201
     msgs = auth_client.get("/api/v1/bots/solo/messages").json
     assert any(
-        m["role"] == "system" and "introuvable" in (m.get("content") or "").lower()
+        m["role"] == "system" and "not found" in (m.get("content") or "").lower()
         for m in msgs
     )
 
@@ -184,53 +345,78 @@ def test_mail_api_tell(auth_client):
 def test_ask_deep_link_meta(home):
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    user = chat_svc.send_message("alice", "Demande à @bob quelle heure ?", home=home)
+    user = chat_svc.send_message("alice", "Ask @bob what time is it?", home=home)
+    assert (user.get("meta") or {}).get("mail_kind") == "route_intent"
+    ask = botmail_svc.ask(
+        "alice",
+        "bob",
+        "What time is it?",
+        home=home,
+        origin="test",
+        origin_message_id=user["id"],
+    )
+    assert ask["state"] == "open"
     alice = chat_svc.list_messages("alice", home=home)
     user_msg = next(m for m in alice if m["id"] == user["id"])
-    # Meta may be enriched after route (link back to peer card).
-    assert (user_msg.get("meta") or {}).get("to_bot") == "bob" or (
-        user_msg.get("meta") or {}
-    ).get("mail_kind") in ("ask", None)
-    # Reload after peer delivery patches link_message_id onto the user bubble.
-    alice = chat_svc.list_messages("alice", home=home)
-    user_msg = next(m for m in alice if m["id"] == user["id"])
+    sent = [
+        m
+        for m in alice
+        if (m.get("meta") or {}).get("mail_kind") == "outgoing"
+    ][-1]
     bob = chat_svc.list_messages("bob", home=home)
     recv = [m for m in bob if (m.get("meta") or {}).get("mail_kind") == "ask"][-1]
     assert recv["meta"].get("link_bot") == "alice"
-    assert recv["meta"].get("link_message_id") == user["id"]
+    # Received card deep-links to the Sent card (peer-facing body).
+    assert recv["meta"].get("link_message_id") == sent["id"]
+    assert sent["meta"].get("link_message_id") == recv["id"]
     assert user_msg["meta"].get("link_message_id") == recv["id"]
     assert user_msg["meta"].get("link_bot") == "bob"
+
+
+def test_ask_links_latest_route_intent_automatically(home):
+    """API ask without origin_message_id still deep-links the Tell/Ask bubble."""
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    user = chat_svc.send_message("alice", "Ask @bob what time is it?", home=home)
+    botmail_svc.ask("alice", "bob", "What time is it?", home=home, origin="api")
+    alice = chat_svc.list_messages("alice", home=home)
+    user_msg = next(m for m in alice if m["id"] == user["id"])
+    sent = [
+        m
+        for m in alice
+        if (m.get("meta") or {}).get("mail_kind") == "outgoing"
+    ][-1]
+    bob = chat_svc.list_messages("bob", home=home)
+    recv = [m for m in bob if (m.get("meta") or {}).get("mail_kind") == "ask"][-1]
+    assert user_msg["meta"].get("link_message_id") == recv["id"]
+    assert recv["meta"].get("link_message_id") == sent["id"]
 
 
 def test_delete_purges_queued_mail(home):
     """Deleting the sender must drop queued mail so a recreated peer stays clean."""
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    bots_svc.patch_bot("bob", {"status": "busy"}, home=home)
-    botmail_svc.tell("alice", "bob", "message zombie", home=home, origin="test")
+    # waiting keeps mail queued (busy would mid-run-deliver the card).
+    bots_svc.patch_bot("bob", {"status": "waiting"}, home=home)
+    botmail_svc.tell("alice", "bob", "zombie message", home=home, origin="test")
     bots_svc.delete_bot("alice", home=home, destroy_desk=False)
     bots_svc.patch_bot("bob", {"status": "idle"}, home=home)
     botmail_svc.on_run_finished("bob", assistant_content="done", home=home)
     assert not any(
-        "message zombie" in (m.get("content") or "")
+        "zombie message" in (m.get("content") or "")
         for m in chat_svc.list_messages("bob", home=home)
     )
 
 
 def test_drain_skips_ghost_sender_after_recreate(home):
-    """Same slug recreated must not receive mail queued by a deleted peer.
-
-    Inbox rows key off bots.id (UUID). A new bot with the same slug gets a new
-    id, so the old queued tell is invisible to the drain.
-    """
+    """Same slug recreated must not receive mail queued by a deleted peer."""
     from autonomous.db import get_db
 
     bots_svc.create_bot("horloge", home=home)
     bots_svc.create_bot("test", home=home)
     old_test_id = bots_svc.get_bot("test", home=home)["id"]
-    bots_svc.patch_bot("test", {"status": "busy"}, home=home)
-    botmail_svc.tell("horloge", "test", "Il est 16h30", home=home, origin="test")
-    # Broken delete that leaves inbox rows (UUID still points at the dead life).
+    bots_svc.patch_bot("test", {"status": "waiting"}, home=home)
+    botmail_svc.tell("horloge", "test", "It is 4:30pm", home=home, origin="test")
     with get_db(home) as conn:
         conn.execute("DELETE FROM bots WHERE name IN ('horloge', 'test')")
     bots_svc.create_bot("Test", slug="test", home=home)
@@ -238,7 +424,7 @@ def test_drain_skips_ghost_sender_after_recreate(home):
     assert new_test_id != old_test_id
     botmail_svc.on_run_finished("test", assistant_content="fnac done", home=home)
     assert not any(
-        "16h30" in (m.get("content") or "")
+        "4:30" in (m.get("content") or "")
         or "horloge" in (m.get("content") or "").lower()
         for m in chat_svc.list_messages("test", home=home)
     )
@@ -252,21 +438,158 @@ def test_bot_has_stable_uuid(home):
     assert bots_svc.bot_uuid("alice", home=home) == a["id"]
 
 
+def test_rescue_mentions_never_auto_mails(home):
+    """Mention / send-claim without bot_tell must NOT invent peer mail from user text."""
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message(
+        "alice",
+        "I think @bob rides horses — do you like that too?",
+        role="user",
+        home=home,
+    )
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "alice",
+        "I forwarded that to @bob; I'll let you know as soon as I get a reply.",
+        mail_sent=[],
+        home=home,
+    )
+    assert rescued == []
+    assert not any(
+        (m.get("meta") or {}).get("kind") == "botmail"
+        for m in chat_svc.list_messages("bob", home=home)
+    )
+
+
+def test_rescue_skips_bare_citation(home):
+    bots_svc.create_bot("manager", home=home)
+    bots_svc.create_bot("pascaline", home=home)
+    chat_svc.create_message(
+        "manager",
+        "Cite @pascaline without sending her a message",
+        role="user",
+        home=home,
+    )
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "manager",
+        "Pascaline is your bot. She rides horses.",
+        mail_sent=[],
+        home=home,
+    )
+    assert rescued == []
+
+
+def test_rescue_skips_cite_with_at_token(home):
+    bots_svc.create_bot("manager", home=home)
+    bots_svc.create_bot("pascaline", home=home)
+    chat_svc.create_message("manager", "With the @", role="user", home=home)
+    rescued = botmail_svc.maybe_rescue_mentions(
+        "manager",
+        "Here: @pascaline\n\nAs you asked me not to send her a message, "
+        "I am only citing her in this chat.",
+        mail_sent=[],
+        home=home,
+    )
+    assert rescued == []
+    assert not chat_svc.list_messages("pascaline", home=home)
+
+
+def test_rescue_via_on_run_finished_does_not_mail(home):
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    chat_svc.create_message(
+        "alice", "Tell bob hello from me", role="user", home=home
+    )
+    botmail_svc.on_run_finished(
+        "alice",
+        assistant_content="Ok, writing to @bob right away.",
+        mail_sent=[],
+        home=home,
+    )
+    assert not any(
+        (m.get("meta") or {}).get("kind") == "botmail"
+        for m in chat_svc.list_messages("bob", home=home)
+    )
+
+
+def test_rescue_skipped_when_answering_ask(home):
+    """Answering an ask with @asker in the text must not re-mail the asker."""
+    bots_svc.create_bot("alice", home=home)
+    bots_svc.create_bot("bob", home=home)
+    ask = botmail_svc.ask("alice", "bob", "what time is it?", home=home, origin="test")
+    before = len(chat_svc.list_messages("alice", home=home))
+    botmail_svc.on_run_finished(
+        "bob",
+        assistant_content="@alice, it is 3pm.",
+        mail_sent=[],
+        home=home,
+    )
+    ask2 = botmail_svc.get_ask(ask["id"], home=home)
+    assert ask2["state"] == "answered"
+    alice = chat_svc.list_messages("alice", home=home)
+    mail = [
+        m
+        for m in alice[before:]
+        if (m.get("meta") or {}).get("kind") == "botmail"
+    ]
+    assert len(mail) == 1
+    assert mail[0]["meta"].get("mail_kind") == "ask_answered"
+
+
+def test_orphan_tell_relay_when_asker_awaits(home):
+    """bot_tell + « I'll forward the reply » → peer answer is mirrored back."""
+    bots_svc.create_bot("trump", home=home)
+    bots_svc.create_bot("etat-major", home=home)
+    chat_svc.create_message(
+        "trump",
+        "Ask @etat-major if we can proceed",
+        role="user",
+        home=home,
+    )
+    botmail_svc.tell(
+        "trump",
+        "etat-major",
+        "Can we proceed?",
+        home=home,
+        origin="test",
+    )
+    chat_svc.create_message(
+        "trump",
+        "I forwarded that to @etat-major. I'll let you know as soon as I get a reply.",
+        role="assistant",
+        home=home,
+    )
+    botmail_svc.on_run_finished(
+        "etat-major",
+        assistant_content="No, that is not advisable.",
+        home=home,
+    )
+    trump_msgs = chat_svc.list_messages("trump", home=home)
+    answered = [
+        m
+        for m in trump_msgs
+        if m["role"] == "system"
+        and (m.get("meta") or {}).get("mail_kind") == "ask_answered"
+    ]
+    assert answered, trump_msgs
+    assert "not advisable" in answered[-1]["content"]
+    assert answered[-1]["meta"].get("from_bot") == "etat-major"
+
+
 def test_drain_cancels_orphan_queued_without_purge(home):
     """Defense in depth: cancel queued rows whose from_bot vanished mid-flight."""
     from autonomous.db import get_db
 
     bots_svc.create_bot("alice", home=home)
     bots_svc.create_bot("bob", home=home)
-    bots_svc.patch_bot("bob", {"status": "busy"}, home=home)
-    botmail_svc.tell("alice", "bob", "encore là", home=home, origin="test")
-    # Simulate a half-broken delete that left inbox rows (pre-fix DB).
+    bots_svc.patch_bot("bob", {"status": "waiting"}, home=home)
+    botmail_svc.tell("alice", "bob", "still here", home=home, origin="test")
     with get_db(home) as conn:
         conn.execute("DELETE FROM bots WHERE name = ?", ("alice",))
     bots_svc.patch_bot("bob", {"status": "idle"}, home=home)
     botmail_svc.on_run_finished("bob", assistant_content="done", home=home)
     assert not any(
-        "encore là" in (m.get("content") or "")
+        "still here" in (m.get("content") or "")
         for m in chat_svc.list_messages("bob", home=home)
     )
     bob_id = bots_svc.get_bot("bob", home=home)["id"]

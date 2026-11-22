@@ -8,22 +8,22 @@
 - `autonomous/services/chat_attachments.py` (normalize + agent prompt)
 - `autonomous/api/bots.py` (`POST /bots/:name/chat/files`)
 
-**Last updated**: 2026-10-28 (thumbnail grid + side-by-side cards)
+**Last updated**: 2026-11-14 (10 GB per dropped file)
 
 ## User behaviour
 
 - Composer **+** button → system file picker (multiple).
 - **Drag and drop** onto the conversation area → same attachments.
-- Storage: `~/shared/upload/<uuid>/<user_file_name>` (name collision = different UUID).
+- Storage: `~/files/upload/<uuid>/<user_file_name>` (name collision = different UUID).
 - In the thread: images (pasted **or** uploaded `.png`/`.jpg`/…) in a **thumbnail grid**; other files as side-by-side **cards** (wrap), not stacked.
 - Pasting an **image** (Ctrl+V) remains the vision flow (`chat-attachments/`), distinct from uploaded files.
-- The agent receives **absolute paths** (host + VM) — never `~/shared` (Pi runs as the host user, so `~` points to that user's home → ENOENT).
+- The agent receives **absolute paths** (host + VM) — never `~/files` (Pi runs as the host user, so `~` points to that user's home → ENOENT). The VM path is `/home/autonomous/workspace/…` (same private folder).
 
 ## Implementation
 
 - `POST /api/v1/bots/:name/chat/files` multipart `file` → `{ type, name, path, url, size }`.
 - `POST /messages`: `attachments` = mix of image URLs (str) and file objects.
-- No cap on the number of attached files; max 4 **pasted** images (vision); files ≤ 50 MB each.
+- No cap on the number of attached files; each file ≤ 10 GB (chat drop and the Files tab). Pasted images: ≤ 100 MB each, at most 16 per message. The model does not receive those originals: see [`pi-agent.md`](./pi-agent.md).
 
 ## Pitfalls
 

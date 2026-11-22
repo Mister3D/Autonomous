@@ -8,6 +8,7 @@
 set -eu
 
 REPO_URL="${AUTONOMOUS_REPO_URL:-https://github.com/Mister3D/Autonomous}"
+# Default ref installed by this script (override with AUTONOMOUS_VERSION / --version).
 VERSION="${AUTONOMOUS_VERSION:-main}"
 PREFIX="${AUTONOMOUS_PREFIX:-$HOME/autonomous}"
 DATA_HOME="${AUTONOMOUS_HOME:-}"
@@ -15,6 +16,10 @@ PORT="${AUTONOMOUS_PORT:-8787}"
 ASSUME_YES=0
 NO_DESK=0
 NO_SERVICE=0
+SERVICE_INSTALLED=0
+LISTEN_HOST="127.0.0.1"
+PUBLIC_IP=""
+PUBLIC_URL=""
 PKG=""
 SUDO=""
 OS_ID=""
@@ -34,7 +39,7 @@ Usage: install.sh [options]
   --home DIR       data directory, AUTONOMOUS_HOME (default: PREFIX/data)
   --version REF    git branch or tag to install (default: main)
   --port N         port for the systemd service (default: 8787)
-  --no-desk        do not offer to build the desktop Docker image
+  --no-desk        ignored (desk image builds when Autonomous starts if needed)
   --no-service     do not offer to install a systemd service
   -h, --help       show this help
 
@@ -306,20 +311,82 @@ init_app() {
 	GENERATED_PASSWORD=""
 	read_password
 	info "Initialising $DATA_HOME"
-	init_args=(init --password "$PASSWORD")
-	# Generated password → force change on first web login and drop plaintext ASAP.
+	# POSIX sh (Debian dash) — no bash arrays. Generated password → force change
+	# on first web login and drop plaintext ASAP.
 	if [ -n "${GENERATED_PASSWORD_FILE:-}" ]; then
-		init_args+=(--must-change-password)
+		AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" \
+			init --password "$PASSWORD" --must-change-password >/dev/null
+	else
+		AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" \
+			init --password "$PASSWORD" >/dev/null
 	fi
-	AUTONOMOUS_HOME="$DATA_HOME" "$PREFIX/.venv/bin/autonomous" "${init_args[@]}" >/dev/null
 	PASSWORD=""
 }
 
-build_desk() {
-	[ "$NO_DESK" = 0 ] || return 0
-	check_docker || { warn "skipping the desktop image: Docker is not available"; return 0; }
-	if confirm "Build the desktop image now (autonomous-desktop:latest, several GB, ~10 min)?"; then
-		docker build -t autonomous-desktop:latest "$PREFIX/docker/desktop"
+_ip_cmd() {
+	if have ip; then command -v ip
+	elif [ -x /sbin/ip ]; then echo /sbin/ip
+	elif [ -x /usr/sbin/ip ]; then echo /usr/sbin/ip
+	else echo ""
+	fi
+}
+
+# True for docker/bridge/link-local/loopback — not a useful LAN URL.
+_is_bad_lan_ip() {
+	case "$1" in
+		""|127.*|0.*|169.254.*) return 0 ;;
+		172.17.*|172.18.*|172.19.*) return 0 ;; # docker0 / libvirt-ish bridges
+		*) return 1 ;;
+	esac
+}
+
+# Prefer a real LAN IPv4 (e.g. 192.168.0.127), never 127.0.0.1 / docker0.
+detect_public_ip() {
+	PUBLIC_IP=""
+	IPC="$(_ip_cmd)"
+
+	# 1) Source address for the default route (works even without internet).
+	if [ -n "$IPC" ]; then
+		gw="$("$IPC" -4 route show default 2>/dev/null | awk '/default/ {print $3; exit}')" || true
+		if [ -n "${gw:-}" ]; then
+			PUBLIC_IP="$("$IPC" -4 route get "$gw" 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')" || true
+		fi
+		if _is_bad_lan_ip "$PUBLIC_IP"; then
+			PUBLIC_IP="$("$IPC" -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')" || true
+		fi
+		# 2) First global IPv4 that is not docker/loopback (eth0/en* first).
+		if _is_bad_lan_ip "$PUBLIC_IP"; then
+			PUBLIC_IP="$("$IPC" -4 -o addr show scope global 2>/dev/null | awk '
+				$0 ~ /docker|br-|veth|virbr|cni/ { next }
+				{
+					split($4, a, "/")
+					ip = a[1]
+					if (ip ~ /^127\./ || ip ~ /^169\.254\./) next
+					if (ip ~ /^172\.1[7-9]\./ || ip ~ /^172\.2[0-9]\./ || ip ~ /^172\.3[0-1]\./) next
+					print ip
+					exit
+				}')" || true
+		fi
+	fi
+
+	# 3) hostname -I: skip docker-ish addresses.
+	if _is_bad_lan_ip "$PUBLIC_IP" && have hostname; then
+		PUBLIC_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '
+			/^127\./ || /^169\.254\./ { next }
+			/^172\.1[7-9]\./ || /^172\.2[0-9]\./ || /^172\.3[0-1]\./ { next }
+			/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }
+		')" || true
+	fi
+
+	if _is_bad_lan_ip "$PUBLIC_IP"; then
+		PUBLIC_IP=""
+		LISTEN_HOST="127.0.0.1"
+		PUBLIC_URL="http://127.0.0.1:${PORT}"
+		warn "no LAN IPv4 detected — UI URL will be http://127.0.0.1:${PORT}/"
+	else
+		LISTEN_HOST="0.0.0.0"
+		PUBLIC_URL="http://${PUBLIC_IP}:${PORT}"
+		info "LAN address detected: $PUBLIC_IP (UI will listen on all interfaces)"
 	fi
 }
 
@@ -329,6 +396,12 @@ install_service() {
 	confirm "Install a systemd service (autonomous.service, port $PORT)?" || return 0
 	unit=/etc/systemd/system/autonomous.service
 	tmp="$(mktemp)"
+	# LAN IP → bind all interfaces + BIND_PUBLIC so http://<lan>:PORT works from other devices.
+	bind_env=""
+	if [ "$LISTEN_HOST" != "127.0.0.1" ]; then
+		bind_env="Environment=AUTONOMOUS_BIND_PUBLIC=1
+Environment=AUTONOMOUS_PUBLIC_URL=$PUBLIC_URL"
+	fi
 	cat >"$tmp" <<UNIT
 [Unit]
 Description=Autonomous bot hub
@@ -340,8 +413,9 @@ User=$(id -un)
 WorkingDirectory=$PREFIX
 Environment=AUTONOMOUS_HOME=$DATA_HOME
 Environment=PATH=$HOME/.local/bin:$HOME/.pi/agent/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+$bind_env
 EnvironmentFile=-$PREFIX/.env
-ExecStart=$PREFIX/.venv/bin/autonomous serve --host 127.0.0.1 --port $PORT
+ExecStart=$PREFIX/.venv/bin/autonomous serve --host $LISTEN_HOST --port $PORT
 Restart=on-failure
 
 [Install]
@@ -359,36 +433,49 @@ next_steps() {
 
 Autonomous is installed in $PREFIX (data: $DATA_HOME).
 
-Next steps:
+>>> Open ${PUBLIC_URL}/ and log in.
 EOT
+	if [ -n "$PUBLIC_IP" ]; then
+		echo "    (also http://127.0.0.1:$PORT/ on this machine)"
+	fi
 	if [ "${SERVICE_INSTALLED:-0}" = 1 ]; then
-		echo "  1. Open http://127.0.0.1:$PORT/ and log in  (service: systemctl status autonomous)"
+		echo "    (service: systemctl status autonomous)"
 	else
-		echo "  1. Start it:  cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
-		echo "     then open http://127.0.0.1:$PORT/"
+		echo "    Start it first:"
+		if [ "$LISTEN_HOST" != "127.0.0.1" ]; then
+			echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME AUTONOMOUS_BIND_PUBLIC=1 \\"
+			echo "        .venv/bin/autonomous serve --host $LISTEN_HOST --port $PORT"
+		else
+			echo "      cd $PREFIX && AUTONOMOUS_HOME=$DATA_HOME .venv/bin/autonomous serve --port $PORT"
+		fi
 	fi
+	echo ""
+	echo "The desktop Docker image builds automatically when Autonomous starts"
+	echo "(if missing or docker/desktop changed, ~10 min). Log: \$AUTONOMOUS_HOME/desk-image/build.log"
 	if [ -n "${GENERATED_PASSWORD:-}" ]; then
-		echo "  2. Temporary login password (you will be forced to change it on first login):"
-		echo "       $GENERATED_PASSWORD"
-		echo "     Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
+		echo ""
+		echo "Temporary login password (you will be forced to change it on first login):"
+		echo "  $GENERATED_PASSWORD"
+		echo "  Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
 	elif [ -n "${GENERATED_PASSWORD_FILE:-}" ] && [ -r "$GENERATED_PASSWORD_FILE" ]; then
-		echo "  2. Temporary login password (you will be forced to change it on first login):"
-		echo "       $(cat "$GENERATED_PASSWORD_FILE")"
-		echo "     Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
+		echo ""
+		echo "Temporary login password (you will be forced to change it on first login):"
+		echo "  $(cat "$GENERATED_PASSWORD_FILE")"
+		echo "  Also written to: $GENERATED_PASSWORD_FILE (removed after first login)"
 	fi
-	echo "  Then follow the setup page: it lists what is left (LLM, desktop image, optional"
-	echo "  grounding and companion) with Configure links and Install/Build buttons."
+	echo ""
+	echo "Then follow the setup page (LLM, optional grounding and companion)."
 }
 
 main() {
 	parse_args "$@"
 	detect_os
+	detect_public_ip
 	check_prereqs
 	fetch_source
 	install_app
 	setup_env
 	init_app
-	build_desk
 	install_service
 	next_steps
 }

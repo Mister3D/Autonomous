@@ -49,7 +49,7 @@ def test_login_rate_limit(client, home):
     assert codes[-1] == 429
 
 
-def test_pairing_rate_limit(client):
+def test_pairing_rate_limit(client, pairing_on):
     from autonomous.services.ratelimit import PAIRING
 
     PAIRING.clear()

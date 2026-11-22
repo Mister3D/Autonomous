@@ -53,7 +53,7 @@ def test_chat_file_upload_and_message(auth_client, home):
     assert att["name"] == "rapport.pdf"
     assert att["path"].startswith("upload/")
     assert att["path"].endswith("/rapport.pdf")
-    # On disk under bot home (=~/shared)
+    # On disk under bot home (=~/files)
     disk = Path(home) / "bots" / "filebot" / "home" / att["path"]
     assert disk.is_file()
     assert disk.read_bytes() == data
@@ -105,6 +105,134 @@ def test_message_queued_while_busy(auth_client, home):
     assert "queued" not in (sent[-1].get("meta") or {})
 
 
+def test_hold_until_idle_hides_queue_until_drain(auth_client, home):
+    """Onboarding follow-up must not sit in the visible queue while a turn runs."""
+    from autonomous.services import bots as bots_svc
+    from autonomous.services import chat as chat_svc
+
+    auth_client.post("/api/v1/bots", json={"name": "qhold"})
+    bots_svc.patch_bot("qhold", {"status": "busy"}, home=home)
+    r = auth_client.post(
+        "/api/v1/bots/qhold/messages",
+        json={"content": "Continuons", "hold": True, "prompt": "script"},
+    )
+    assert r.status_code == 201, r.data
+    assert r.json["meta"].get("queued") is True
+    assert r.json["meta"].get("hold") is True
+    assert r.json["meta"].get("agent_prompt") == "script"
+
+    bots_svc.patch_bot("qhold", {"status": "idle"}, home=home)
+    assert chat_svc.drain_queued_user_messages("qhold", home=home) is True
+    msgs = auth_client.get("/api/v1/bots/qhold/messages").json
+    sent = [m for m in msgs if m["role"] == "user" and m.get("content") == "Continuons"]
+    assert len(sent) == 1
+    assert "queued" not in (sent[0].get("meta") or {})
+    assert "hold" not in (sent[0].get("meta") or {})
+    assert sent[0]["meta"].get("agent_prompt") == "script"
+
+
+def test_queued_stamped_on_create_event(auth_client, home):
+    """Busy send must publish message.created already with meta.queued (no blue flash)."""
+    from autonomous.services import bots as bots_svc
+    from autonomous.services.events import BUS
+
+    auth_client.post("/api/v1/bots", json={"name": "qflash"})
+    bots_svc.patch_bot("qflash", {"status": "busy"}, home=home)
+    q = BUS.subscribe("qflash")
+    try:
+        r = auth_client.post(
+            "/api/v1/bots/qflash/messages",
+            json={"content": "déjà en file"},
+        )
+        assert r.status_code == 201, r.data
+        assert r.json["meta"].get("queued") is True
+        created = []
+        while True:
+            try:
+                created.append(q.get_nowait())
+            except Exception:
+                break
+    finally:
+        BUS.unsubscribe("qflash", q)
+    first_created = next(
+        (e for e in created if e.name == "message.created"),
+        None,
+    )
+    assert first_created is not None
+    assert first_created.data["message"]["meta"].get("queued") is True
+
+
+def test_busy_composer_never_mid_run_steers(auth_client, home, monkeypatch):
+    """Composer sends while busy always FIFO-queue — never mid-run jump."""
+    from autonomous.services import bots as bots_svc
+    from autonomous.services import chat as chat_svc
+
+    auth_client.post("/api/v1/bots", json={"name": "qfifo"})
+    bots_svc.patch_bot("qfifo", {"status": "busy"}, home=home)
+
+    steered = {"n": 0}
+
+    def fake_steer(bot, prompt, *, home=None):
+        steered["n"] += 1
+        return True
+
+    monkeypatch.setattr(
+        "autonomous.services.agent.steer_mid_run", fake_steer
+    )
+
+    first = auth_client.post(
+        "/api/v1/bots/qfifo/messages",
+        json={"content": "premier"},
+    )
+    assert first.status_code == 201, first.data
+    assert first.json["meta"].get("queued") is True
+    assert first.json["meta"].get("mid_run") is not True
+
+    second = auth_client.post(
+        "/api/v1/bots/qfifo/messages",
+        json={"content": "deuxième"},
+    )
+    assert second.status_code == 201, second.data
+    assert second.json["meta"].get("queued") is True
+    assert second.json["meta"].get("mid_run") is not True
+    assert steered["n"] == 0
+
+    queued = chat_svc.list_queued_user_messages("qfifo", home=home)
+    assert [m["content"] for m in queued] == ["premier", "deuxième"]
+
+    bots_svc.patch_bot("qfifo", {"status": "idle"}, home=home)
+    assert chat_svc.drain_queued_user_messages("qfifo", home=home) is True
+    left = chat_svc.list_queued_user_messages("qfifo", home=home)
+    assert [m["content"] for m in left] == ["deuxième"]
+
+
+def test_delete_queued_message(auth_client, home):
+    from autonomous.services import bots as bots_svc
+    from autonomous.services import chat as chat_svc
+
+    auth_client.post("/api/v1/bots", json={"name": "qdel"})
+    bots_svc.patch_bot("qdel", {"status": "busy"}, home=home)
+    queued = auth_client.post(
+        "/api/v1/bots/qdel/messages",
+        json={"content": "à annuler"},
+    )
+    assert queued.status_code == 201, queued.data
+    assert queued.json["meta"].get("queued") is True
+    msg_id = queued.json["id"]
+
+    gone = auth_client.delete(f"/api/v1/bots/qdel/messages/{msg_id}")
+    assert gone.status_code == 200, gone.data
+    assert chat_svc.list_queued_user_messages("qdel", home=home) == []
+    msgs = auth_client.get("/api/v1/bots/qdel/messages").json
+    assert not any(m["id"] == msg_id for m in msgs)
+
+    # Non-queued (or missing) → refuse.
+    live = chat_svc.create_message("qdel", "déjà là", role="user", home=home)
+    bad = auth_client.delete(f"/api/v1/bots/qdel/messages/{live['id']}")
+    assert bad.status_code == 400
+    assert bad.json.get("code") == "not_queued" or "queued" in str(bad.json).lower()
+
+
 def test_message_queued_while_run_slot_held(auth_client, home):
     """A send that arrives while a run owns the slot is queued, even if status is still idle."""
     import threading
@@ -130,6 +258,30 @@ def test_message_queued_while_run_slot_held(auth_client, home):
         assert [m["content"] for m in queued] == ["premier", "deuxième"]
     finally:
         agent_svc._release_run("qslot", settled)
+
+
+def test_delete_bot_drops_run_slot_so_recreate_is_not_queued(auth_client, home):
+    """Deleting a bot must not leave a ghost run that queues the next first message."""
+    import threading
+
+    from autonomous.services import agent as agent_svc
+
+    created = auth_client.post("/api/v1/bots", json={"name": "ghost"})
+    assert created.status_code == 201, created.data
+    settled = threading.Event()
+    assert agent_svc._register_run("ghost", settled)
+    deleted = auth_client.delete("/api/v1/bots/ghost")
+    assert deleted.status_code == 200, deleted.data
+    assert agent_svc.run_in_progress("ghost") is False
+
+    again = auth_client.post("/api/v1/bots", json={"name": "ghost"})
+    assert again.status_code == 201, again.data
+    sent = auth_client.post(
+        "/api/v1/bots/ghost/messages", json={"content": "bonjour"}
+    )
+    assert sent.status_code == 201, sent.data
+    assert sent.json["meta"].get("queued") is not True
+    agent_svc.clear_active_run("ghost")
 
 
 def test_openapi_generated(auth_client):

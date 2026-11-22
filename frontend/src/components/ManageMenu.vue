@@ -1,57 +1,100 @@
 <template>
   <div class="action-list">
-    <button type="button" @click="clearChat">{{ t("manage.clearChat") }}</button>
-    <button type="button" :disabled="exporting" @click="exportPdf">
-      {{ exporting ? t("manage.exportingPdf") : t("manage.exportPdf") }}
-    </button>
-    <button type="button" @click="restart">{{ t("manage.restartDesk") }}</button>
-    <button type="button" @click="reset">{{ t("manage.resetDesk") }}</button>
-    <button type="button" @click="setCap('none')">{{ t("manage.removeVm") }}</button>
-
-    <template v-if="!confirmingDelete">
-      <button class="danger" type="button" @click="confirmingDelete = true">
-        {{ t("manage.deleteBot") }}
-      </button>
-    </template>
-    <div v-else class="inline-confirm" role="group">
-      <p>{{ t("confirm.deleteBotInline", { name: bot.name }) }}</p>
+    <div v-for="item in rows" :key="item.id" class="action-row">
       <button
-        class="danger"
         type="button"
-        :disabled="deleting"
-        @click="remove"
+        :class="{ danger: item.danger }"
+        :disabled="item.disabled"
+        @click="onRow(item)"
       >
-        {{ deleting ? t("manage.deletingBot") : t("confirm.deleteBotGo") }}
+        {{ item.label }}
       </button>
-      <button type="button" :disabled="deleting" @click="confirmingDelete = false">
-        {{ t("files.cancel") }}
-      </button>
+      <UiActionConfirm
+        v-if="item.confirm && armed === item.id"
+        :disabled="busy"
+        @confirm="run(item.id)"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { api } from "../api";
 import { state } from "../store";
+import UiActionConfirm from "./ui/UiActionConfirm.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
 const router = useRouter();
-const confirmingDelete = ref(false);
-const deleting = ref(false);
+const armed = ref("");
+const busy = ref(false);
 const exporting = ref(false);
+
+/** A desktop exists (running, asleep, starting, or failed). Absent means no VM. */
+const deskOn = computed(() => {
+  const st = props.bot.desk?.state;
+  return st === "creating" || st === "running" || st === "sleeping" || st === "error";
+});
+
+const rows = computed(() => {
+  const list = [
+    {
+      id: "clear",
+      label: t("manage.clearChat"),
+      confirm: t("confirm.clearChat"),
+    },
+    {
+      id: "export",
+      label: exporting.value ? t("manage.exportingPdf") : t("manage.exportPdf"),
+      disabled: exporting.value,
+    },
+  ];
+  if (deskOn.value) {
+    list.push(
+      {
+        id: "restart",
+        label: t("manage.restartDesk"),
+        confirm: t("confirm.restartDesk"),
+      },
+      {
+        id: "reset",
+        label: t("manage.resetDesk"),
+        confirm: t("confirm.reset"),
+      },
+      {
+        id: "vm",
+        label: t("manage.removeVm"),
+        confirm: t("confirm.removeVm"),
+      },
+    );
+  }
+  list.push({
+    id: "delete",
+    label: busy.value && armed.value === "delete" ? t("manage.deletingBot") : t("manage.deleteBot"),
+    confirm: t("confirm.deleteBotInline", { name: props.bot.label || props.bot.name }),
+    danger: true,
+    disabled: busy.value,
+  });
+  return list;
+});
 
 watch(
   () => props.bot?.name,
   () => {
-    confirmingDelete.value = false;
-    deleting.value = false;
+    armed.value = "";
+    busy.value = false;
     exporting.value = false;
-  }
+  },
 );
+
+watch(deskOn, (on) => {
+  if (!on && (armed.value === "restart" || armed.value === "reset" || armed.value === "vm")) {
+    armed.value = "";
+  }
+});
 
 function applyBot(bot) {
   if (!bot?.name) return;
@@ -59,8 +102,28 @@ function applyBot(bot) {
   if (i >= 0) state.bots[i] = bot;
 }
 
+function onRow(item) {
+  if (item.disabled) return;
+  if (!item.confirm) {
+    if (item.id === "export") exportPdf();
+    return;
+  }
+  armed.value = armed.value === item.id ? "" : item.id;
+}
+
 async function clearChat() {
-  await api.clearMessages(props.bot.name);
+  const name = props.bot.name;
+  await api.clearMessages(name);
+  // Server wipe does not emit SSE; drop the thread so the pane and the rail update.
+  state.messages[name] = [];
+  state.threadPages[name] = {
+    before: null,
+    hasMore: false,
+    boot: false,
+    paged: false,
+    older: false,
+  };
+  delete state.previews[name];
 }
 
 async function exportPdf() {
@@ -84,53 +147,45 @@ async function exportPdf() {
   }
 }
 
-async function restart() {
+async function run(id) {
+  if (busy.value || armed.value !== id) return;
+  busy.value = true;
   try {
-    await api.deskRestart(props.bot.name);
+    if (id === "clear") await clearChat();
+    else if (id === "restart") await api.deskRestart(props.bot.name);
+    else if (id === "reset") await api.deskReset(props.bot.name);
+    else if (id === "vm") await setCap("none");
+    else if (id === "delete") await remove();
+    armed.value = "";
   } catch (e) {
-    alert(e.message);
+    alert(e.message || String(e));
+  } finally {
+    busy.value = false;
   }
 }
 
-async function reset() {
-  if (!confirm(t("confirm.reset"))) return;
-  await api.deskReset(props.bot.name);
-}
-
 async function setCap(level) {
-  try {
-    const bot = await api.setCapability(props.bot.name, level);
-    applyBot(bot);
-    if (level === "none" && (state.tab === "terminal" || state.tab === "screen")) {
-      state.tab = "discussion";
-    }
-  } catch (e) {
-    alert(e.message || String(e));
+  const bot = await api.setCapability(props.bot.name, level);
+  applyBot(bot);
+  if (level === "none" && (state.tab === "terminal" || state.tab === "screen")) {
+    state.tab = "discussion";
   }
 }
 
 async function remove() {
-  if (deleting.value) return;
   const name = props.bot.name;
-  deleting.value = true;
-  try {
-    await api.deleteBot(name);
-    // SSE bot.deleted also updates the list; ensure local nav even if event is slow.
-    state.bots = state.bots.filter((b) => b.name !== name);
-    delete state.messages[name];
-    const next = state.bots[0]?.name || null;
-    state.currentBot = next;
-    confirmingDelete.value = false;
-    if (next) {
-      state.tab = "discussion";
-      router.push(`/b/${encodeURIComponent(next)}/discussion`);
-    } else {
-      router.push("/");
-    }
-  } catch (e) {
-    alert(e.message || String(e));
-  } finally {
-    deleting.value = false;
+  await api.deleteBot(name);
+  state.bots = state.bots.filter((b) => b.name !== name);
+  delete state.messages[name];
+  delete state.threadPages[name];
+  delete state.previews[name];
+  const next = state.bots[0]?.name || null;
+  state.currentBot = next;
+  if (next) {
+    state.tab = "discussion";
+    router.push(`/b/${encodeURIComponent(next)}/discussion`);
+  } else {
+    router.push("/");
   }
 }
 </script>

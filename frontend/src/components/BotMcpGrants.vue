@@ -1,21 +1,18 @@
 <template>
   <div class="mcp-grants">
     <div class="mcp-grants-head">
-      <span>
-        <strong>{{ t("details.mcp") }}</strong>
-        <small>{{ t("details.mcpHint") }}</small>
+      <span class="ui-toggle-main">
+        <UiIconBadge size="sm">
+          <UiIcon name="puzzle" :size="16" :stroke="1.9" />
+        </UiIconBadge>
+        <span class="ui-toggle-copy">
+          <strong>{{ t("details.mcp") }}</strong>
+          <small>{{ t("details.mcpHint") }}</small>
+        </span>
       </span>
-      <button
-        class="settings-orb mcp-add"
-        type="button"
-        :aria-label="t('details.mcpAdd')"
-        :title="t('details.mcpAdd')"
-        @click="startPick"
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
+      <UiOrb :label="t('details.mcpAdd')" @click="startPick">
+        <UiIcon name="plus" :size="14" />
+      </UiOrb>
     </div>
     <p v-if="error && !open" class="mcp-grants-error">{{ error }}</p>
     <ul v-if="grants.length" class="mcp-grant-list">
@@ -25,77 +22,76 @@
           <small v-if="!grant.available">{{ t("details.mcpMissing") }}</small>
           <small v-else-if="!grant.online">{{ t("details.mcpOffline") }}</small>
         </span>
-        <button class="btn danger-ghost" type="button" @click="remove(grant)">
+        <UiButton variant="danger-ghost" type="button" @click="remove(grant)">
           {{ t("details.mcpRemove") }}
-        </button>
+        </UiButton>
       </li>
     </ul>
-    <p v-else-if="ready" class="hint">{{ t("details.mcpEmpty") }}</p>
 
-    <Teleport to="body">
-      <div v-if="open" class="modal-backdrop" @click.self="cancel">
-        <div
-          class="modal mcp-grant-modal"
-          role="dialog"
-          aria-modal="true"
-          :aria-label="t('details.mcpDialog')"
+    <UiModal
+      :open="open"
+      panel-class="mcp-grant-modal"
+      :aria-label="t('details.mcpDialog')"
+      @close="cancel"
+    >
+      <h2>{{ t("details.mcpDialog") }}</h2>
+      <p class="field-hint">{{ t("details.mcpPickCompanion") }}</p>
+      <p v-if="!companions.length" class="hint">{{ t("details.mcpNone") }}</p>
+      <div v-else class="mcp-choice" role="listbox" :aria-label="t('details.mcpPickCompanion')">
+        <button
+          v-for="device in companions"
+          :key="device.device_id"
+          type="button"
+          :class="{ active: device.device_id === chosenId }"
+          @click="chooseCompanion(device)"
         >
-          <h2>{{ t("details.mcpDialog") }}</h2>
-          <p class="field-hint">{{ t("details.mcpPickCompanion") }}</p>
-          <p v-if="!companions.length" class="hint">{{ t("details.mcpNone") }}</p>
-          <div v-else class="mcp-choice" role="listbox" :aria-label="t('details.mcpPickCompanion')">
-            <button
-              v-for="device in companions"
-              :key="device.device_id"
-              type="button"
-              :class="{ active: device.device_id === chosenId }"
-              @click="chooseCompanion(device)"
-            >
-              <strong>{{ device.device_name }}</strong>
-              <small :class="{ on: device.online }">
-                {{ device.online ? t("companion.online") : t("companion.offline") }}
-              </small>
-            </button>
-          </div>
-          <template v-if="chosenId">
-            <p class="field-hint">{{ t("details.mcpPickServer") }}</p>
-            <div class="mcp-choice" role="listbox" :aria-label="t('details.mcpPickServer')">
-              <button
-                v-for="server in serversForChosen"
-                :key="server.server"
-                type="button"
-                :disabled="already(server)"
-                :class="{ active: picked && picked.server === server.server && picked.device_id === server.device_id }"
-                @click="picked = server"
-              >
-                <strong>{{ server.server }}</strong>
-              </button>
-            </div>
-          </template>
-          <p v-if="error" class="mcp-grants-error">{{ error }}</p>
-          <div class="mcp-dialog-actions">
-            <button class="btn ghost" type="button" @click="cancel">{{ t("details.mcpCancel") }}</button>
-            <button class="btn primary" type="button" :disabled="!canAdd" @click="grant(picked)">
-              {{ t("details.mcpAdd") }}
-            </button>
-          </div>
-        </div>
+          <strong>{{ device.device_name }}</strong>
+          <small :class="{ on: device.online }">
+            {{ device.online ? t("companion.online") : t("companion.offline") }}
+          </small>
+        </button>
       </div>
-    </Teleport>
+      <template v-if="chosenId">
+        <p class="field-hint">{{ t("details.mcpPickServer") }}</p>
+        <div class="mcp-choice" role="listbox" :aria-label="t('details.mcpPickServer')">
+          <button
+            v-for="server in serversForChosen"
+            :key="server.server"
+            type="button"
+            :disabled="already(server)"
+            :class="{ active: picked && picked.server === server.server && picked.device_id === server.device_id }"
+            @click="picked = server"
+          >
+            <strong>{{ server.server }}</strong>
+          </button>
+        </div>
+      </template>
+      <p v-if="error" class="mcp-grants-error">{{ error }}</p>
+      <div class="mcp-dialog-actions">
+        <UiButton variant="ghost" type="button" @click="cancel">{{ t("details.mcpCancel") }}</UiButton>
+        <UiButton variant="primary" type="button" :disabled="!canAdd" @click="grant(picked)">
+          {{ t("details.mcpAdd") }}
+        </UiButton>
+      </div>
+    </UiModal>
   </div>
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "../api";
+import UiButton from "./ui/UiButton.vue";
+import UiIcon from "./ui/UiIcon.vue";
+import UiIconBadge from "./ui/UiIconBadge.vue";
+import UiModal from "./ui/UiModal.vue";
+import UiOrb from "./ui/UiOrb.vue";
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t } = useI18n();
 
 const grants = ref([]);
 const servers = ref([]);
-const ready = ref(false);
 const error = ref("");
 const open = ref(false);
 const chosenId = ref("");
@@ -131,15 +127,12 @@ function already(server) {
 
 async function load() {
   error.value = "";
-  ready.value = false;
   try {
     const data = await api.listBotMcp(props.bot.name);
     grants.value = data.grants || [];
     servers.value = data.servers || [];
   } catch (e) {
     error.value = e.message;
-  } finally {
-    ready.value = true;
   }
 }
 
@@ -162,10 +155,6 @@ function cancel() {
   chosenId.value = "";
   picked.value = null;
   error.value = "";
-}
-
-function onKey(ev) {
-  if (ev.key === "Escape" && open.value) cancel();
 }
 
 async function grant(server) {
@@ -199,6 +188,4 @@ watch(() => props.bot.name, () => {
   cancel();
   load();
 }, { immediate: true });
-document.addEventListener("keydown", onKey);
-onUnmounted(() => document.removeEventListener("keydown", onKey));
 </script>

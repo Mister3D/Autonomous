@@ -11,7 +11,7 @@
   "auth.logout": "Déconnecté",
   "auth.rate_limited": "Trop de tentatives de connexion — réessayez dans quelques minutes",
   "auth.password_too_short": "Le mot de passe doit faire au moins 8 caractères",
-  "auth.password_unchanged": "Choisissez un mot de passe différent de celui généré",
+  "auth.password_unchanged": "Choisissez un mot de passe différent de l’actuel",
   "auth.password_changed": "Mot de passe mis à jour",
   "bot.created": "Bot « {name} » créé",
   "bot.deleted": "Bot « {name} » supprimé",
@@ -20,7 +20,12 @@
   "bot.manager_exists": "Il ne peut y avoir qu’un seul Manager (déjà : « {name} »). Désactivez-le avant d’en nommer un autre.",
   "bot.invalid_name": "Identifiant technique invalide (slug : [a-z0-9][a-z0-9_-]{{0,31}})",
   "bot.invalid_display_name": "Nom de bot invalide (1–64 caractères, sans / ni \\)",
+  "bot.model_required": "Choisissez un modèle.",
   "chat.sent": "Message envoyé",
+  "notebook.order": "Mémorisé : {text}",
+  "notebook.open": "À finir : {text}",
+  "notebook.note": "Note : {text}",
+  "notebook.removed": "Retiré : {text}",
   "chat.cleared": "Historique effacé",
   "desk.creating": "Création du bureau…",
   "desk.destroying": "Destruction du bureau…",
@@ -29,6 +34,7 @@
   "terminal.done": "Commande terminée (code {code})",
   "files.not_found": "Chemin introuvable",
   "files.forbidden": "Chemin hors du répertoire du bot",
+  "files.exists": "Un fichier portant ce nom existe déjà",
   "job.not_found": "Tâche « {id} » introuvable",
   "health.ok": "Autonomous {version} OK",
   "serve.starting": "Écoute sur http://{host}:{port}",
@@ -41,5 +47,7 @@
   "serve.stopped": "Serveur arrêté.",
   "serve.killed": "Le serveur ne s'est pas arrêté à temps ; pid {pid} tué.",
   "serve.not_running": "Aucun serveur en cours (serve.pid absent ou obsolète).",
-  "serve.already_running": "Serveur déjà lancé (pid {pid}). Utilisez : autonomous serve stop"
+  "serve.already_running": "Serveur déjà lancé (pid {pid}). Utilisez : autonomous serve stop",
+  "notify.botWaitingTitle": "Action requise",
+  "notify.botWaitingBody": "{bot} attend votre réponse."
 }

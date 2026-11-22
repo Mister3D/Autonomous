@@ -313,7 +313,7 @@ def test_request_access_grant(home):
     assert again["result"].get("already_granted") is True
 
 
-def test_dead_session_after_vault_posts_resume_card(home, auth_client):
+def test_dead_session_after_vault_auto_resumes(home, auth_client, monkeypatch):
     bots_svc.create_bot("frank", label="Frank", home=home)
     chat_svc.send_message(
         "frank", "Connecte-toi au site", home=home, trigger_agent=False
@@ -335,14 +335,31 @@ def test_dead_session_after_vault_posts_resume_card(home, auth_client):
         reason="login",
         home=home,
     )
-    # No live Pi session → resolve must unstick + post Reprendre card.
+    prompts: list[str] = []
+
+    class FakeAgent:
+        def start_run(self, name, message, *, home=None, images=None):
+            prompts.append(message)
+            return ""
+
+        def stop_run(self, name, *, home=None):
+            return None
+
+    monkeypatch.setattr(
+        "autonomous.services.agent.get_agent",
+        lambda *a, **k: FakeAgent(),
+    )
+    # No live Pi session → resolve must unstick + auto-resume (no manual card).
     out = vault_svc.resolve_request(req["id"], action="approve", home=home)
     assert out["state"] == "approved"
-    bot = bots_svc.get_bot("frank", home=home)
-    assert bot["status"] == "idle"
     msgs = chat_svc.list_messages("frank", home=home)
-    resume = next(m for m in msgs if m["meta"].get("kind") == "agent_interrupted")
-    assert resume["meta"]["state"] == "pending"
+    pending = [
+        m
+        for m in msgs
+        if (m.get("meta") or {}).get("kind") == "agent_interrupted"
+        and (m.get("meta") or {}).get("state") == "pending"
+    ]
+    assert pending == []
     tool = next(
         m
         for m in msgs
@@ -350,13 +367,7 @@ def test_dead_session_after_vault_posts_resume_card(home, auth_client):
         and m["meta"].get("tool_name") == "request_vault_access"
     )
     assert tool["meta"]["status"] == "error"
-
-    r = auth_client.post("/api/v1/bots/frank/resume")
-    assert r.status_code == 200
-    assert r.get_json()["ok"] is True
-    msgs = chat_svc.list_messages("frank", home=home)
-    resume = next(m for m in msgs if m["meta"].get("kind") == "agent_interrupted")
-    assert resume["meta"]["state"] == "resumed"
+    assert prompts and "Original task" in prompts[0]
 
 
 def test_vault_http_api(home, auth_client):
@@ -422,8 +433,7 @@ def test_vault_http_api(home, auth_client):
     assert "never-to-llm" not in str(body)
 
 
-def test_chat_message_cancels_pending_vault_with_redirect(home):
-    """While waiting on a vault form, a chat reply cancels it (not a hard deny)."""
+def test_chat_message_queues_while_vault_is_pending(home):
     bots_svc.create_bot("lea", label="Lea", home=home)
     req = vault_svc.create_request(
         "lea",
@@ -441,17 +451,15 @@ def test_chat_message_cancels_pending_vault_with_redirect(home):
         "Ce n'est pas un code : valide l'action sur mon téléphone.",
         home=home,
     )
-    assert not (msg.get("meta") or {}).get("queued")
+    assert (msg.get("meta") or {}).get("queued") is True
 
     fresh = vault_svc.get_request(req["id"], home=home)
-    assert fresh["state"] == "cancelled"
-    assert fresh["result"].get("human_redirect") is True
-    assert "téléphone" in fresh["result"].get("message", "")
-    assert fresh["result"].get("denied") is False
+    assert fresh["state"] == "pending"
+    assert bots_svc.get_bot("lea", home=home)["status"] == "waiting"
 
 
 def test_deny_with_queued_message_becomes_redirect(home):
-    """« Refuser » after a queued correction must not look like a hard denial."""
+    """A message queued while the card waits still guides a later decline."""
     bots_svc.create_bot("marc", label="Marc", home=home)
     req = vault_svc.create_request(
         "marc",
@@ -459,15 +467,13 @@ def test_deny_with_queued_message_becomes_redirect(home):
         label="2FA",
         home=home,
     )
-    bots_svc.patch_bot("marc", {"status": "busy"}, home=home)
-    # Simulate a message that was queued before waiting (or during busy).
+    bots_svc.patch_bot("marc", {"status": "waiting"}, home=home)
     queued = chat_svc.send_message(
         "marc",
         "Valide sur l'autre appareil, pas de code.",
         home=home,
     )
     assert (queued.get("meta") or {}).get("queued") is True
-    bots_svc.patch_bot("marc", {"status": "waiting"}, home=home)
 
     resolved = vault_svc.resolve_request(req["id"], action="deny", home=home)
     assert resolved["state"] == "cancelled"
@@ -482,3 +488,15 @@ def test_plain_deny_still_denied(home):
     resolved = vault_svc.resolve_request(req["id"], action="deny", home=home)
     assert resolved["state"] == "denied"
     assert resolved["result"].get("denied") is True
+
+
+def test_prompt_exception_for_temporary_codes():
+    from autonomous.services.pi_rpc import _VAULT_SYSTEM_HINT, _VM_SYSTEM_HINT
+
+    hint = _VAULT_SYSTEM_HINT
+    assert "NEVER reveal vault secrets" in hint
+    assert "temporary authentication codes" in hint
+    assert "report_user_secret" in hint
+    assert "long-lived token" in hint
+    assert "see VAULT" in _VM_SYSTEM_HINT
+    assert "do not ask for them again" in _VM_SYSTEM_HINT

@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { api } from "./api";
 import { i18n } from "./i18n";
 import { uid } from "./uid";
 
@@ -12,6 +13,10 @@ export const state = reactive({
   panel: "details",
   inspectorOpen: false,
   messages: {},
+  /** bot → { before, hasMore, boot, paged, older } for chat history paging. */
+  threadPages: {},
+  /** Rail snippet when the full thread is not loaded yet. */
+  previews: {},
   /** botName → true when assistant activity arrived while not selected */
   unread: {},
   terminal: {},
@@ -26,6 +31,8 @@ export const state = reactive({
   composerRestore: null,
   /** Latest schedule/webhook SSE payload so the Events tab can refresh live. */
   eventsFeed: null,
+  /** Latest ~/files mutation so the Files tab can refresh live. */
+  filesFeed: null,
   /** Set when the user saves a timezone in Settings, so Events can reload. */
   userTimezone: null,
   piStatus: null,
@@ -41,7 +48,6 @@ let setupInflight = null;
 export function refreshSetup(force = false) {
   if (setupInflight && !force) return setupInflight;
   setupInflight = (async () => {
-    const { api } = await import("./api");
     try {
       state.setup = await api.setupStatus(force);
     } catch {
@@ -80,30 +86,110 @@ export function isOptimisticMessageId(id) {
 /**
  * Drop optimistic bubbles that match a server message (same role + content).
  * Prevents doubles when SSE / loadMessages arrive before the HTTP replace.
+ * Returns ``{ hadQueued, queueOrd }`` from the twin so the file order stays stable
+ * when server ``created_at`` would otherwise reshuffle the queue.
  */
 export function dropOptimisticDupes(bot, serverMsg) {
-  if (!bot || !serverMsg?.id || isOptimisticMessageId(serverMsg.id)) return;
+  const empty = { hadQueued: false, queueOrd: null };
+  if (!bot || !serverMsg?.id || isOptimisticMessageId(serverMsg.id)) return empty;
   const list = state.messages[bot];
-  if (!Array.isArray(list) || !list.length) return;
+  if (!Array.isArray(list) || !list.length) return empty;
   const role = serverMsg.role;
   const content = String(serverMsg.content || "");
+  let hadQueued = false;
+  let queueOrd = null;
   for (let i = list.length - 1; i >= 0; i--) {
     const m = list[i];
     if (!isOptimisticMessageId(m?.id)) continue;
     if (m.role !== role) continue;
     if (String(m.content || "") !== content) continue;
+    if (m.meta?.queued) hadQueued = true;
+    const ord = Number(m.meta?.queue_ord);
+    if (Number.isFinite(ord)) queueOrd = ord;
     list.splice(i, 1);
   }
+  return { hadQueued, queueOrd };
+}
+
+/** Keep « En file » + stable ``queue_ord`` from the optimistic twin. */
+export function withInheritedQueued(serverMsg, inherit) {
+  const hadQueued = !!inherit?.hadQueued;
+  const queueOrd = inherit?.queueOrd;
+  if (!serverMsg) return serverMsg;
+  const meta = { ...(serverMsg.meta || {}) };
+  let changed = false;
+  if (hadQueued && !meta.queued && !meta.mid_run) {
+    meta.queued = true;
+    changed = true;
+  }
+  if (Number.isFinite(queueOrd) && !Number.isFinite(Number(meta.queue_ord))) {
+    meta.queue_ord = queueOrd;
+    changed = true;
+  }
+  return changed ? { ...serverMsg, meta } : serverMsg;
+}
+
+/** Preserve local ``queue_ord`` across SSE/HTTP merges. */
+export function withPreservedQueueOrd(local, remote) {
+  if (!remote) return remote;
+  const ord = Number(local?.meta?.queue_ord);
+  if (!Number.isFinite(ord)) return remote;
+  if (Number.isFinite(Number(remote.meta?.queue_ord))) return remote;
+  return {
+    ...remote,
+    meta: { ...(remote.meta || {}), queue_ord: ord },
+  };
+}
+
+/**
+ * Merge a live streaming bubble with a possibly-stale HTTP/SSE snapshot.
+ * Prefer the longer body while either side is still streaming so mid-turn
+ * navigation / DB flushes cannot truncate text already shown via deltas.
+ * A finished remote message (`streaming: false`) always wins.
+ */
+export function preferLiveStreamingMessage(local, remote) {
+  if (!local) return remote;
+  if (!remote) return local;
+  const remoteDone = remote.meta && remote.meta.streaming === false;
+  if (remoteDone && !local.meta?.streaming) return remote;
+  if (remoteDone && String(remote.content || "").length >= String(local.content || "").length) {
+    return remote;
+  }
+  const localStreaming = !!local.meta?.streaming;
+  const remoteStreaming = !!remote.meta?.streaming;
+  if (!localStreaming && !remoteStreaming) return remote;
+  const localLen = String(local.content || "").length;
+  const remoteLen = String(remote.content || "").length;
+  if (localLen > remoteLen) {
+    return {
+      ...remote,
+      content: local.content,
+      meta: {
+        ...(remote.meta || {}),
+        ...(local.meta || {}),
+        streaming: true,
+      },
+    };
+  }
+  return {
+    ...remote,
+    meta: {
+      ...(remote.meta || {}),
+      streaming: localStreaming || remoteStreaming || !!remote.meta?.streaming,
+    },
+  };
+}
+
+export function dismissNotification(id) {
+  const i = state.notifications.findIndex((n) => n.id === id);
+  if (i >= 0) state.notifications.splice(i, 1);
 }
 
 export function pushNotification(text, kind = "info") {
   const id = uid();
   state.notifications.unshift({ id, text, kind, ts: Date.now() });
   if (state.notifications.length > 20) state.notifications.pop();
-  setTimeout(() => {
-    const i = state.notifications.findIndex((n) => n.id === id);
-    if (i >= 0) state.notifications.splice(i, 1);
-  }, 6000);
+  setTimeout(() => dismissNotification(id), 6000);
 }
 
 export function applyEvent(envelope, { fromBroadcast = false } = {}) {
@@ -140,12 +226,14 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
   if (type === "message.created" && data.message) {
     const bot = data.message.bot;
     if (!state.messages[bot]) state.messages[bot] = [];
-    dropOptimisticDupes(bot, data.message);
-    if (!state.messages[bot].some((m) => m.id === data.message.id)) {
-      state.messages[bot].push(data.message);
+    const inherit = dropOptimisticDupes(bot, data.message);
+    const incoming = withInheritedQueued(data.message, inherit);
+    data.message = incoming;
+    if (!state.messages[bot].some((m) => m.id === incoming.id)) {
+      state.messages[bot].push(incoming);
     }
     // Queued drafts stay out of "last activity" until they actually fire.
-    if (!data.message.meta?.queued) {
+    if (!incoming.meta?.queued) {
       const i = state.bots.findIndex((b) => b.name === bot);
       if (i >= 0 && data.message.created_at) {
         const prev = state.bots[i].last_message_at || "";
@@ -164,7 +252,8 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
     }
   }
   if (type === "message.delta" && data.id && data.bot) {
-    const list = state.messages[data.bot] || [];
+    if (!state.messages[data.bot]) state.messages[data.bot] = [];
+    const list = state.messages[data.bot];
     const i = list.findIndex((m) => m.id === data.id);
     if (i >= 0) {
       const prev = list[i];
@@ -173,30 +262,43 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
         content: (prev.content || "") + (data.delta || ""),
         meta: { ...(prev.meta || {}), streaming: true },
       };
+    } else {
+      // Entering a bot mid-stream can miss message.created — don't drop deltas.
+      list.push({
+        id: data.id,
+        bot: data.bot,
+        role: "assistant",
+        content: data.delta || "",
+        created_at: new Date().toISOString(),
+        meta: { streaming: true },
+      });
     }
   }
   if (type === "message.updated" && data.message) {
     const bot = data.message.bot;
     if (!state.messages[bot]) state.messages[bot] = [];
     const list = state.messages[bot];
-    dropOptimisticDupes(bot, data.message);
-    const i = list.findIndex((m) => m.id === data.message.id);
+    const inherit = dropOptimisticDupes(bot, data.message);
+    let incoming = withInheritedQueued(data.message, inherit);
+    data.message = incoming;
+    const i = list.findIndex((m) => m.id === incoming.id);
     const released =
       i >= 0 &&
       list[i].meta?.queued &&
-      !data.message.meta?.queued;
+      !incoming.meta?.queued;
     if (i >= 0) {
+      incoming = withPreservedQueueOrd(list[i], incoming);
+      data.message = incoming;
       if (released) {
         // Leave the early "draft" slot and append as a real turn.
         list.splice(i, 1);
-        list.push(data.message);
+        list.push(incoming);
       } else {
-        list[i] = data.message;
+        // Mid-stream DB flush can lag behind SSE deltas already applied.
+        list[i] = preferLiveStreamingMessage(list[i], incoming);
       }
-    } else if (!data.message.meta?.queued) {
-      list.push(data.message);
     } else {
-      list.push(data.message);
+      list.push(incoming);
     }
     if (released || !data.message.meta?.queued) {
       const bi = state.bots.findIndex((b) => b.name === bot);
@@ -219,8 +321,22 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
       markBotUnread(bot);
     }
   }
+  if (type === "message.deleted" && data.bot && data.id) {
+    const list = state.messages[data.bot];
+    if (list) {
+      state.messages[data.bot] = list.filter((m) => m.id !== data.id);
+    }
+  }
   if (type === "message.cleared" && data.bot) {
     state.messages[data.bot] = [];
+    state.threadPages[data.bot] = {
+      before: null,
+      hasMore: false,
+      boot: false,
+      paged: false,
+      older: false,
+    };
+    delete state.previews[data.bot];
     const i = state.bots.findIndex((b) => b.name === data.bot);
     if (i >= 0) {
       state.bots[i] = { ...state.bots[i], last_message_at: null };
@@ -263,6 +379,9 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
   ) {
     state.eventsFeed = { type, ...data, at: Date.now() };
   }
+  if (type === "files.changed" && data.bot) {
+    state.filesFeed = { type, ...data, at: Date.now() };
+  }
   if (type === "notification" && data.kind) {
     if (data.kind === "desk.running" && !fromBroadcast) {
       pushNotification(t("notify.deskRunning", { bot: data.bot }));
@@ -278,7 +397,10 @@ export function applyEvent(envelope, { fromBroadcast = false } = {}) {
     if (data.kind === "device.pairing" && !fromBroadcast) {
       pushNotification(t("notify.devicePairing", { name: data.name, code: data.code }));
     }
-    if (data.kind === "bot.busy" && data.bot) {
+    if (
+      (data.kind === "bot.busy" || data.kind === "bot.waiting") &&
+      data.bot
+    ) {
       const name = data.bot.name || data.bot;
       const i = state.bots.findIndex((b) => b.name === name);
       if (i >= 0 && data.bot.name) state.bots[i] = data.bot;

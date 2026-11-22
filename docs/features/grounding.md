@@ -2,22 +2,23 @@
 
 **Status**: in place (localisation only — no click)  
 **Key files**: `autonomous/services/grounding{,_image,_parse}.py`, `POST /bots/:name/screen/ground`, `vm_ground` (`pi_extensions/vm.ts`), `grounding.md`  
-**Last updated**: 2026-11-06 (grounder URL SSRF gate + redirect re-check)
+**Last updated**: 2026-11-18 (native ground without browser_snapshot)
 
 ## User behaviour
 
-- The Pi agent calls **`vm_ground`** (instruction in English).
+- The Pi agent calls **`vm_ground`** (instruction in English). When the latest `browser_snapshot` already lists the control, the server returns that `screen=` point and does not call the vision model. Vision still runs for a canvas, a native dialog, or a drawn widget.
+- On **native desktop apps** (calculator, XFCE dialogs, no browser DOM), grounding is the normal path: `vm_ground` → `vm_click` / `vm_type`. **No** `browser_snapshot` is required first — `observe_gate.shortcut_ground` returns `None` (run vision) when there is no DOM read. A stale empty browser page also allows vision. The system hint tells the agent not to replace that with `vm_look` loops or `xdotool` in the shell.
 - In the **chat**, capture, loop notes (UI-TARS, verdict, nudge, failure) and contiguous tools form a `ToolGroup`.
 - **During the run** (unsealed group): **live preview of the last tool call** (any of them: `vm_*`, `browser_*`, … — args + result).
 - **As soon as a message follows** (assistant, vault, etc.): the group is **sealed** → menu **collapsed** (unless the user opened it).
-- **No** special "Target" / "Pointer actions" sections: `vm_ground`, `vm_click`, `vm_drag`, `vm_scroll` are **tool lines** like the others (collapsed). Cross / notes / overlay only appear when you **expand** that line.
+- **No** special "Target" / "Pointer actions" sections: `vm_ground`, `vm_click`, `vm_drag`, `vm_scroll` are **tool lines** like the others. The folded bar shows **Grounding · N** when the group contains `vm_ground` calls. Opening the list shows each call (instruction on the `vm_ground` row) and the loop lines (`Grounding · boucle…`, UI-TARS, verdict) as their own rows. The crosshair image stays under the expanded `vm_ground` row.
 - Tool response: `{ ok, x, y, loops[], max_loops, … }` — **no click**.
 
 ## Guard-rails (Settings)
 
 | Key | Default | Role |
 |-----|--------|------|
-| `grounding.max_loops` | `2` | Grounder+check attempts (1–8), Settings UI. The four fields save by themselves (leaving the field or a short pause). |
+| `grounding.max_loops` | `2` | Attempts before giving up (1–8): aim, then check. On Settings → Grounding, **Enregistrer** is a full-width page action under the cards (no bubble) and writes the grounder fields and this limit together. Tester sits beside the model picker and turns green on success until the URL or token changes. |
 | `guard.review_every` | `100` | LLM review (steer) every N tools since the last user/webhook/cron message (`0` = off) |
 | `guard.max_actions` | `1000` | Hard stop after N tools (same window) |
 
@@ -63,13 +64,13 @@ POST /bots/:name/screen/ground
 
 - Saving `grounder_url` (and runtime `_chat_completions`) uses the same SSRF gate as LLM URLs; redirects are re-checked (`urlopen_safe`).
 - Role separation: the grounder points, the judge validates (short hollow reticle — no full-screen cross).
-- Don't redisplay capture / grounding notes as separate items: `meta.kind=grounding` and `meta.grounding` captures stay in the adjacent tool group.
+- Don't redisplay captures as their own thread items: `meta.grounding` screenshots stay under the expanded `vm_ground` row. Loop notes (`meta.kind=grounding`) stay inside that same tool group and are listed when the group is open — not hidden until the row is expanded.
 - Coords = original capture after remap.
 - `show_in_chat=false` for silent tests.
 - Restart the Pi session after changing `vm.ts`.
 - After `ok`: Pi tools `vm_click` / `vm_drag` / `vm_type` / `vm_scroll` depending on `action`.
 - Pi often omits `args` on `tool_execution_end`: Autonomous **keeps** those from the start + parses the result text → `meta.pointer` / `x,y,x2,y2` for the UI.
-- Web nav: see [`browser-nav.md`](./browser-nav.md) — **gesture decided before** the ground (`action_hint`); DOM via `browser_snapshot` / `browser_frames_snapshot`.
+- Web nav: see [`browser-nav.md`](./browser-nav.md) — a control listed by `browser_snapshot` is clicked at `screen=` with `vm_click`. `vm_ground` is for what that read does not list.
 - Slide drag: stretch only if `|dx|<160` and capped at ~240–320px (not 30% of the screen). Handle and target on the **same** Y row; `chrome_h` (~87) to map iframe→screen.
 
 ## Quick check

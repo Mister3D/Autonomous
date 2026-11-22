@@ -22,14 +22,13 @@
           />
           <div v-if="linkState !== 'connected'" class="novnc-status" :class="linkState">
             <p>{{ statusLabel }}</p>
-            <button
+            <UiButton
               v-if="linkState === 'error' || linkState === 'disconnected'"
               type="button"
-              class="btn"
               @click="retryNovnc"
             >
               {{ t("screen.reconnect") }}
-            </button>
+            </UiButton>
           </div>
           <button
             v-if="!state.humanControl && linkState === 'connected'"
@@ -60,18 +59,26 @@
       </ul>
     </div>
 
-    <div v-else-if="(waking || sleeping) && active" class="desk-status">
+    <div v-else-if="waking && active" class="desk-status">
       <h3>{{ t("desk.waking") }}</h3>
       <p v-if="wakeError" style="color: var(--danger)">{{ wakeError }}</p>
-      <button
+      <UiButton
         v-if="wakeError"
-        class="btn primary"
+        variant="primary"
         type="button"
         :disabled="waking"
         @click="wake"
       >
         {{ t("desk.wakeRetry") }}
-      </button>
+      </UiButton>
+    </div>
+
+    <div v-else-if="sleeping && active" class="desk-status is-center">
+      <h3>{{ t("desk.asleep") }}</h3>
+      <UiButton variant="primary" type="button" :disabled="waking" @click="wake">
+        {{ t("desk.wake") }}
+      </UiButton>
+      <p v-if="wakeError" class="desk-wake-error">{{ wakeError }}</p>
     </div>
     <!-- Keep a quiet placeholder while sleeping but tab not visible (v-show mount). -->
     <div v-else-if="sleeping || waking" class="empty" aria-hidden="true" />
@@ -79,14 +86,14 @@
     <div v-else-if="errored" class="desk-status">
       <h3>{{ t("status.error") }}</h3>
       <p style="color: var(--danger)">{{ bot.desk?.last_error || t("desk.createFailed") }}</p>
-      <button class="btn primary" @click="showCreate = true">{{ t("screen.create") }}</button>
+      <UiButton variant="primary" type="button" @click="showCreate = true">{{ t("screen.create") }}</UiButton>
     </div>
 
     <div v-else class="empty">
       <p>{{ t("screen.empty") }}</p>
-      <button class="btn primary" type="button" @click="showCreate = true">
+      <UiButton variant="primary" type="button" @click="showCreate = true">
         {{ t("screen.create") }}
-      </button>
+      </UiButton>
     </div>
   </div>
 </template>
@@ -98,10 +105,11 @@ import { api } from "../api";
 import { wakeBotDesk } from "../deskWake";
 import { state } from "../store";
 import CreateDeskModal from "./CreateDeskModal.vue";
+import UiButton from "./ui/UiButton.vue";
 
 const props = defineProps({
   bot: { type: Object, required: true },
-  /** True when the Screen tab is visible — triggers wake / noVNC refresh. */
+  /** True when the Screen tab is visible. Does not wake a sleeping desk. */
   active: { type: Boolean, default: false },
 });
 const { t } = useI18n();
@@ -116,6 +124,8 @@ const linkState = ref("idle");
 let releaseArmedAt = 0;
 let connectWatchdog = 0;
 let retryTimer = 0;
+/** While the user holds the desktop, ping often enough that the 5 min clock stays at zero. */
+let activityTimer = 0;
 
 const running = computed(
   () => props.bot.desk?.state === "running" && !!props.bot.desk?.vnc_port,
@@ -170,21 +180,30 @@ function armConnectWatchdog() {
   }, 20000);
 }
 
+function urlIsFor(name) {
+  return !!name && novncUrl.value.includes(`/novnc/${name}/`);
+}
+
 async function refreshNovnc({ bust = false } = {}) {
+  const botName = props.bot.name;
   clearTimers();
   if (!running.value) {
     novncUrl.value = "";
     linkState.value = "idle";
     return;
   }
+  // Same bot, already on screen: opening the tab again must not cover it.
+  // Another bot's connected iframe must not satisfy this — that was the stale desktop.
+  if (!bust && linkState.value === "connected" && urlIsFor(botName)) return;
   linkState.value = "loading";
   try {
-    const info = await api.novnc(props.bot.name);
+    const info = await api.novnc(botName);
+    if (botName !== props.bot.name) return;
     if (info.vnc_port) {
       const base =
         info.url ||
         info.direct_url ||
-        `/novnc/${props.bot.name}/vnc_lite.html?autoconnect=1&scale=true&path=novnc/${props.bot.name}/&v=8`;
+        `/novnc/${botName}/vnc_lite.html?autoconnect=1&scale=true&path=novnc/${botName}/&v=8`;
       novncUrl.value = bust ? `${base}${base.includes("?") ? "&" : "?"}r=${Date.now()}` : base;
       armConnectWatchdog();
     } else {
@@ -193,6 +212,7 @@ async function refreshNovnc({ bust = false } = {}) {
       retryTimer = window.setTimeout(() => refreshNovnc({ bust: true }), 2500);
     }
   } catch {
+    if (botName !== props.bot.name) return;
     novncUrl.value = "";
     linkState.value = "error";
     retryTimer = window.setTimeout(() => refreshNovnc({ bust: true }), 2500);
@@ -266,10 +286,28 @@ async function wake() {
   }
 }
 
+function stopActivityHold() {
+  if (activityTimer) {
+    clearInterval(activityTimer);
+    activityTimer = 0;
+  }
+}
+
+function holdActivity() {
+  if (!props.active || !state.humanControl || !running.value) return;
+  api.deskActivity(props.bot.name).catch(() => {});
+}
+
+function syncActivityHold() {
+  stopActivityHold();
+  if (!props.active || !state.humanControl || !running.value) return;
+  holdActivity();
+  activityTimer = window.setInterval(holdActivity, 60_000);
+}
+
 async function ensureVisible() {
   if (!props.active) return;
-  if (sleeping.value) await wake();
-  else if (running.value) await refreshNovnc({ bust: false });
+  if (running.value) await refreshNovnc({ bust: false });
 }
 
 watch(running, (isRunning) => {
@@ -281,9 +319,10 @@ watch(running, (isRunning) => {
   }
 });
 
-watch(sleeping, (asleep) => {
-  if (asleep && props.active) wake();
-});
+watch(
+  () => [props.active, state.humanControl, running.value],
+  () => syncActivityHold(),
+);
 
 watch(
   () => props.active,
@@ -294,10 +333,15 @@ watch(
 
 watch(
   () => props.bot.name,
-  () => {
+  (name, prev) => {
     state.humanControl = false;
     wakeError.value = "";
-    ensureVisible();
+    if (prev && prev !== name) {
+      clearTimers();
+      novncUrl.value = "";
+      linkState.value = "idle";
+    }
+    if (props.active && running.value) refreshNovnc({ bust: true });
   },
 );
 
@@ -309,6 +353,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearTimers();
+  stopActivityHold();
   document.removeEventListener("pointerdown", onDocPointerDown, true);
   window.removeEventListener("message", onNovncMessage);
 });
@@ -319,8 +364,27 @@ onUnmounted(() => {
   padding: 2rem 1.5rem;
   max-width: 520px;
 }
+.desk-status.is-center {
+  flex: 1;
+  align-self: stretch;
+  max-width: none;
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.85rem;
+}
 .desk-status h3 {
   margin: 0 0 1rem;
+}
+.desk-status.is-center h3 {
+  margin: 0;
+}
+.desk-wake-error {
+  margin: 0;
+  color: var(--danger);
 }
 .desk-step {
   margin: 0 0 0.75rem;
@@ -389,6 +453,20 @@ onUnmounted(() => {
   color: var(--text);
   font-size: 0.92rem;
   font-weight: 600;
+}
+.novnc-status.loading {
+  inset: auto;
+  top: 0.65rem;
+  left: 50%;
+  transform: translateX(-50%);
+  place-content: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg, #fff) 90%, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--line, #ddd) 80%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 10%, transparent);
+  font-size: 0.78rem;
+  pointer-events: none;
 }
 .novnc-status p {
   margin: 0;

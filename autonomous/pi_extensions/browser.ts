@@ -1,8 +1,8 @@
 /**
  * Chrome CDP tools for Pi (generic web nav — no site-specific logic).
  *
- * Action loop: browser_snapshot (DOM, no scroll) → choose gesture
- * (left/right/drag) → vm_ground(action_hint) → vm_click / vm_drag.
+ * Find controls in the DOM (screen=x,y). Act only with VNC (vm_click / vm_drag /
+ * vm_scroll) so the pointer moves like a hand. Never CDP-click.
  * Reveal off-screen targets with vm_scroll (VNC wheel), not CDP jump.
  * Never attach screenshots here.
  */
@@ -190,8 +190,13 @@ export default function (pi: ExtensionAPI) {
     name: "browser_navigate",
     label: "Browser navigate",
     description:
-      "Navigate the active Chrome tab to a URL (CDP). Prefer opening via bot-chrome " +
-      "once, then navigate. Generic — no site-specific helpers.",
+      "FIRST OPEN ONLY. The server refuses this as soon as a page is already " +
+      "open (code=url_change), including a reload or a link you can see. " +
+      "The first URL must be one the user wrote, or that site's homepage — " +
+      "a guessed path is refused (code=invented_url). After the open: click " +
+      "what you see (shortest path). Google search: click the address bar, " +
+      "type the query, Enter. Reload: click the refresh icon. Never type a " +
+      "site URL into the address bar.",
     parameters: Type.Object({
       url: Type.String({ description: "Absolute URL, e.g. https://example.com" }),
     }),
@@ -208,10 +213,13 @@ export default function (pi: ExtensionAPI) {
           { error: true },
         );
       }
-      return textResult(`Navigated to ${res.data?.navigated || params.url}.${sliderNote(res.data?.slider_hints)}`, {
-        ok: true,
-        navigated: res.data?.navigated,
-      });
+      const page = res.data?.page ? "\n\n" + res.data.page : "";
+      return textResult(
+        `Navigated to ${res.data?.navigated || params.url}.` +
+          `${sliderNote(res.data?.slider_hints)}` +
+          page,
+        { ok: true, navigated: res.data?.navigated },
+      );
     },
   });
 
@@ -220,10 +228,10 @@ export default function (pi: ExtensionAPI) {
     label: "Browser wait load",
     description:
       "Wait until the active page finished loading (document.readyState complete), " +
-      "bounded by a timeout. USE THIS instead of `sleep N` after a click, a form " +
-      "submit, a redirect or launching Chrome. Never blocks forever: if the page " +
-      "loads endlessly it returns timed_out=true after the timeout — the page is " +
-      "then usually already usable, so go on (browser_snapshot / vm_look).",
+      "bounded by a timeout. vm_click, vm_drag and Return already wait and " +
+      "return the new page — do not call this after them. Use it only after " +
+      "the first browser_navigate if that result has no page. Never blocks " +
+      "forever: timed_out=true means the page is usually already usable.",
     parameters: Type.Object({
       timeout: Type.Optional(
         Type.Number({ description: "Max seconds to wait (default 15, max 30)" }),
@@ -265,7 +273,8 @@ export default function (pi: ExtensionAPI) {
       "page that just says access is restricted / blocked with nothing to act on: " +
       "such a block is tied to the session state, not to you. NOT for a login page, " +
       "a verification widget you can still act on, or a slow page. " +
-      "Then browser_navigate to the site's homepage and start over (fresh visit). " +
+      "Then click the refresh icon and start over from what you see (fresh visit). " +
+      "Do not browser_navigate to another URL. " +
       "You will be logged out of that site; log in again afterwards. At most 2 resets " +
       "per site, then report to the user.",
     parameters: Type.Object({}),
@@ -283,7 +292,7 @@ export default function (pi: ExtensionAPI) {
       const d = res.data || {};
       return textResult(
         `Session cleared for ${d.origin || "current site"} (${(d.cleared || []).join(", ")}). ` +
-          "Now browser_navigate to the homepage and begin again.",
+          "Now click the refresh icon and begin again from what you see. Do not browser_navigate.",
         { ok: true, cleared: d.cleared },
       );
     },
@@ -294,7 +303,8 @@ export default function (pi: ExtensionAPI) {
     label: "Browser text",
     description:
       "Read visible text of the active Chrome page (innerText, truncated). " +
-      "Use to understand results / forms without screenshots. Prefer over dumping HTML.",
+      "vm_click and browser_snapshot already include an excerpt: call this " +
+      "only when that excerpt is missing the fact you need. Prefer over dumping HTML.",
     parameters: Type.Object({
       max_chars: Type.Optional(
         Type.Number({ description: "Max characters (default 8000)" }),
@@ -434,12 +444,11 @@ export default function (pi: ExtensionAPI) {
     name: "browser_snapshot",
     label: "Browser DOM snapshot",
     description:
-      "Read a compact list of interactive controls (buttons, links, inputs, sliders) " +
-      "via CDP WITHOUT scrolling or clicking — invisible to the page visually. " +
-      "Each in-view control has screen=x,y = desk pixels, CLICK-READY for vm_click " +
-      "(no vm_ground needed when the control is in the DOM and not [COVERED]). " +
-      "Use BEFORE choosing a gesture and BEFORE vm_ground. " +
-      "Check in_viewport: if false, vm_scroll first. Optional query filters text/name/href.",
+      "Read interactive controls WITHOUT scrolling or clicking. Each in-view " +
+      "control has screen=x,y = desk pixels for vm_click (real mouse — never " +
+      "browser_click_selector). Skip [COVERED] controls until the overlay is " +
+      "gone. Off-screen: vm_scroll first. Optional query filters text/name/href. " +
+      "vm_ground only if the control is absent here.",
     parameters: Type.Object({
       max_elements: Type.Optional(
         Type.Number({ description: "Max controls to return (default 60, max 120)" }),
@@ -467,6 +476,7 @@ export default function (pi: ExtensionAPI) {
       const d = res.data || {};
       const els = Array.isArray(d.elements) ? d.elements : [];
       const lines = [
+        "Click with vm_click at screen= (real mouse). Never browser_click_selector.",
         `url: ${d.url || "?"}`,
         `title: ${d.title || "?"}`,
         `scrollY: ${d.scrollY ?? "?"} / height: ${d.scrollHeight ?? "?"} (viewport ${d.innerHeight ?? "?"})`,
@@ -476,15 +486,14 @@ export default function (pi: ExtensionAPI) {
       const overlays = Array.isArray(d.overlays) ? d.overlays : [];
       if (overlays.length) {
         lines.push(
-          "!! BLOCKING OVERLAY on top of the page — clicks on the page underneath land " +
-            "on this layer. Deal with it FIRST (accept / refuse / close), then re-snapshot:",
+          "!! BLOCKING OVERLAY — vm_click its screen= point first (real mouse), then snapshot again:",
         );
         for (const ov of overlays) {
           lines.push(`   [${ov.kind}] "${String(ov.text || "").slice(0, 200)}"`);
           for (const c of Array.isArray(ov.controls) ? ov.controls : []) {
-            const b = c.bbox || {};
+            const s = c.screen || {};
             lines.push(
-              `   - ${c.tag} "${String(c.text || "").slice(0, 60)}" screen=${c.screen?.x},${c.screen?.y} bbox=${b.x},${b.y} ${b.w}x${b.h}`,
+              `   - ${c.tag} "${String(c.text || "").slice(0, 60)}" screen=${s.x},${s.y}`,
             );
           }
         }
@@ -503,18 +512,18 @@ export default function (pi: ExtensionAPI) {
           el.name ? `name=${el.name}` : "",
           el.href ? `→ ${String(el.href).slice(0, 100)}` : "",
           el.screen ? `screen=${el.screen.x},${el.screen.y}` : "",
-          el.bbox
-            ? `bbox=${el.bbox.x},${el.bbox.y} ${el.bbox.w}x${el.bbox.h}`
-            : "",
         ].filter(Boolean);
         lines.push("- " + bits.join(" "));
       }
       if (!els.length) {
         lines.push(
-          "(no control in the top document. If vm_look / the screen shows a form or widget, " +
-            "it lives inside an iframe: call browser_frames_snapshot — it returns screen=x,y " +
-            "for those controls, so you do NOT need vm_ground.)",
+          "(no control in the top document. If a form or widget is visible, " +
+            "call browser_frames_snapshot. If it is only drawn, vm_ground it. " +
+            "Do not invent a coordinate.)",
         );
+      }
+      if (d.text) {
+        lines.push("", "Visible text:", String(d.text).slice(0, 800));
       }
       return textResult(lines.join("\n"), {
         ok: true,
@@ -528,15 +537,10 @@ export default function (pi: ExtensionAPI) {
     name: "browser_frames_snapshot",
     label: "Browser frames snapshot",
     description:
-      "Like browser_snapshot but ALSO walks cross-origin iframes (verification " +
-      "widgets, embedded forms). Prefer calling it WITHOUT query (a query that matches " +
-      "nothing falls back to the full list). A slide-to-verify widget is detected and the " +
-      "ready-to-use vm_drag(x,y,x2,y2) is printed as « SLIDER WIDGET ». " +
-      "Returns center_screen / bbox_screen in desk pixels for " +
-      "vm_click / vm_drag. Use when the visible UI is a widget but browser_text is " +
-      "empty. Draggable handle: vm_drag from the handle's center_screen to the far end " +
-      "of its track (or to the target element if one exists). Retry/reload buttons: " +
-      "vm_click their center_screen first.",
+      "Like browser_snapshot, and also walks cross-origin iframes. screen= points " +
+      "are for vm_click / vm_drag (real mouse), not a CDP click. A « SLIDER WIDGET » " +
+      "line is one vm_drag at those coordinates. Prefer calling it WITHOUT query. " +
+      "A drawn widget with no controls: vm_ground inside the box, do not click its center.",
     parameters: Type.Object({
       max_elements: Type.Optional(
         Type.Number({ description: "Max controls per frame (default 60)" }),
@@ -584,14 +588,12 @@ export default function (pi: ExtensionAPI) {
       for (const fr of Array.isArray(d.frames) ? d.frames : []) {
         const fb = fr.box_screen;
         lines.push(
-          `## ${fr.type || "frame"} ${(fr.url || "").toString().slice(0, 100)}` +
-            (fb ? ` [box=${fb.x},${fb.y} ${fb.w}x${fb.h}]` : ""),
+          `## ${fr.type || "frame"} ${(fr.url || "").toString().slice(0, 100)}`,
         );
         if (fr.type === "iframe" && !(fr.elements || []).length && fb && fb.w > 40 && fb.h > 20) {
           lines.push(
-            "- (no readable controls: the widget is drawn inside the iframe — locate its " +
-              "checkbox/button with vm_ground inside this box, or vm_look; the box center is " +
-              `screen=${fb.x + Math.floor(fb.w / 2)},${fb.y + Math.floor(fb.h / 2)})`,
+            "- (no readable controls: the widget is drawn inside the iframe — " +
+              "vm_look, then vm_ground its checkbox or button. Do not click the box center.)",
           );
         }
         for (const el of Array.isArray(fr.elements) ? fr.elements : []) {
@@ -601,10 +603,7 @@ export default function (pi: ExtensionAPI) {
             el.className ? `class=${String(el.className).slice(0, 60)}` : "",
             el.id ? `id=${el.id}` : "",
             el.text ? `"${String(el.text).slice(0, 60)}"` : "",
-            `screen=${c.x},${c.y}`,
-            el.bbox_screen
-              ? `box=${el.bbox_screen.x},${el.bbox_screen.y} ${el.bbox_screen.w}x${el.bbox_screen.h}`
-              : "",
+            c.x != null ? `screen=${c.x},${c.y}` : "",
           ].filter(Boolean);
           lines.push("- " + bits.join(" "));
         }
@@ -622,8 +621,8 @@ export default function (pi: ExtensionAPI) {
     name: "browser_click_selector",
     label: "Browser click selector",
     description:
-      "CDP click + scrollIntoView — easy for anti-bot to spot. Prefer " +
-      "browser_snapshot → gesture → vm_ground → vm_click/vm_drag on protected sites.",
+      "CDP click + scrollIntoView. Do not use it: anti-bot systems flag a click " +
+      "with no real pointer. Use vm_click / vm_drag at the snapshot screen= point.",
     parameters: Type.Object({
       selector: Type.String({ description: "CSS selector" }),
     }),

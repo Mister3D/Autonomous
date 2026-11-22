@@ -5,9 +5,11 @@ Complement to [`README.md`](./README.md) (the README remains the **first** file 
 ## Obligations
 
 1. **Read** `docs/README.md` then the `features/` notes for the topic.
-2. **Document** every behaviour change in `docs/features/` (even a "small" one).
-3. HTTP API changed → also `docs/API.md` (summary); runtime truth = `/api/openapi.json`.
-4. Doc backlog: if tasks had already been given → catch up on the notes before piling on new vague work.
+2. **Discover the Vue UI**: skim [`features/vue-components.md`](./features/vue-components.md) on every docs onboarding. UI work → open the listed components / feature notes before adding files under `frontend/src/components/`.
+3. **Document** every behaviour change in `docs/features/` (even a "small" one). New/renamed/removed Vue component → update `vue-components.md` in the same change.
+4. HTTP API changed → also `docs/API.md` (summary); runtime truth = `/api/openapi.json`.
+5. Doc backlog: if tasks had already been given → catch up on the notes before piling on new vague work.
+6. **Bump the patch on every commit.** In the same commit, increment the third number of the app version in both `autonomous/__init__.py` (`__version__`) and `pyproject.toml` (`[project].version`) so they stay identical. Example: `0.1.0` → `0.1.1`. Docs-only commits count. Leave minor and major alone unless the user asks. Do not bump `frontend/`, `companion/`, or `avatar/` package versions for this.
 
 ## `features/*.md` note format
 
@@ -26,7 +28,8 @@ Complement to [`README.md`](./README.md) (the README remains the **first** file 
 
 ## Product reminders
 
-- French.
+- Chat with the human in **French** when they ask for it (user preference).
+- **Source code, tests, agent prompts, and `docs/features/`** stay in **English** (open-source / international). UI copy → `frontend/src/locales/{en,fr}.json` (and backend `autonomous/locales/` when used).
 - No package installs (`apt`/`pip`/global npm…) without agreement.
 - No PowerShell without permission.
 

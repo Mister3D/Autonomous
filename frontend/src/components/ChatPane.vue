@@ -48,13 +48,15 @@
         {{ tokenStats.tip }}
       </span>
     </div>
+    <div class="chat-surface">
     <div
       class="messages"
       :class="{ 'messages-placing': !threadPlaced }"
       ref="scroller"
       @scroll.passive="onMessagesScroll"
     >
-      <p v-if="!thread.length" class="empty">{{ t("chat.empty") }}</p>
+      <p v-if="historyBooting && !hasHistory" class="empty">{{ t("chat.loading") }}</p>
+      <p v-else-if="showEmpty" class="empty">{{ t("chat.empty") }}</p>
       <template v-for="item in thread" :key="item.id">
         <div v-if="item.kind === 'day'" class="day-sep">{{ item.label }}</div>
         <div v-else-if="item.kind === 'new'" class="new-sep">
@@ -62,24 +64,39 @@
         </div>
         <template v-else-if="item.kind === 'live'">
           <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
-            <div class="thinking-row waiting">
-              <span class="thinking-label">{{ t("desk.creating") }}</span>
+            <div class="thinking-stack">
+              <div class="thinking-row waiting">
+                <span class="thinking-label">{{ deskCreatingLabel }}</span>
+              </div>
             </div>
           </article>
           <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
-            <div class="thinking-row waiting">
-              <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
+            <div class="thinking-stack">
+              <div class="thinking-row waiting">
+                <span class="thinking-label">{{ waitingHumanLabel }}</span>
+              </div>
             </div>
           </article>
-          <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
-            <div class="thinking-row">
-              <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
-              <span class="thinking-label">{{ t("chat.working") }}</span>
+          <article v-else-if="showAgentOrb" class="msg assistant thinking" aria-live="polite">
+            <div class="thinking-stack">
+              <div class="thinking-row">
+                <WorkingOrb state="working" :size="22" :label="agentOrbLabel" />
+                <span class="thinking-label">{{ agentOrbLabel }}</span>
+                <button
+                  type="button"
+                  class="agent-stop-btn"
+                  :aria-label="t('chat.stop')"
+                  :title="t('chat.stopHint')"
+                  @click="stop"
+                >
+                  {{ t("chat.stop") }}
+                </button>
+              </div>
             </div>
           </article>
         </template>
         <article v-else-if="item.kind === 'tools'" class="msg tool" :data-msg-id="item.id">
-          <ToolGroup :entries="item.entries" :sealed="item.sealed" />
+          <ToolGroup :entries="item.entries" :sealed="item.sealed" :bot="bot.name" />
         </article>
         <article v-else-if="item.kind === 'notice'" class="msg notice" :data-msg-id="item.message.id">
           <div class="notice-card" :class="item.message.meta?.status">
@@ -113,6 +130,42 @@
           <div class="guard-card" :class="item.tone">
             <span class="guard-ico" aria-hidden="true">{{ item.icon }}</span>
             <span class="guard-title">{{ item.text }}</span>
+            <time
+              v-if="item.time"
+              class="guard-time"
+              :datetime="item.iso"
+            >{{ item.time }}</time>
+          </div>
+        </article>
+        <article v-else-if="item.kind === 'notebook'" class="msg notebook" :data-msg-id="item.id">
+          <div
+            class="notebook-card"
+            :class="[item.tier, item.action === 'close' ? 'removed' : 'added']"
+          >
+            <span class="notebook-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7">
+                <path d="M6 4.5h10.5A1.5 1.5 0 0 1 18 6v13.2a.8.8 0 0 1-1.2.7L14 18.4l-2.8 1.5L8.4 18.4 5.2 19.9A.8.8 0 0 1 4 19.2V6A1.5 1.5 0 0 1 5.5 4.5H6Z" />
+                <path d="M8.2 8.2h7.2M8.2 11.2h7.2M8.2 14.2h4.4" stroke-linecap="round" />
+              </svg>
+            </span>
+            <div class="notebook-card-main">
+              <span class="notebook-label">{{ item.label }}</span>
+              <span class="notebook-text">{{ item.text }}</span>
+            </div>
+            <time
+              v-if="item.time"
+              class="notebook-time"
+              :datetime="item.iso"
+            >{{ item.time }}</time>
+          </div>
+        </article>
+        <article v-else-if="item.kind === 'compaction'" class="msg guard" :data-msg-id="item.id">
+          <div class="guard-card compaction-card" :class="item.status">
+            <span class="guard-ico" aria-hidden="true">{{ item.icon }}</span>
+            <span class="guard-title">
+              {{ item.text }}
+              <small v-if="item.detail">{{ item.detail }}</small>
+            </span>
             <time
               v-if="item.time"
               class="guard-time"
@@ -156,6 +209,9 @@
         <article v-else-if="item.kind === 'approval'" class="msg approval" :data-msg-id="item.message.id">
           <ApprovalCard :message="item.message" />
         </article>
+        <article v-else-if="item.kind === 'bot_delete'" class="msg bot-delete" :data-msg-id="item.message.id">
+          <BotDeleteCard :message="item.message" :bot-name="bot.name" />
+        </article>
         <article v-else-if="item.kind === 'clarify'" class="msg clarify" :data-msg-id="item.message.id">
           <ClarifyCard :message="item.message" />
         </article>
@@ -197,8 +253,23 @@
             {{ sourceOf(item.message) }}
           </p>
           <div class="msg-row" :class="[item.message.role, { event: isEventTrigger(item.message) }]">
+            <div
+              v-if="item.message.role === 'user' && item.message.meta?.queued"
+              class="msg-time msg-queued-meta"
+            >
+              <span class="msg-queued-label">{{ t("chat.queued") }}</span>
+              <button
+                type="button"
+                class="msg-queued-cancel"
+                :title="t('chat.queuedCancel')"
+                :aria-label="t('chat.queuedCancel')"
+                @click.stop="cancelQueued(item.message)"
+              >
+                {{ t("chat.queuedCancel") }}
+              </button>
+            </div>
             <time
-              v-if="item.message.role === 'user' && msgStamp(item.message).time"
+              v-else-if="item.message.role === 'user' && msgStamp(item.message).time"
               class="msg-time"
               :datetime="item.message.created_at"
             >
@@ -265,8 +336,21 @@
                     botmail: !!botmailDirection(item.message),
                     sent: botmailDirection(item.message) === 'sent',
                     received: botmailDirection(item.message) === 'received',
+                    'botmail-open':
+                      !!botmailDirection(item.message) &&
+                      isBotmailExpanded(item.message),
+                    'botmail-collapsible':
+                      !!botmailDirection(item.message) &&
+                      botmailCollapsible(item.message),
                   },
                 ]"
+                :title="bubbleTitle(item.message)"
+                :aria-expanded="
+                  botmailCollapsible(item.message)
+                    ? isBotmailExpanded(item.message)
+                    : undefined
+                "
+                @click="onMessageBubbleClick(item.message, $event)"
               >
                 <div
                   v-if="botmailDirection(item.message)"
@@ -317,9 +401,26 @@
                     :style="{ color: avatarColor(botmailPeer(item.message).bot) }"
                   >@{{ botmailPeer(item.message).bot }}</a>
                 </div>
-                <span v-if="item.message.meta?.queued" class="msg-queued">
-                  {{ t("chat.queued") }}
-                </span>
+                <div
+                  v-if="botmailAttachments(item.message).length"
+                  class="botmail-files"
+                >
+                  <a
+                    v-for="(att, ai) in botmailAttachments(item.message)"
+                    :key="`${item.id}-mail-file-${ai}`"
+                    class="botmail-file"
+                    :href="botmailAttUrl(att)"
+                    :download="att.name || undefined"
+                    target="_blank"
+                    rel="noopener"
+                    @click.stop
+                  >
+                    <span class="botmail-file-name">{{ att.name || t("chat.mailFile") }}</span>
+                    <span v-if="att.size" class="botmail-file-size">{{
+                      formatBytes(att.size)
+                    }}</span>
+                  </a>
+                </div>
                 <div
                   v-if="isEventTrigger(item.message)"
                   class="event-trigger"
@@ -332,7 +433,15 @@
                         : t("chat.scheduleLabel")
                     }}
                     <template v-if="item.message.meta?.name">
-                      · {{ item.message.meta.name }}
+                      ·
+                      <button
+                        type="button"
+                        class="event-trigger-name"
+                        :title="t('events.showInstruction')"
+                        @click.stop="openEventInstruction(item.message)"
+                      >
+                        {{ item.message.meta.name }}
+                      </button>
                     </template>
                   </span>
                   <button
@@ -343,28 +452,33 @@
                   >
                     {{ t("chat.eventAnchor") }}
                   </button>
-                  <details
-                    v-if="item.message.meta?.has_payload || item.message.meta?.payload != null"
-                    class="event-payload"
-                  >
-                    <summary>{{ t("chat.webhookPayload") }}</summary>
-                    <pre>{{ formatPayload(item.message.meta?.payload) }}</pre>
-                  </details>
                 </div>
-                <span
-                  v-if="isEventTrigger(item.message)"
-                  v-html="render(eventDisplay(item.message))"
-                />
+                <div
+                  v-else-if="botmailDirection(item.message) && showBubbleText(item.message)"
+                  class="botmail-body"
+                  :class="{
+                    collapsed:
+                      botmailCollapsible(item.message) &&
+                      !isBotmailExpanded(item.message),
+                    expanded: isBotmailExpanded(item.message),
+                  }"
+                >
+                  <span
+                    class="botmail-body-html"
+                    v-html="renderBotmail(item.message)"
+                  />
+                  <span
+                    v-if="botmailCollapsible(item.message)"
+                    class="botmail-fold"
+                    aria-hidden="true"
+                  >{{
+                    isBotmailExpanded(item.message) ? "▴" : "▾"
+                  }}</span>
+                </div>
                 <span
                   v-else-if="showBubbleText(item.message)"
                   v-html="render(item.message)"
                 />
-                <span
-                  v-else-if="item.message.meta?.streaming && !item.message.content"
-                  class="thinking-inline"
-                >
-                  <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
-                </span>
               </div>
               <div
                 v-if="reactionsOf(item.message).length"
@@ -376,6 +490,32 @@
                   :key="emo"
                   class="msg-reaction"
                 >{{ emo }}</span>
+              </div>
+              <div
+                v-if="showQueuedActions(item.message)"
+                class="msg-queued-actions"
+              >
+                <button
+                  v-if="isFirstQueued(item.message)"
+                  type="button"
+                  class="msg-queued-action send"
+                  :disabled="sendingQueuedNow"
+                  :title="t('chat.queuedSendNowHint')"
+                  :aria-label="t('chat.queuedSendNow')"
+                  @click.stop="sendQueuedNow"
+                >
+                  {{ t("chat.queuedSendNow") }}
+                </button>
+                <button
+                  v-if="canEditQueued(item.message)"
+                  type="button"
+                  class="msg-queued-action edit"
+                  :title="t('chat.queuedEditHint')"
+                  :aria-label="t('chat.queuedEdit')"
+                  @click.stop="editQueued(item.message)"
+                >
+                  {{ t("chat.queuedEdit") }}
+                </button>
               </div>
             </div>
             <time
@@ -393,19 +533,34 @@
       </template>
       <template v-if="!hasQueued">
         <article v-if="deskCreating" class="msg assistant thinking" aria-live="polite">
-          <div class="thinking-row waiting">
-            <span class="thinking-label">{{ t("desk.creating") }}</span>
+          <div class="thinking-stack">
+            <div class="thinking-row waiting">
+              <span class="thinking-label">{{ deskCreatingLabel }}</span>
+            </div>
           </div>
         </article>
         <article v-else-if="waitingHuman" class="msg assistant thinking" aria-live="polite">
-          <div class="thinking-row waiting">
-            <span class="thinking-label">{{ t("chat.waitingHuman") }}</span>
+          <div class="thinking-stack">
+            <div class="thinking-row waiting">
+              <span class="thinking-label">{{ waitingHumanLabel }}</span>
+            </div>
           </div>
         </article>
-        <article v-else-if="waitingForReply" class="msg assistant thinking" aria-live="polite">
-          <div class="thinking-row">
-            <WorkingOrb state="working" :size="20" :label="t('chat.working')" />
-            <span class="thinking-label">{{ t("chat.working") }}</span>
+        <article v-else-if="showAgentOrb" class="msg assistant thinking" aria-live="polite">
+          <div class="thinking-stack">
+            <div class="thinking-row">
+              <WorkingOrb state="working" :size="22" :label="agentOrbLabel" />
+              <span class="thinking-label">{{ agentOrbLabel }}</span>
+              <button
+                type="button"
+                class="agent-stop-btn"
+                :aria-label="t('chat.stop')"
+                :title="t('chat.stopHint')"
+                @click="stop"
+              >
+                {{ t("chat.stop") }}
+              </button>
+            </div>
           </div>
         </article>
       </template>
@@ -417,7 +572,7 @@
       class="chat-jump-bottom"
       :aria-label="t('chat.jumpBottom')"
       :title="t('chat.jumpBottom')"
-      @click="scrollMessagesToBottom(true)"
+      @click="scrollMessagesToBottom(true, true)"
     >
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path
@@ -433,6 +588,18 @@
     <p v-if="secretRefuseHint" class="composer-secret-refuse" role="alert">
       {{ secretRefuseHint }}
     </p>
+    <div v-if="showRetryBar" class="composer-retry" role="status">
+      <p class="composer-retry-hint">{{ retryHint }}</p>
+      <button
+        type="button"
+        class="composer-retry-btn"
+        :disabled="retrying || waitingHuman"
+        @click="retryPending"
+      >
+        {{ retrying ? t("chat.retrying") : t("chat.retry") }}
+      </button>
+      <p v-if="retryFeedback" class="composer-retry-feedback">{{ retryFeedback }}</p>
+    </div>
     <form class="composer" @submit.prevent="send">
       <button
         class="icon-btn"
@@ -499,10 +666,7 @@
             ref="composer"
             v-model="text"
             rows="1"
-            :placeholder="
-              runLocked ? t('chat.placeholderQueue') : t('chat.placeholderTo', { name: bot.label || bot.name })
-            "
-            :title="t('chat.newlineHint')"
+            :placeholder="composerPlaceholder"
             @keydown="onComposerKey"
             @paste="onPaste"
             @input="onComposerInput"
@@ -540,17 +704,7 @@
         </div>
       </div>
       <button
-        v-if="busy"
-        class="send-btn working"
-        type="button"
-        :aria-label="t('chat.stop')"
-        :title="t('chat.stopHint')"
-        @click="stop"
-      >
-        <WorkingOrb state="working" :size="20" dark :label="t('chat.working')" />
-      </button>
-      <button
-        v-else-if="deskCreating || waitingHuman"
+        v-if="deskCreating || waitingHuman"
         class="send-btn working waiting"
         type="button"
         :aria-label="t('chat.stop')"
@@ -572,17 +726,36 @@
         </svg>
       </button>
     </form>
+    </div>
+    <EventInstructionModal
+      :open="!!eventInstructionModal"
+      :name="eventInstructionModal?.name || ''"
+      :instruction="eventInstructionModal?.instruction || ''"
+      :kind="eventInstructionModal?.kind || 'webhook'"
+      :show-payload="!!eventInstructionModal?.showPayload"
+      :payload="eventInstructionModal?.payload || ''"
+      @close="eventInstructionModal = null"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { api } from "../api";
 import { state } from "../store";
+import { loadOlderMessages, threadBooting, threadHasMore } from "../threadPages";
 import { avatarColor } from "../avatarColor";
 import {
   colorizeMentionsInHtml,
@@ -598,21 +771,36 @@ import ToolGroup from "./ToolGroup.vue";
 import VaultRequestCard from "./VaultRequestCard.vue";
 import MemoryProposalCard from "./MemoryProposalCard.vue";
 import ApprovalCard from "./ApprovalCard.vue";
+import BotDeleteCard from "./BotDeleteCard.vue";
 import ClarifyCard from "./ClarifyCard.vue";
 import DeskRequestCard from "./DeskRequestCard.vue";
 import AgentResumeCard from "./AgentResumeCard.vue";
+import EventInstructionModal from "./EventInstructionModal.vue";
 import WorkingOrb from "./WorkingOrb.vue";
+import {
+  getComposerDraft,
+  setComposerDraft,
+  clearComposerDraft,
+  getComposerPending,
+  setComposerPending,
+  clearComposerPending,
+} from "../composerDrafts.js";
+import { formatDurationMs } from "../runTimings";
 
-/** Pasted vision images (LLM often caps at 2/prompt; extras deferred server-side). */
-const MAX_PENDING_IMAGES = 2;
+/** Pasted images kept in the chat. The model receives a smaller copy. */
+const MAX_PENDING_IMAGES = 16;
+const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
 
 const props = defineProps({ bot: { type: Object, required: true } });
 const { t, locale } = useI18n();
 const router = useRouter();
-const text = ref("");
-const pending = ref([]);
+const text = ref(getComposerDraft(props.bot?.name));
+const pending = ref(getComposerPending(props.bot?.name).slice());
 const scroller = ref(null);
 const composer = ref(null);
+const compactComposerPh = ref(
+  typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
+);
 const secretRefuseHint = ref("");
 const mirror = ref(null);
 const fileInput = ref(null);
@@ -621,6 +809,8 @@ const uploading = ref(false);
 const mentionOpen = ref(false);
 const mentionIndex = ref(0);
 const mentionQuery = ref(null);
+/** After Escape, keep the menu closed for this @ token (keyup would reopen it). */
+let mentionDismissedStart = null;
 const flashMsgId = ref("");
 const tokenTipOpen = ref(false);
 /** Auto-follow new messages only while the user stays near the bottom. */
@@ -675,8 +865,31 @@ const busy = computed(() => props.bot.status === "busy");
 /** VM boot in progress — not an agent run yet. */
 const deskCreating = computed(() => props.bot.desk?.state === "creating");
 /** Agent mid-run but blocked on vault/desk user approval. */
+/** Pending vault / desk / approval / clarify / delete card in the thread. */
+const hasPendingHumanCard = computed(() => {
+  const msgs = state.messages[props.bot.name] || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    const kind = m?.meta?.kind;
+    const st = m?.meta?.state;
+    if (
+      (kind === "desk_request" ||
+        kind === "vault_request" ||
+        kind === "approval_request" ||
+        kind === "clarify_request" ||
+        kind === "bot_delete_request") &&
+      st === "pending"
+    ) {
+      return true;
+    }
+  }
+  return false;
+});
+
 const waitingHuman = computed(
-  () => props.bot.status === "waiting" && !deskCreating.value
+  () =>
+    !deskCreating.value &&
+    (props.bot.status === "waiting" || hasPendingHumanCard.value)
 );
 const runLocked = computed(
   () => busy.value || waitingHuman.value || deskCreating.value
@@ -685,12 +898,94 @@ const canSend = computed(
   () => !uploading.value && (!!text.value.trim() || pending.value.length > 0)
 );
 
-/** Orbe en bas du fil tant qu’aucune bulle assistant n’est encore en streaming. */
+/** True only before the first streaming token (retry-bar logic). */
 const waitingForReply = computed(() => {
   if (!busy.value || waitingHuman.value) return false;
   const msgs = state.messages[props.bot.name] || [];
   return !msgs.some((m) => m.role === "assistant" && m.meta?.streaming);
 });
+/** Left-side orb for the whole run, including tools and streaming text. */
+const showAgentOrb = computed(() => busy.value && !waitingHuman.value);
+
+/** Live phase key while the agent (or a wait) is active. */
+const runTimingPhaseKey = computed(() => {
+  if (deskCreating.value) return "desk";
+  if (waitingHuman.value) return "wait";
+  if (!busy.value) return "";
+  const msgs = state.messages[props.bot.name] || [];
+  let lastUser = -1;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m?.role !== "user" || m?.meta?.hidden_prompt || m?.meta?.queued) continue;
+    lastUser = i;
+    break;
+  }
+  const slice = lastUser >= 0 ? msgs.slice(lastUser + 1) : msgs;
+  for (let i = slice.length - 1; i >= 0; i--) {
+    const m = slice[i];
+    if (m?.meta?.kind === "tool" && m?.meta?.status === "running") {
+      const name = String(m.meta.tool_name || m.meta.name || "tool").trim() || "tool";
+      return `tool:${name}`;
+    }
+  }
+  if (slice.some((m) => m?.role === "assistant" && m?.meta?.streaming)) {
+    return "reply";
+  }
+  return "reflect";
+});
+
+function runTimingPhaseLabel(key) {
+  if (!key) return "";
+  if (key === "reflect") return t("chat.timing.reflect");
+  if (key === "reply") return t("chat.timing.reply");
+  if (key === "wait") return t("chat.waitingHuman");
+  if (key === "desk") return t("desk.creating");
+  if (key.startsWith("tool:")) return key.slice(5) || t("chat.timing.tool");
+  return key;
+}
+
+const runTimingNowMs = ref(Date.now());
+const runTimingPhaseStartedAt = ref(Date.now());
+let runTimingTick = 0;
+
+const runTimingLiveLabel = computed(() => {
+  const key = runTimingPhaseKey.value;
+  if (!key) return "";
+  const ms = Math.max(0, runTimingNowMs.value - runTimingPhaseStartedAt.value);
+  const dur = formatDurationMs(ms);
+  const label = runTimingPhaseLabel(key);
+  return dur ? `${label} · ${dur}` : label;
+});
+
+const agentOrbLabel = computed(() =>
+  runTimingLiveLabel.value || t("chat.working")
+);
+
+const deskCreatingLabel = computed(() => {
+  if (runTimingPhaseKey.value !== "desk") {
+    return t("desk.creating");
+  }
+  return runTimingLiveLabel.value || t("desk.creating");
+});
+
+/** No live chrono while waiting on the human — that clock is noise. */
+const waitingHumanLabel = computed(() => t("chat.waitingHuman"));
+
+watch(
+  runTimingPhaseKey,
+  () => {
+    runTimingNowMs.value = Date.now();
+    runTimingPhaseStartedAt.value = Date.now();
+  },
+  { flush: "sync" }
+);
+
+watch(
+  () => props.bot?.name,
+  () => {
+    runTimingPhaseStartedAt.value = Date.now();
+  }
+)
 
 const otherBots = computed(() =>
   (state.bots || []).filter((b) => b.name && b.name !== props.bot.name)
@@ -709,12 +1004,19 @@ const composerHighlight = computed(() =>
   composerHighlightHtml(text.value, state.bots || [])
 );
 
+const composerPlaceholder = computed(() => {
+  if (runLocked.value) return t("chat.placeholderQueue");
+  if (compactComposerPh.value) return t("chat.placeholderToMobile");
+  return t("chat.placeholderTo", { name: props.bot.label || props.bot.name });
+});
+
 function autosize() {
   const el = composer.value;
   if (!el) return;
   el.style.height = "auto";
   const max = 160;
-  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  const min = 32; /* match --composer-btn */
+  el.style.height = `${Math.min(Math.max(el.scrollHeight, min), max)}px`;
   syncMirrorScroll();
 }
 
@@ -728,17 +1030,33 @@ function syncMirrorScroll() {
 function syncMentionQuery() {
   const el = composer.value;
   if (!el) {
+    mentionDismissedStart = null;
     closeMentions();
     return;
   }
   const q = mentionQueryAt(text.value, el.selectionStart ?? text.value.length);
   if (!q) {
+    mentionDismissedStart = null;
     closeMentions();
     return;
   }
+  // Escape closed this @ — ignore keyup/click until the user starts a new @.
+  if (mentionDismissedStart !== null && q.start === mentionDismissedStart) {
+    return;
+  }
+  mentionDismissedStart = null;
+  const prev = mentionQuery.value;
+  const sameQuery =
+    prev &&
+    prev.start === q.start &&
+    String(prev.query || "").toLowerCase() === String(q.query || "").toLowerCase();
   mentionQuery.value = q;
   mentionOpen.value = true;
-  mentionIndex.value = 0;
+  // ArrowUp/Down also fire keyup → keep the highlighted row unless the filter changed.
+  if (!sameQuery) mentionIndex.value = 0;
+  else if (mentionIndex.value >= mentionMatches.value.length) {
+    mentionIndex.value = Math.max(0, mentionMatches.value.length - 1);
+  }
 }
 
 function closeMentions() {
@@ -775,28 +1093,54 @@ function pickMention(bot) {
 }
 
 function onComposerKey(e) {
-  if (mentionOpen.value && mentionMatches.value.length) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      mentionIndex.value = (mentionIndex.value + 1) % mentionMatches.value.length;
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const n = mentionMatches.value.length;
-      mentionIndex.value = (mentionIndex.value - 1 + n) % n;
-      return;
-    }
-    if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      pickMention(mentionMatches.value[mentionIndex.value]);
-      return;
-    }
+  if (mentionOpen.value) {
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
+      const el = composer.value;
+      const q =
+        mentionQuery.value ||
+        (el
+          ? mentionQueryAt(text.value, el.selectionStart ?? text.value.length)
+          : null);
+      mentionDismissedStart = q?.start ?? null;
       closeMentions();
       return;
     }
+    if (mentionMatches.value.length) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        mentionIndex.value = (mentionIndex.value + 1) % mentionMatches.value.length;
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = mentionMatches.value.length;
+        mentionIndex.value = (mentionIndex.value - 1 + n) % n;
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickMention(mentionMatches.value[mentionIndex.value]);
+        return;
+      }
+    }
+  }
+  if (
+    e.key === "ArrowUp" &&
+    !e.shiftKey &&
+    !e.altKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.isComposing &&
+    !String(text.value || "").trim()
+  ) {
+    const message = latestEditableQueued();
+    if (message) {
+      e.preventDefault();
+      editQueued(message);
+    }
+    return;
   }
   if (e.key !== "Enter" || e.isComposing) return;
   if (e.shiftKey) return;
@@ -926,6 +1270,109 @@ function showBubbleShell(message) {
   return showBubbleText(message);
 }
 
+async function cancelQueued(message) {
+  const bot = props.bot.name;
+  const id = message?.id;
+  if (!bot || !id || !message?.meta?.queued) return false;
+  const list = state.messages[bot] || [];
+  const idx = list.findIndex((m) => m.id === id);
+  const snapshot = idx >= 0 ? list[idx] : null;
+  state.messages[bot] = list.filter((m) => m.id !== id);
+  if (String(id).startsWith("tmp-")) {
+    recalledTemps.add(String(id));
+    return true;
+  }
+  try {
+    await api.deleteQueuedMessage(bot, id);
+    return true;
+  } catch (e) {
+    if (snapshot) {
+      const cur = state.messages[bot] || [];
+      if (!cur.some((m) => m.id === id)) {
+        const next = cur.slice();
+        next.splice(Math.min(idx, next.length), 0, snapshot);
+        state.messages[bot] = next;
+      }
+    }
+    alert(e.message || String(e));
+    return false;
+  }
+}
+
+const sendingQueuedNow = ref(false);
+
+function compareQueued(a, b) {
+  const oa = Number(a?.meta?.queue_ord);
+  const ob = Number(b?.meta?.queue_ord);
+  const aOrd = Number.isFinite(oa);
+  const bOrd = Number.isFinite(ob);
+  if (aOrd && bOrd && oa !== ob) return oa - ob;
+  if (aOrd && !bOrd) return -1;
+  if (!aOrd && bOrd) return 1;
+  const byTime = String(a.created_at || "").localeCompare(String(b.created_at || ""));
+  if (byTime) return byTime;
+  return String(a.id || "").localeCompare(String(b.id || ""));
+}
+
+const firstQueuedId = computed(() => {
+  const list = (state.messages[props.bot.name] || [])
+    .filter((m) => m?.meta?.queued && !m?.meta?.hidden_prompt && !m?.meta?.hold)
+    .slice()
+    .sort(compareQueued);
+  return list[0]?.id ?? null;
+});
+
+function isFirstQueued(message) {
+  const id = message?.id;
+  return id != null && id === firstQueuedId.value;
+}
+
+function canEditQueued(message) {
+  if (message?.meta?.hold) return false;
+  if (message?.role !== "user" || !message?.meta?.queued) return false;
+  if (isEventTrigger(message) || botmailDirection(message)) return false;
+  return true;
+}
+
+/** Newest plain user bubble still waiting to be sent. */
+function latestEditableQueued() {
+  const list = (state.messages[props.bot.name] || [])
+    .filter((m) => canEditQueued(m) && String(m.content || "").trim())
+    .slice()
+    .sort(compareQueued);
+  return list.length ? list[list.length - 1] : null;
+}
+
+function showQueuedActions(message) {
+  return isFirstQueued(message) || canEditQueued(message);
+}
+
+async function sendQueuedNow() {
+  if (sendingQueuedNow.value) return;
+  sendingQueuedNow.value = true;
+  try {
+    await stop();
+  } finally {
+    sendingQueuedNow.value = false;
+  }
+}
+
+async function editQueued(message) {
+  if (!canEditQueued(message)) return;
+  const content = String(message?.content || "");
+  const removed = await cancelQueued(message);
+  if (!removed) return;
+  text.value = content;
+  await nextTick();
+  autosize();
+  const el = composer.value;
+  el?.focus();
+  if (el && typeof el.setSelectionRange === "function") {
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }
+}
+
 function pendingImageCount() {
   return pending.value.filter((p) => p.kind === "image").length;
 }
@@ -937,6 +1384,10 @@ async function addPendingImages(files) {
     if (pendingImageCount() >= MAX_PENDING_IMAGES) {
       alert(t("chat.tooManyImages", { count: MAX_PENDING_IMAGES }));
       break;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      alert(t("chat.imageTooLarge"));
+      continue;
     }
     try {
       const dataUrl = await fileToDataUrl(file);
@@ -954,7 +1405,7 @@ async function addPendingImages(files) {
   }
 }
 
-/** Picker / drop → ~/shared/upload/<uuid>/<name>. */
+/** Picker / drop → ~/files/upload/<uuid>/<name>. */
 async function addPendingUploads(fileList) {
   const files = [...(fileList || [])].filter(Boolean);
   if (!files.length) return;
@@ -1092,10 +1543,12 @@ function rewriteWorkspaceImages(content, botName) {
       if (!raw) return full;
       if (raw.includes(`/api/v1/bots/${botName}/files/raw`)) return full;
       if (/^https?:\/\//i.test(raw) || raw.startsWith("data:")) return full;
-      // Local-ish path: renard.svg, shared/x.png, ./foo.jpg
+      // Local-ish path: renard.svg, files/x.png, shared/x.png, ./foo.jpg
       const path = raw
         .replace(/^\/+/, "")
         .replace(/^\.\//, "")
+        .replace(/^~\/files\//, "")
+        .replace(/^files\//, "")
         .replace(/^~\/shared\//, "")
         .replace(/^shared\//, "");
       if (!path || path.includes("..")) return full;
@@ -1103,6 +1556,15 @@ function rewriteWorkspaceImages(content, botName) {
       return `![${alt}](${src})`;
     },
   );
+}
+
+/** Escape raw HTML so marked/DOMPurify cannot swallow the rest of the message.
+ *  E.g. user text « … et <script setup>. » must not open a real <script> tag.
+ *  Only angle brackets — leave & alone so markdown URLs with query strings stay intact. */
+function escapeRawHtml(text) {
+  return String(text || "")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function render(messageOrContent) {
@@ -1118,7 +1580,9 @@ function render(messageOrContent) {
       "",
     );
   }
-  const content = rewriteWorkspaceImages(raw, botName);
+  // Escape before markdown so tags in prose (Vue <script setup>, generics, …)
+  // stay visible. marked still builds <p>/<strong>/images from markdown syntax.
+  const content = rewriteWorkspaceImages(escapeRawHtml(raw), botName);
   const md = marked.parse(content || "", { breaks: true, gfm: true });
   const withMentions = colorizeMentionsInHtml(String(md), state.bots || [], {
     message,
@@ -1287,16 +1751,89 @@ const HIDDEN_TOOL_CARDS = new Set([
   "memory_list",
   "memory_get",
   "memory_search",
+  "notebook_list",
+  "notebook_get",
+  "notebook_remember",
+  "notebook_close",
   "ask_approval",
   "ask_clarify",
   "report_user_secret",
   "chat_search",
   "react",
+  // Autorisation VM : DeskRequestCard only.
+  "vm_request_desk",
 ]);
 
 function isEventTrigger(m) {
   const kind = m?.meta?.kind;
   return kind === "schedule" || kind === "webhook";
+}
+
+const eventInstructionModal = ref(null);
+
+/** Standing instruction for a fire card (meta, or stripped content for older msgs). */
+function eventCarrierInstruction(m) {
+  const meta = m?.meta || {};
+  const fromMeta = String(meta.instruction || "").trim();
+  if (fromMeta) return fromMeta;
+  let text = String(m?.content || "").trim();
+  text = text.replace(/^La tâche planifiée « [^»]* » dit ceci :\s*/i, "");
+  text = text.replace(/^Webhook déclenché avec une charge\.\s*/i, "");
+  text = text.replace(/^Webhook déclenché\.\s*/i, "");
+  text = text.replace(/\n+Contexte ancré : message \S+\s*$/i, "");
+  text = text.replace(/\n+Payload\s*:\s*[\s\S]*$/i, "");
+  return text.trim();
+}
+
+function eventPayloadText(m) {
+  const meta = m?.meta || {};
+  if (meta.payload != null && meta.payload !== "") {
+    const formatted = formatPayload(meta.payload).trim();
+    if (formatted && formatted !== "{}") return formatted;
+  }
+  for (const blob of [meta.agent_prompt, m?.content]) {
+    const text = String(blob || "");
+    const match = text.match(/(?:^|\n)Payload\s*:\s*\n?([\s\S]*)$/i);
+    if (match && match[1].trim()) return match[1].trim();
+  }
+  return "";
+}
+
+function openEventInstruction(m) {
+  if (!isEventTrigger(m)) return;
+  const meta = m?.meta || {};
+  const kind = meta.kind === "schedule" ? "schedule" : "webhook";
+  eventInstructionModal.value = {
+    name: String(meta.name || "").trim() || "—",
+    instruction: eventCarrierInstruction(m),
+    kind,
+    showPayload: kind === "webhook",
+    payload: eventPayloadText(m),
+  };
+}
+
+function bubbleTitle(m) {
+  if (isEventTrigger(m)) {
+    return m?.meta?.kind === "webhook"
+      ? t("chat.readPayload")
+      : t("events.showInstruction");
+  }
+  if (botmailCollapsible(m)) {
+    return isBotmailExpanded(m) ? t("chat.mailCollapse") : t("chat.mailExpand");
+  }
+  return undefined;
+}
+
+function onMessageBubbleClick(m, ev) {
+  if (isEventTrigger(m)) {
+    const target = ev?.target;
+    if (target && typeof target.closest === "function") {
+      if (target.closest("a, button, input, textarea, summary, pre, code")) return;
+    }
+    openEventInstruction(m);
+    return;
+  }
+  onBotmailBubbleClick(m, ev);
 }
 
 function isNotify(m) {
@@ -1353,20 +1890,84 @@ function botmailLead(m) {
   return "";
 }
 
-/** Instruction seule, sans le préambule déjà dit par la première ligne. */
-function eventInstruction(m) {
-  let text = String(m?.content || "").trim();
-  text = text.replace(/^La tâche planifiée « [^»]* » dit ceci :\s*/i, "");
-  text = text.replace(/^Webhook déclenché avec une charge\.\s*/i, "");
-  text = text.replace(/^Webhook déclenché\.\s*/i, "");
-  text = text.replace(/\n+Contexte ancré : message \S+\s*$/i, "");
-  text = text.trim();
-  if (text === "(aucune instruction)") return "";
-  return text;
+/** Expanded botmail cards (click toggles). Keys = message id. */
+const botmailExpanded = reactive({});
+
+function botmailPlainBody(m) {
+  let raw = String(m?.content || "").trim();
+  if (botmailDirection(m) === "received") {
+    raw = raw.replace(
+      /^@[a-zA-Z0-9_-]+\s+m['’]a envoyé un message\s*:\s*/i,
+      "",
+    );
+  }
+  return raw.trim();
 }
 
-function eventDisplay(m) {
-  return t("chat.eventSent", { text: eventInstruction(m) });
+/** Drop a leading ATX heading marker so collapsed previews stay body-sized. */
+function botmailPreviewText(text) {
+  return String(text || "")
+    .replace(/^\s{0,3}#{1,6}\s+/, "")
+    .trim();
+}
+
+/** First sentence (period must be followed by space/end — keeps Vue.js / paths intact). */
+function botmailFirstSentence(text) {
+  const flat = String(text || "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const m = flat.match(/^(.+?(?:[.!?…](?=\s|$)))/);
+  if (m) return m[1].trim();
+  const line = String(text || "").split(/\n/, 1)[0].trim();
+  if (line.length <= 160) return line;
+  return `${line.slice(0, 157).trimEnd()}…`;
+}
+
+function botmailCollapsible(m) {
+  if (!botmailDirection(m)) return false;
+  const full = botmailPlainBody(m);
+  if (!full) return false;
+  const first = botmailFirstSentence(full);
+  if (!first) return false;
+  return full.slice(first.length).replace(/^\s+/, "").length > 0;
+}
+
+function isBotmailExpanded(m) {
+  return !!(m?.id && botmailExpanded[m.id]);
+}
+
+function renderBotmail(m) {
+  if (!botmailCollapsible(m) || isBotmailExpanded(m)) return render(m);
+  return render(botmailPreviewText(botmailFirstSentence(botmailPlainBody(m))));
+}
+
+function onBotmailBubbleClick(m, ev) {
+  if (!botmailCollapsible(m)) return;
+  const t = ev?.target;
+  if (t && typeof t.closest === "function") {
+    if (t.closest("a, button, input, textarea, summary, pre, code")) return;
+  }
+  const id = m?.id;
+  if (!id) return;
+  botmailExpanded[id] = !botmailExpanded[id];
+}
+
+function botmailAttachments(m) {
+  const list = m?.meta?.attachments;
+  return Array.isArray(list) ? list.filter((a) => a && (a.name || a.path)) : [];
+}
+
+function botmailAttUrl(att) {
+  if (att?.url) return att.url;
+  const path = att?.path || "";
+  if (!path) return "#";
+  return api.downloadUrl(props.bot.name, path);
+}
+
+function formatBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return `${v} B`;
+  if (v < 1024 * 1024) return `${(v / 1024).toFixed(v < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(v / (1024 * 1024)).toFixed(v < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
 function formatPayload(payload) {
@@ -1405,6 +2006,10 @@ function isApproval(m) {
   return m?.role === "event" && m?.meta?.kind === "approval_request";
 }
 
+function isBotDelete(m) {
+  return m?.role === "event" && m?.meta?.kind === "bot_delete_request";
+}
+
 function isClarify(m) {
   return m?.role === "event" && m?.meta?.kind === "clarify_request";
 }
@@ -1425,6 +2030,101 @@ function isGuardSystem(m) {
   return m?.role === "system" && m?.meta?.kind === "guard";
 }
 
+function isCompaction(m) {
+  return m?.role === "system" && m?.meta?.kind === "compaction";
+}
+
+function isNotebook(m) {
+  return m?.role === "system" && m?.meta?.kind === "notebook";
+}
+
+function notebookItem(m) {
+  const d = parseDate(m.created_at);
+  const time = d ? formatMsgTime(m.created_at, locale.value) : "";
+  const meta = m.meta || {};
+  const tier = String(meta.tier || "note");
+  const action = String(meta.action || "set");
+  const text = String(meta.text || meta.title || m.content || "");
+  let labelKey = "chat.notebookAddedNote";
+  if (action === "close") labelKey = "chat.notebookRemovedLabel";
+  else if (tier === "order") labelKey = "chat.notebookAddedOrder";
+  else if (tier === "open") labelKey = "chat.notebookAddedOpen";
+  return {
+    kind: "notebook",
+    id: m.id,
+    tier,
+    action,
+    label: t(labelKey),
+    text,
+    time,
+    iso: m.created_at || "",
+  };
+}
+
+function formatTok(n) {
+  const value = Number(n);
+  if (!Number.isFinite(value)) return "";
+  if (value >= 1000) return `${Math.round(value / 1000)}k`;
+  return String(value);
+}
+
+function compactionItem(m) {
+  const d = parseDate(m.created_at);
+  const time = d ? formatMsgTime(m.created_at, locale.value) : "";
+  const meta = m.meta || {};
+  const status = String(meta.status || "done");
+  const knownReason = ["threshold", "overflow", "manual"].includes(meta.reason)
+    ? meta.reason
+    : "";
+  const reason = knownReason ? t(`chat.compactionReason.${knownReason}`) : "";
+  let text = t("chat.compactionDone");
+  let icon = "✓";
+  if (status === "running") {
+    text = t("chat.compactionRunning");
+    icon = "…";
+  } else if (status === "error") {
+    text = t("chat.compactionError");
+    icon = "!";
+  } else if (status === "aborted") {
+    text = t("chat.compactionAborted");
+    icon = "–";
+  }
+  const bits = [];
+  if (reason) bits.push(reason);
+  if (meta.chunked && Number(meta.passes) > 1) {
+    bits.push(t("chat.compactionPasses", { n: Number(meta.passes) }));
+  }
+  if (status === "error" && meta.hint === "lower_thinking") {
+    bits.push(t("chat.compactionHintLowerThinking"));
+  }
+  if (
+    status === "done" &&
+    Number.isFinite(Number(meta.tokens_before)) &&
+    Number.isFinite(Number(meta.tokens_after))
+  ) {
+    bits.push(
+      t("chat.compactionTokens", {
+        before: formatTok(meta.tokens_before),
+        after: formatTok(meta.tokens_after),
+      })
+    );
+  }
+  return {
+    kind: "compaction",
+    id: `compaction-${m.id}`,
+    status,
+    icon,
+    text,
+    detail: bits.join(" · "),
+    time,
+    iso: m.created_at || "",
+  };
+}
+
+function isLlmTurn(m) {
+  return m?.role === "system" && m?.meta?.kind === "llm_turn";
+}
+
 function isSecretLeak(m) {
   if (m?.role !== "system") return false;
   const kind = m?.meta?.kind;
@@ -1435,14 +2135,35 @@ function isSecretLeak(m) {
   );
 }
 
-/** Hard agent failures posted as `⚠️ …` assistant bubbles — show as centered red cards. */
+/**
+ * Host hard-failure assistant bubbles (`⚠️ pi process ended`, RPC timeout, …).
+ * Not ordinary bot prose that happens to open with a warning emoji.
+ */
+function isHardFailureText(raw, meta = {}) {
+  const text = String(raw || "").trim();
+  if (!text) return false;
+  if (meta?.aborted || meta?.error) {
+    return (
+      /^\s*⚠️/.test(text) ||
+      text === String(meta.error || "").trim() ||
+      /^⏹\s*Stopped\.?$/i.test(text)
+    );
+  }
+  if (!/^\s*⚠️\s+\S/.test(text)) return false;
+  const body = text.replace(/^\s*⚠️\s*/, "").trim();
+  // Real host failures are one short line — not a multi-paragraph reply.
+  if (body.includes("\n")) return false;
+  if (body.length > 240) return false;
+  // Bot emphasis often puts markdown right after the emoji (e.g. `⚠️ **Alert**`).
+  if (/^(\*\*|__|#{1,6}\s|>\s)/.test(body)) return false;
+  return true;
+}
+
+/** Hard agent failures → centred red cards (not left bubbles). */
 function isAgentError(m) {
   if (m?.role !== "assistant") return false;
   if (m?.meta?.streaming) return false;
-  const raw = String(m?.content || "").trim();
-  if (!raw) return false;
-  if (m?.meta?.error) return /^\s*⚠️/.test(raw) || raw === String(m.meta.error).trim();
-  return /^\s*⚠️\s+\S/.test(raw);
+  return isHardFailureText(m?.content, m?.meta || {});
 }
 
 function agentErrorItem(m) {
@@ -1502,6 +2223,18 @@ function guardItem(m) {
         text: t("chat.guardReview", { count: meta.action_count ?? "?" }),
       };
     }
+    if (meta.guard_continue) {
+      return {
+        ...base,
+        icon: "🧭",
+        tone: "continue",
+        text: t("chat.guardContinue"),
+      };
+    }
+    // Legacy "tools blocked" notices — hide (review card is enough).
+    if (meta.guard_blocked) {
+      return null;
+    }
     const raw = String(m.content || "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
     return {
       ...base,
@@ -1538,7 +2271,13 @@ function isGroundingShot(m) {
 function isActivity(m) {
   // Fold vm_screenshot cards into the tool group so they don't split the run
   // (standalone screenshot between tools). Workspace images use markdown, not this.
-  return isTool(m) || isGrounding(m) || isScreenshot(m);
+  // LLM turns sit in the same tool group as Réflexion rows.
+  return (
+    isTool(m) ||
+    isGrounding(m) ||
+    isScreenshot(m) ||
+    isLlmTurn(m)
+  );
 }
 
 function parseDate(iso) {
@@ -1576,12 +2315,12 @@ function sourceOf(m) {
 
 const thread = computed(() => {
   const all = (state.messages[props.bot.name] || []).filter(
-    (m) => !m?.meta?.hidden_prompt
+    (m) => !m?.meta?.hidden_prompt && !m?.meta?.hold
   );
   const queued = all
     .filter((m) => m?.meta?.queued)
     .slice()
-    .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    .sort(compareQueued);
   const msgs = all.filter((m) => !m?.meta?.queued);
   const items = [];
   let lastKey = "";
@@ -1594,17 +2333,106 @@ const thread = computed(() => {
   let activityBuf = [];
   let awaitNotifyAck = false;
 
-  function flushActivity() {
-    if (!activityBuf.length) return;
-    items.push({
-      kind: "tools",
-      id: `tools-${activityBuf[0].id}`,
-      entries: activityBuf.slice(),
-    });
-    activityBuf = [];
+  /**
+   * Drop orphan seal-only reflections (« [tool X] », no tokens).
+   * Keep strict created_at order — no sticky reordering.
+   */
+  function pruneOrphanLlmSeals(entries) {
+    const out = [];
+    for (const m of entries) {
+      if (!isLlmTurn(m)) {
+        out.push(m);
+        continue;
+      }
+      const meta = m.meta || {};
+      const resp = String(meta.response || "").trim();
+      const seal = resp.match(/^\[tool\s+([^\]]+)\]$/i);
+      const noTok =
+        !Number.isFinite(Number(meta.tokens_in)) &&
+        !Number.isFinite(Number(meta.tokens_out));
+      if (seal && noTok && !meta.response_file) continue;
+      out.push(m);
+    }
+    return out;
   }
 
-  for (const m of msgs) {
+  function sortByCreatedAt(entries) {
+    return entries
+      .slice()
+      .sort((a, b) =>
+        String(a?.created_at || "").localeCompare(String(b?.created_at || ""))
+      );
+  }
+
+  function flushActivity() {
+    if (!activityBuf.length) return;
+    const entries = sortByCreatedAt(pruneOrphanLlmSeals(activityBuf));
+    activityBuf = [];
+    // Keep mid-run asides (run_text) inside the tool group, between tool rows —
+    // not a separate run_progress stack outside (that looked like a final bubble
+    // then shrank).
+    if (entries.length) {
+      items.push({
+        kind: "tools",
+        id: `tools-${entries[0].id}`,
+        entries,
+      });
+    }
+  }
+
+  function pushHumanCard(kind, m) {
+    flushActivity();
+    awaitNotifyAck = false;
+    items.push({ kind, id: m.id, message: m });
+  }
+
+  function isEmptyAssistant(m) {
+    return (
+      m?.role === "assistant" &&
+      !(m.content || "").trim() &&
+      !m?.meta?.streaming &&
+      !(m.attachments && m.attachments.length)
+    );
+  }
+
+  /**
+   * Next thread message after ``fromIdx``, skipping hidden/empty rows and
+   * trailing llm_turn cards. A seal reflection after the final assistant reply
+   * must not force that reply into run_text.
+   */
+  function nextAfterLlmTurns(fromIdx) {
+    for (let j = fromIdx; j < msgs.length; j++) {
+      const n = msgs[j];
+      if (isHiddenTool(n)) continue;
+      if (isEmptyAssistant(n)) continue;
+      if (awaitNotifyAck && isNotifyAck(n)) continue;
+      if (isLlmTurn(n)) continue;
+      return n;
+    }
+    return null;
+  }
+
+  /** Pasteable chat image markdown — must stay a real bubble (not plain run_progress). */
+  function hasChatImageMarkdown(m) {
+    return /!\[[^\]]*\]\([^)\s]+\)/.test(String(m?.content || ""));
+  }
+
+  /** Assistant text mid-run stays with the tool group so order stays chronological. */
+  function isRunContinue(n) {
+    if (!n) return false;
+    // llm_turns alone are not a "run continues" signal — see nextAfterLlmTurns.
+    if (isTool(n) || isGrounding(n) || isScreenshot(n)) return true;
+    return (
+      isVault(n) ||
+      isApproval(n) ||
+      isClarify(n) ||
+      isDeskReq(n) ||
+      isBotDelete(n)
+    );
+  }
+
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i];
     const d = parseDate(m.created_at);
     if (d) {
       const key = dayKey(d);
@@ -1631,32 +2459,62 @@ const thread = computed(() => {
     if (isHiddenTool(m)) {
       continue;
     }
+    if (isEmptyAssistant(m)) {
+      continue;
+    }
+    // Mid-run asides: stay in the tool group (chronological). Never fold image
+    // markdown (must stay a real bubble) or GUARD:CONTINUE/STOP (centred card).
+    // Look past llm_turns so a seal after the final reply does not mis-classify
+    // it. While the bot is still busy and no later item exists yet, fold too —
+    // otherwise the aside flashes as a full bubble then shrinks when the next
+    // tool arrives.
+    if (
+      m?.role === "assistant" &&
+      activityBuf.length &&
+      !hasChatImageMarkdown(m) &&
+      !guardReply(m)
+    ) {
+      const next = nextAfterLlmTurns(i + 1);
+      if (isRunContinue(next) || (!next && busy.value)) {
+        activityBuf.push({
+          ...m,
+          meta: { ...(m.meta || {}), kind: "run_text" },
+        });
+        continue;
+      }
+    }
     if (isActivity(m)) {
       activityBuf.push(m);
       continue;
     }
-    flushActivity();
-    awaitNotifyAck = false;
     if (isVault(m)) {
-      items.push({ kind: "vault", id: m.id, message: m });
+      pushHumanCard("vault", m);
       continue;
     }
     if (isMemoryProposal(m)) {
+      flushActivity();
+      awaitNotifyAck = false;
       items.push({ kind: "memory", id: m.id, message: m });
       continue;
     }
     if (isApproval(m)) {
-      items.push({ kind: "approval", id: m.id, message: m });
+      pushHumanCard("approval", m);
+      continue;
+    }
+    if (isBotDelete(m)) {
+      pushHumanCard("bot_delete", m);
       continue;
     }
     if (isClarify(m)) {
-      items.push({ kind: "clarify", id: m.id, message: m });
+      pushHumanCard("clarify", m);
       continue;
     }
     if (isDeskReq(m)) {
-      items.push({ kind: "desk", id: m.id, message: m });
+      pushHumanCard("desk", m);
       continue;
     }
+    flushActivity();
+    awaitNotifyAck = false;
     if (isResume(m)) {
       items.push({ kind: "resume", id: m.id, message: m });
       continue;
@@ -1670,14 +2528,26 @@ const thread = computed(() => {
       continue;
     }
     if (isGuardSystem(m)) {
-      items.push(guardItem(m));
+      const g = guardItem(m);
+      if (g) items.push(g);
+      continue;
+    }
+    if (isCompaction(m)) {
+      items.push(compactionItem(m));
+      continue;
+    }
+    // Folded into tool groups via isActivity — skip stray leftovers.
+    if (isLlmTurn(m)) {
+      continue;
+    }
+    if (isNotebook(m)) {
+      items.push(notebookItem(m));
       continue;
     }
     const reply = guardReply(m);
     if (reply) {
       items.push(guardItem(m));
       if (reply.rest.trim()) {
-        // Texte après le jeton : bulle normale juste sous la carte.
         items.push({
           kind: "msg",
           id: `${m.id}-rest`,
@@ -1689,15 +2559,50 @@ const thread = computed(() => {
     items.push({ kind: "msg", id: m.id, message: m });
   }
   flushActivity();
-  // Tool groups stay "live" (open + last result) until a later chat item appears.
-  // The live indicator sits just above queued sends, which stay at the bottom
-  // without folding the live tool group.
+  // message_end often seals the final llm_turn *after* the assistant bubble is
+  // written → a lone « 1 réflexion » bar under the reply (same content). Pull
+  // those llm-only groups back into the preceding tools group (above the bubble).
+  for (let i = 0; i < items.length; ) {
+    const it = items[i];
+    if (
+      it.kind !== "tools" ||
+      !it.entries?.length ||
+      !it.entries.every((e) => isLlmTurn(e))
+    ) {
+      i += 1;
+      continue;
+    }
+    let prevTools = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      const k = items[j].kind;
+      if (k === "tools") {
+        prevTools = j;
+        break;
+      }
+      if (k === "msg" && items[j].message?.role === "assistant") continue;
+      break;
+    }
+    if (prevTools >= 0) {
+      items[prevTools].entries = sortByCreatedAt([
+        ...items[prevTools].entries,
+        ...it.entries,
+      ]);
+      items.splice(i, 1);
+      continue;
+    }
+    i += 1;
+  }
+  // Guard cards must not seal tool groups (that collapsed the live panel and
+  // jumped the thread). Walking backwards: only the last tools group stays
+  // live; earlier ones seal. Stay unsealed between tools of the active group
+  // (do not toggle on !running — that flashed the live line every call).
   let laterContent = false;
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    if (it.kind === "day" || it.kind === "new") continue;
+    if (it.kind === "day" || it.kind === "new" || it.kind === "guard" || it.kind === "notebook") continue;
     if (it.kind === "tools") {
       it.sealed = laterContent;
+      laterContent = true;
     } else {
       laterContent = true;
     }
@@ -1713,41 +2618,270 @@ const thread = computed(() => {
 
 const hasQueued = computed(() =>
   (state.messages[props.bot.name] || []).some(
-    (m) => m?.meta?.queued && !m?.meta?.hidden_prompt
+    (m) => m?.meta?.queued && !m?.meta?.hidden_prompt && !m?.meta?.hold
   )
 );
 
+const hasPendingResume = computed(() =>
+  (state.messages[props.bot.name] || []).some(
+    (m) =>
+      m?.role === "event" &&
+      m?.meta?.kind === "agent_interrupted" &&
+      m?.meta?.state === "pending"
+  )
+);
+
+function lastUserIndex(all, { includeOptimistic = true } = {}) {
+  for (let i = all.length - 1; i >= 0; i--) {
+    const m = all[i];
+    if (m?.role !== "user" || m?.meta?.hidden_prompt || m?.meta?.queued) continue;
+    if (!includeOptimistic && String(m?.id || "").startsWith("tmp-")) continue;
+    return i;
+  }
+  return -1;
+}
+
+const hasRunningTools = computed(() =>
+  (state.messages[props.bot.name] || []).some(
+    (m) => m?.meta?.kind === "tool" && m?.meta?.status === "running"
+  )
+);
+
+/**
+ * Idle bot: last turn ended on a real failure bubble (⚠️ / abort / stop).
+ * "User message, no assistant yet" is the normal post-send gap — never a retry.
+ */
+const lastTurnFailed = computed(() => {
+  const all = state.messages[props.bot.name] || [];
+  const lastUser = lastUserIndex(all, { includeOptimistic: false });
+  if (lastUser < 0) return false;
+  let sawFailure = false;
+  for (let i = lastUser + 1; i < all.length; i++) {
+    const m = all[i];
+    if (m?.role === "user") break;
+    if (m?.role !== "assistant") continue;
+    const meta = m.meta || {};
+    const text = String(m.content || "").trim();
+    if (meta.streaming) return false;
+    if (!text || isHardFailureText(text, meta)) {
+      sawFailure = true;
+      continue;
+    }
+    return false;
+  }
+  return sawFailure;
+});
+
+/**
+ * Busy run with an error/abort bubble. Silence is not stuck: a thinking model
+ * can sit for minutes with no visible token. The Working orb covers that.
+ */
+const stuckBusy = computed(() => {
+  if (!busy.value || waitingHuman.value || hasRunningTools.value) return false;
+  const all = state.messages[props.bot.name] || [];
+  const lastUser = lastUserIndex(all, { includeOptimistic: false });
+  if (lastUser < 0) return false;
+  for (let i = all.length - 1; i > lastUser; i--) {
+    const m = all[i];
+    if (m?.role !== "assistant") continue;
+    const meta = m.meta || {};
+    const text = String(m.content || "").trim();
+    if (isHardFailureText(text, meta)) return true;
+    return false;
+  }
+  return false;
+});
+
+/** Live work even if bot.status briefly lags behind SSE (streaming / tools / orb). */
+const agentLive = computed(
+  () =>
+    busy.value ||
+    waitingForReply.value ||
+    hasRunningTools.value ||
+    (state.messages[props.bot.name] || []).some(
+      (m) => m?.role === "assistant" && m?.meta?.streaming
+    )
+);
+
+/**
+ * Queue left while truly idle — Relancer only after auto-drain had a chance.
+ * Between two drained turns status flickers ``idle`` with messages still « En file »;
+ * without this grace the bar flashes « Des messages sont en file » mid-burst.
+ */
+const IDLE_QUEUE_GRACE_MS = 2000;
+const idleQueuedStuck = ref(false);
+let idleQueuedTimer = 0;
+watch(
+  () =>
+    !waitingHuman.value &&
+    !agentLive.value &&
+    !stuckBusy.value &&
+    hasQueued.value,
+  (idleWithQueue) => {
+    clearTimeout(idleQueuedTimer);
+    idleQueuedTimer = 0;
+    if (!idleWithQueue) {
+      idleQueuedStuck.value = false;
+      return;
+    }
+    idleQueuedStuck.value = false;
+    idleQueuedTimer = window.setTimeout(() => {
+      idleQueuedStuck.value =
+        !waitingHuman.value &&
+        !agentLive.value &&
+        !stuckBusy.value &&
+        hasQueued.value;
+    }, IDLE_QUEUE_GRACE_MS);
+  },
+  { immediate: true }
+);
+
+const showRetryBar = computed(() => {
+  if (waitingHuman.value) return false;
+  // Resume card already has Reprendre — never stack Relancer on top.
+  if (hasPendingResume.value) return false;
+  // Healthy live run (busy / streaming / tools): Working orb drains the queue after
+  // the turn — never Relancer. Soft/hard stuck is the only busy exception.
+  if (agentLive.value && !stuckBusy.value) return false;
+  return (
+    idleQueuedStuck.value ||
+    stuckBusy.value ||
+    (!agentLive.value && lastTurnFailed.value)
+  );
+});
+
+const retryHint = computed(() => {
+  if (stuckBusy.value) return t("chat.retryHintStuck");
+  if (idleQueuedStuck.value) return t("chat.retryHintQueued");
+  if (lastTurnFailed.value) return t("chat.retryHintFailed");
+  return t("chat.retryHint");
+});
+
+const retrying = ref(false);
+const retryFeedback = ref("");
+let retryFeedbackTimer = 0;
+
+async function retryPending() {
+  if (retrying.value || waitingHuman.value) return;
+  retrying.value = true;
+  retryFeedback.value = "";
+  clearTimeout(retryFeedbackTimer);
+  try {
+    const out = await api.retryBot(props.bot.name);
+    const action = out?.action || "noop";
+    if (action === "drained") retryFeedback.value = t("chat.retryDoneDrained");
+    else if (action === "resumed") retryFeedback.value = t("chat.retryDoneResumed");
+    else retryFeedback.value = t("chat.retryDoneNone");
+  } catch (e) {
+    retryFeedback.value = e?.message || String(e);
+  } finally {
+    retrying.value = false;
+    retryFeedbackTimer = window.setTimeout(() => {
+      retryFeedback.value = "";
+    }, 4000);
+  }
+}
+
+function absoluteScrollTop(el) {
+  return Math.max(0, el.scrollHeight - el.clientHeight);
+}
+
 function isNearBottom(el) {
   if (!el) return true;
-  return Math.abs(followScrollTop(el) - el.scrollTop) <= NEAR_BOTTOM_PX;
+  // One target only: the real bottom (incl. « En file »). A second “peek”
+  // target used to fight manual scroll and saccade near the queue.
+  return Math.abs(absoluteScrollTop(el) - el.scrollTop) <= NEAR_BOTTOM_PX;
+}
+
+let messagesScrollUiTimer = 0;
+
+function pulseMessagesScrollbar() {
+  const el = scroller.value;
+  if (!el) return;
+  el.classList.add("messages-scrolling");
+  clearTimeout(messagesScrollUiTimer);
+  messagesScrollUiTimer = window.setTimeout(() => {
+    el.classList.remove("messages-scrolling");
+  }, 2000);
+}
+
+const historyBooting = computed(() => threadBooting(props.bot.name));
+const hasHistory = computed(() =>
+  (state.messages[props.bot.name] || []).some((m) => !m?.meta?.hidden_prompt),
+);
+const showEmpty = computed(() => !historyBooting.value && !hasHistory.value);
+const loadingOlder = ref(false);
+
+function revealThread() {
+  if (router.currentRoute.value.query?.msg) {
+    threadPlaced.value = true;
+    return;
+  }
+  if (!hasHistory.value && historyBooting.value) {
+    threadPlaced.value = true;
+    return;
+  }
+  scrollMessagesToBottom(true);
+}
+
+async function fillIfShort() {
+  const name = props.bot.name;
+  let rounds = 0;
+  while (rounds++ < 6 && threadHasMore(name)) {
+    const el = scroller.value;
+    if (!el || el.scrollHeight > el.clientHeight + 8) break;
+    const added = await loadOlderMessages(name);
+    if (!added) break;
+    await nextTick();
+  }
 }
 
 function onMessagesScroll() {
   stickToBottom.value = isNearBottom(scroller.value);
+  pulseMessagesScrollbar();
+  maybeLoadOlder();
 }
 
-function followScrollTop(el) {
-  const max = Math.max(0, el.scrollHeight - el.clientHeight);
-  const firstQueued = el.querySelector('[data-queued="1"]');
-  if (!firstQueued) return max;
-  const liveBottom =
-    el.scrollTop +
-    (firstQueued.getBoundingClientRect().top - el.getBoundingClientRect().top);
-  const queueHeight = Math.max(0, el.scrollHeight - liveBottom);
-  // Keep the bot's latest update on screen, with the queue peeking under it.
-  const reserved = Math.min(queueHeight, Math.round(el.clientHeight * 0.34));
-  return Math.max(0, Math.min(max, liveBottom - (el.clientHeight - reserved)));
+async function maybeLoadOlder() {
+  const el = scroller.value;
+  const name = props.bot.name;
+  if (!el || loadingOlder.value || !threadHasMore(name)) return;
+  if (el.scrollHeight <= el.clientHeight + 8) return;
+  if (el.scrollTop > 160) return;
+  const prevHeight = el.scrollHeight;
+  const prevTop = el.scrollTop;
+  loadingOlder.value = true;
+  stickToBottom.value = false;
+  try {
+    const added = await loadOlderMessages(name);
+    await nextTick();
+    const delta = el.scrollHeight - prevHeight;
+    if (added && delta > 0) el.scrollTop = prevTop + delta;
+  } finally {
+    loadingOlder.value = false;
+  }
 }
 
-function scrollMessagesToBottom(force = false) {
+/** @param {boolean} force ignore stickToBottom
+ *  @param {boolean} [_absolute] kept for call sites; follow is always the true end */
+function scrollMessagesToBottom(force = false, _absolute = false) {
   const el = scroller.value;
   if (!el) return;
   if (!force && !stickToBottom.value) return;
   stickToBottom.value = true;
-  const top = followScrollTop(el);
+  const top = absoluteScrollTop(el);
   if (Math.abs(top - el.scrollTop) > 1) el.scrollTop = top;
   threadPlaced.value = true;
 }
+
+/** Serialize composer POSTs so rapid 7/8/9/10 hit the API in type order. */
+let sendChain = Promise.resolve();
+/** In-flight composer sends (incl. waiting on the chain) — forces « En file » UI. */
+let sendsPending = 0;
+/** Optimistic ids pulled back with ArrowUp before their POST returned. */
+const recalledTemps = new Set();
+/** Monotonic order for queued bubbles (survives optimistic → server created_at swap). */
+let queueOrdSeq = 0;
 
 async function send() {
   const content = text.value.trim();
@@ -1761,18 +2895,34 @@ async function send() {
   if ((!content && !attachments.length) || uploading.value) return;
   secretRefuseHint.value = "";
   stickToBottom.value = true;
-  // Vide tout de suite : l’appel serveur peut lancer l’agent et durer.
-  text.value = "";
-  pending.value = [];
-  closeMentions();
   // Optimistic bubble — visible the instant send is pressed, before HTTP returns.
   const bot = props.bot.name;
+  // Clear right away: the server call may start the agent and take a while.
+  text.value = "";
+  pending.value = [];
+  clearComposerDraft(bot);
+  clearComposerPending(bot);
+  closeMentions();
   const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const alreadyWaiting = (state.messages[bot] || []).some(
+  const msgsNow = state.messages[bot] || [];
+  const alreadyWaiting = msgsNow.some(
     (m) =>
       m?.role === "user" &&
       (m?.meta?.queued || String(m?.id || "").startsWith("tmp-"))
   );
+  // Match server pre-queue: show « En file » immediately (no blue→queued flash).
+  const agentLooksBusy =
+    runLocked.value ||
+    hasRunningTools.value ||
+    msgsNow.some(
+      (m) =>
+        m?.role === "assistant" &&
+        (m?.meta?.streaming || m?.meta?.status === "running")
+    );
+  // Another send already in flight → this one will park behind it.
+  const optimisticQueued = agentLooksBusy || alreadyWaiting || sendsPending > 0;
+  sendsPending += 1;
+  const queueOrd = ++queueOrdSeq;
   const optimistic = {
     id: tempId,
     bot,
@@ -1782,64 +2932,122 @@ async function send() {
     attachments: attachments.map((a) =>
       typeof a === "string" ? { type: "image", url: a } : a
     ),
-    meta: runLocked.value || alreadyWaiting ? { queued: true } : {},
+    meta: optimisticQueued
+      ? { queued: true, queue_ord: queueOrd }
+      : { queue_ord: queueOrd },
     created_at: new Date().toISOString(),
   };
   if (!state.messages[bot]) state.messages[bot] = [];
   state.messages[bot].push(optimistic);
   await nextTick();
   autosize();
-  scrollMessagesToBottom(true);
-  try {
-    const saved = await api.sendMessage(bot, content, attachments);
-    const list = state.messages[bot] || [];
-    // Remove every optimistic twin (SSE may already have inserted the real id).
-    for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i]?.id === tempId) list.splice(i, 1);
-    }
-    if (saved?.id) {
-      const existingIdx = list.findIndex((m) => m.id === saved.id);
-      if (existingIdx >= 0) list[existingIdx] = saved;
-      else list.push(saved);
-      // Same content under another tmp- id (setup / double-tap).
+  // True bottom so the just-sent bubble (incl. « En file ») is fully on screen.
+  scrollMessagesToBottom(true, true);
+
+  const run = async () => {
+    try {
+      const saved = await api.sendMessage(bot, content, attachments);
+      const list = state.messages[bot] || [];
+      // Remove every optimistic twin (SSE may already have inserted the real id).
       for (let i = list.length - 1; i >= 0; i--) {
-        const m = list[i];
-        if (!m?.id || m.id === saved.id) continue;
-        if (!String(m.id).startsWith("tmp-")) continue;
-        if (m.role === saved.role && String(m.content || "") === String(saved.content || "")) {
-          list.splice(i, 1);
+        if (list[i]?.id === tempId) list.splice(i, 1);
+      }
+      if (recalledTemps.has(tempId)) {
+        recalledTemps.delete(tempId);
+        if (saved?.id) {
+          for (let i = list.length - 1; i >= 0; i--) {
+            if (list[i]?.id === saved.id) list.splice(i, 1);
+          }
+        }
+        // ArrowUp already put the text back. Drop the server copy only if it
+        // is still waiting; a run that already started keeps its bubble.
+        if (saved?.id && saved.meta?.queued) {
+          try {
+            await api.deleteQueuedMessage(bot, saved.id);
+          } catch {
+            if (!list.some((m) => m.id === saved.id)) list.push(saved);
+          }
+        } else if (saved?.id && !list.some((m) => m.id === saved.id)) {
+          list.push(saved);
+        }
+      } else if (saved?.id) {
+        // Keep send-order stamp so the file does not jump when created_at swaps.
+        const stamped = {
+          ...saved,
+          meta: {
+            ...(saved.meta || {}),
+            queue_ord:
+              Number.isFinite(Number(saved.meta?.queue_ord))
+                ? saved.meta.queue_ord
+                : queueOrd,
+          },
+        };
+        const existingIdx = list.findIndex((m) => m.id === stamped.id);
+        if (existingIdx >= 0) {
+          const prev = list[existingIdx];
+          const prevOrd = Number(prev?.meta?.queue_ord);
+          list[existingIdx] = {
+            ...stamped,
+            meta: {
+              ...stamped.meta,
+              queue_ord: Number.isFinite(Number(stamped.meta?.queue_ord))
+                ? stamped.meta.queue_ord
+                : Number.isFinite(prevOrd)
+                  ? prevOrd
+                  : queueOrd,
+            },
+          };
+        } else list.push(stamped);
+        // Same content under another tmp- id (setup / double-tap).
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          if (!m?.id || m.id === stamped.id) continue;
+          if (!String(m.id).startsWith("tmp-")) continue;
+          if (m.role === stamped.role && String(m.content || "") === String(stamped.content || "")) {
+            list.splice(i, 1);
+          }
         }
       }
-    }
-    for (const p of keptPending) {
-      if (p.preview) URL.revokeObjectURL(p.preview);
-    }
-  } catch (e) {
-    const list = state.messages[bot] || [];
-    const tempIdx = list.findIndex((m) => m.id === tempId);
-    if (tempIdx >= 0) list.splice(tempIdx, 1);
-    const code = e?.code || e?.data?.code || e?.data?.error_code || "";
-    const isSecretRefuse =
-      code === "secret_disclosure" ||
-      /divulgation|vault secret|secret_disclosure/i.test(String(e?.message || ""));
-    if (!text.value.trim()) text.value = content;
-    if (!pending.value.length) pending.value = keptPending;
-    else {
       for (const p of keptPending) {
-        if (p.preview && !pending.value.includes(p)) URL.revokeObjectURL(p.preview);
+        if (p.preview) URL.revokeObjectURL(p.preview);
       }
-    }
-    if (isSecretRefuse) {
-      secretRefuseHint.value = t("chat.secretDisclosureRefuse");
-    } else {
-      alert(e.message || String(e));
+    } catch (e) {
+      recalledTemps.delete(tempId);
+      const list = state.messages[bot] || [];
+      const tempIdx = list.findIndex((m) => m.id === tempId);
+      if (tempIdx >= 0) list.splice(tempIdx, 1);
+      const code = e?.code || e?.data?.code || e?.data?.error_code || "";
+      const isSecretRefuse =
+        code === "secret_disclosure" ||
+        /divulgation|vault secret|secret_disclosure/i.test(String(e?.message || ""));
+      if (!text.value.trim()) text.value = content;
+      if (!pending.value.length) pending.value = keptPending;
+      else {
+        for (const p of keptPending) {
+          if (p.preview && !pending.value.includes(p)) URL.revokeObjectURL(p.preview);
+        }
+      }
+      if (isSecretRefuse) {
+        secretRefuseHint.value = t("chat.secretDisclosureRefuse");
+      } else {
+        alert(e.message || String(e));
+      }
+      await nextTick();
+      autosize();
+    } finally {
+      sendsPending = Math.max(0, sendsPending - 1);
     }
     await nextTick();
-    autosize();
-  }
-  await nextTick();
-  scrollMessagesToBottom(true);
-  composer.value?.focus();
+    scrollMessagesToBottom(true, true);
+    composer.value?.focus();
+  };
+
+  const wait = sendChain.then(run, run);
+  sendChain = wait.then(
+    () => undefined,
+    () => undefined
+  );
+  await wait;
 }
 
 async function stop() {
@@ -1850,11 +3058,20 @@ async function stop() {
   }
 }
 
-watch(text, async () => {
+watch(text, async (v) => {
   if (secretRefuseHint.value) secretRefuseHint.value = "";
+  setComposerDraft(props.bot.name, v);
   await nextTick();
   autosize();
 });
+
+watch(
+  pending,
+  (items) => {
+    setComposerPending(props.bot.name, items.slice());
+  },
+  { deep: true }
+);
 
 watch(
   () => state.composerRestore,
@@ -1864,6 +3081,7 @@ watch(
     state.composerRestore = null;
     if (!draft) return;
     text.value = draft;
+    setComposerDraft(props.bot.name, draft);
     secretRefuseHint.value = t("chat.secretRestoredToComposer");
     await nextTick();
     autosize();
@@ -1871,6 +3089,7 @@ watch(
   }
 );
 
+let scrollFollowRaf = 0;
 watch(
   () =>
     [
@@ -1880,40 +3099,74 @@ watch(
         .join("\0"),
     ].join("|"),
   async () => {
-    const el = scroller.value;
-    // A fresh history is still at the top: keep it hidden until the jump.
-    if (
-      stickToBottom.value &&
-      el &&
-      el.scrollTop < 40 &&
-      el.scrollHeight > el.clientHeight + 480
-    ) {
-      threadPlaced.value = false;
-    }
+    // Never flip messages-placing mid-run: hiding the thread on each tool
+    // update makes the conversation visibly jump/flicker.
     await nextTick();
     if (router.currentRoute.value.query?.msg) {
       threadPlaced.value = true;
       return;
     }
-    scrollMessagesToBottom(false);
+    if (!stickToBottom.value) return;
+    // Coalesce rapid tool SSE bursts into one scroll per frame.
+    if (scrollFollowRaf) cancelAnimationFrame(scrollFollowRaf);
+    scrollFollowRaf = requestAnimationFrame(() => {
+      scrollFollowRaf = 0;
+      scrollMessagesToBottom(false);
+    });
   }
 );
 
 watch(
   () => props.bot.name,
-  async () => {
+  async (next, prev) => {
+    if (prev && prev !== next) {
+      setComposerDraft(prev, text.value);
+      setComposerPending(prev, pending.value.slice());
+      text.value = getComposerDraft(next);
+      pending.value = getComposerPending(next).slice();
+      closeMentions();
+      secretRefuseHint.value = "";
+    }
     stickToBottom.value = true;
     threadPlaced.value = false;
     await nextTick();
-    if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
-    else threadPlaced.value = true;
+    autosize();
+    if (!hasHistory.value && historyBooting.value) {
+      threadPlaced.value = true;
+      return;
+    }
+    revealThread();
   }
 );
 
-onMounted(async () => {
+watch(historyBooting, async (loading, was) => {
+  if (loading || !was) return;
   await nextTick();
-  if (!router.currentRoute.value.query?.msg) scrollMessagesToBottom(true);
-  else threadPlaced.value = true;
+  if (stickToBottom.value) await fillIfShort();
+  revealThread();
+});
+
+let composerMq;
+function onComposerMqChange(e) {
+  compactComposerPh.value = !!e.matches;
+  nextTick(() => autosize());
+}
+
+onMounted(async () => {
+  composerMq = window.matchMedia("(max-width: 720px)");
+  compactComposerPh.value = composerMq.matches;
+  composerMq.addEventListener("change", onComposerMqChange);
+  runTimingTick = window.setInterval(() => {
+    const liveOrb = busy.value || waitingHuman.value || deskCreating.value;
+    const liveTurn = (state.messages[props.bot.name] || []).some(
+      (m) => m?.meta?.kind === "llm_turn" && m?.meta?.status === "running"
+    );
+    if (!liveOrb && !liveTurn) return;
+    runTimingNowMs.value = Date.now();
+  }, 1000);
+  await nextTick();
+  autosize();
+  revealThread();
 });
 
 watch(
@@ -1938,8 +3191,16 @@ watch(lightboxSrc, (src) => {
 });
 
 onBeforeUnmount(() => {
-  clearPending();
+  // Keep drafts for this tab; do not revoke pending previews still stored in the map.
+  setComposerDraft(props.bot.name, text.value);
+  setComposerPending(props.bot.name, pending.value.slice());
+  pending.value = [];
   if (flashTimer) clearTimeout(flashTimer);
+  clearTimeout(messagesScrollUiTimer);
+  clearTimeout(idleQueuedTimer);
+  if (runTimingTick) window.clearInterval(runTimingTick);
+  scroller.value?.classList.remove("messages-scrolling");
   window.removeEventListener("keydown", onLightboxKey);
+  composerMq?.removeEventListener("change", onComposerMqChange);
 });
 </script>

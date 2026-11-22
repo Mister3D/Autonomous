@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+import select
+import signal
 import subprocess
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +23,15 @@ from autonomous.services.events import BUS
 _MAX_OUTPUT_CHARS = 200_000
 _DEFAULT_TIMEOUT = 30
 _MAX_TIMEOUT = 600
+
+# In-flight ``docker exec`` per bot, so the chat can stop that command
+# without stopping the Pi agent.
+_EXEC_LOCK = threading.Lock()
+_EXEC_PROCS: dict[str, subprocess.Popen[bytes]] = {}
+# Extra seconds after the user's timeout so `timeout -k` can SIGKILL, then we
+# close the pipes ourselves. A blocked read must not add minutes.
+_TIMEOUT_GRACE_S = 8
+_EXEC_CANCELLED: set[str] = set()
 
 
 def _now() -> str:
@@ -151,6 +164,118 @@ def _llm_test_clock(bot: str, command: str, *, home: Path | None) -> dict[str, A
     )
 
 
+def _kill_proc(proc: subprocess.Popen[bytes]) -> None:
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _collect_output(proc: subprocess.Popen[bytes], timeout_s: int) -> tuple[int, str, bool]:
+    """Read stdout/stderr until the process exits or the deadline passes.
+
+    ``communicate(timeout=)`` checks the clock between blocking reads. One read
+    that never returns (the docker CLI stuck on a live pipe) used to keep the
+    tool "running" long after the timeout. Reads here are non-blocking, and a
+    second thread closes the pipes so the wait cannot outlive the deadline.
+    """
+    deadline = time.monotonic() + timeout_s + _TIMEOUT_GRACE_S
+    stop = threading.Event()
+
+    def _enforce() -> None:
+        if stop.wait(timeout_s + _TIMEOUT_GRACE_S):
+            return
+        _kill_proc(proc)
+        for stream in (proc.stdout, proc.stderr):
+            if stream is None:
+                continue
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+    threading.Thread(target=_enforce, name="term-timeout", daemon=True).start()
+    chunks: list[bytes] = []
+    total = 0
+    fds: list[int] = []
+    for stream in (proc.stdout, proc.stderr):
+        if stream is None:
+            continue
+        fd = stream.fileno()
+        os.set_blocking(fd, False)
+        fds.append(fd)
+    forced = False
+
+    def _read(fd: int) -> bool:
+        nonlocal total
+        if fd not in fds:
+            return False
+        try:
+            data = os.read(fd, 65536)
+        except BlockingIOError:
+            return False
+        except OSError:
+            fds.remove(fd)
+            return False
+        if not data:
+            fds.remove(fd)
+            return False
+        if total < _MAX_OUTPUT_CHARS:
+            take = data[: _MAX_OUTPUT_CHARS - total]
+            chunks.append(take)
+            total += len(take)
+        return True
+
+    try:
+        while fds and time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            try:
+                ready, _, _ = select.select(fds, [], [], min(0.5, max(0.0, remaining)))
+            except (ValueError, OSError):
+                break
+            if not ready:
+                if proc.poll() is not None and not any(_read(fd) for fd in list(fds)):
+                    break
+                continue
+            for fd in list(ready):
+                _read(fd)
+        # Pipes can EOF a moment before the exit status is waitable.
+        # Wait briefly; only a process still alive here is past the deadline.
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            _kill_proc(proc)
+            forced = True
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        stop.set()
+    output = b"".join(chunks).decode("utf-8", errors="replace")
+    code = proc.returncode
+    if code is None:
+        forced = True
+        code = 124
+    return int(code), output, forced
+
+
+def cancel_running_command(bot: str) -> bool:
+    """Kill the VM command this bot is waiting on. Pi keeps running."""
+    with _EXEC_LOCK:
+        proc = _EXEC_PROCS.get(bot)
+        if proc is None or proc.poll() is not None:
+            return False
+        _EXEC_CANCELLED.add(bot)
+    _kill_proc(proc)
+    return True
+
+
 def exec_command(
     bot: str,
     command: str,
@@ -163,13 +288,32 @@ def exec_command(
     if not command:
         raise AutonomousError("command required", code="validation_error")
 
+    sleep_wait = re.fullmatch(
+        r"sleep\s+(\d+(?:\.\d+)?)(?:\s*&&\s*echo\b.*)?",
+        command,
+        flags=re.IGNORECASE,
+    )
+    # A few seconds of sleep is the model waiting on a page. A long sleep
+    # stays a real command (the cancel test uses sleep 30).
+    if sleep_wait and float(sleep_wait.group(1)) <= 15:
+        return append_log(
+            bot,
+            command,
+            exit_code=0,
+            output=(
+                "Do not sleep to wait for a page. "
+                "Call browser_wait_load or browser_snapshot."
+            ),
+            home=home,
+        )
+
     canned = _llm_test_clock(bot, command, home=home)
     if canned is not None:
         return canned
 
     from autonomous.services import desk as desk_svc
 
-    desk_svc.ensure_awake(bot, home=home)
+    desk_svc.ensure_awake_for_tool(bot, home=home)
 
     try:
         timeout_s = int(timeout)
@@ -178,7 +322,8 @@ def exec_command(
     timeout_s = max(1, min(timeout_s, _MAX_TIMEOUT))
 
     name = desk_svc.container_name(bot, home=home)
-    # subprocess + `docker exec` so timeout is reliably enforced (SDK exec_run has none).
+    # `timeout -k` kills the process inside the VM. Killing only the docker
+    # client leaves that process running and the tool waiting on its pipe.
     cmd = [
         "docker",
         "exec",
@@ -193,31 +338,46 @@ def exec_command(
         "-e",
         "HOME=/home/autonomous",
         name,
+        "/usr/bin/timeout",
+        "-k",
+        "5",
+        str(timeout_s),
         "bash",
         "-lc",
         command,
     ]
+    proc: subprocess.Popen[bytes] | None = None
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
-        exit_code = int(completed.returncode)
-        output = (completed.stdout or "") + (completed.stderr or "")
     except FileNotFoundError as exc:
         raise AutonomousError("docker CLI not found on host") from exc
-    except subprocess.TimeoutExpired as exc:
-        exit_code = 124
-        parts = []
-        if exc.stdout:
-            parts.append(exc.stdout if isinstance(exc.stdout, str) else exc.stdout.decode("utf-8", "replace"))
-        if exc.stderr:
-            parts.append(exc.stderr if isinstance(exc.stderr, str) else exc.stderr.decode("utf-8", "replace"))
-        parts.append(f"[timeout after {timeout_s}s]")
-        output = "".join(parts)
+    with _EXEC_LOCK:
+        _EXEC_CANCELLED.discard(bot)
+        _EXEC_PROCS[bot] = proc
+    try:
+        exit_code, output, forced = _collect_output(proc, timeout_s)
+        with _EXEC_LOCK:
+            stopped = bot in _EXEC_CANCELLED
+        if stopped:
+            exit_code = 130
+            output = (output or "") + "\n[user stopped] The user stopped this command."
+        elif forced or exit_code in (124, 137, -9, -15):
+            exit_code = 124
+            if "[timeout after" not in (output or ""):
+                output = (
+                    (output or "").rstrip()
+                    + f"\n[timeout after {timeout_s}s] The timeout stopped this command."
+                ).strip()
+    finally:
+        with _EXEC_LOCK:
+            if _EXEC_PROCS.get(bot) is proc:
+                _EXEC_PROCS.pop(bot, None)
+            _EXEC_CANCELLED.discard(bot)
 
     output = output + _utc_date_note(command, home)
     return append_log(bot, command, exit_code=exit_code, output=output, home=home)

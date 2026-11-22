@@ -116,7 +116,7 @@ export default function (pi: ExtensionAPI) {
       + "cron = 5 fields (minute hour day-of-month month day-of-week), "
       + "e.g. 09:00 in that zone = '0 9 * * 1-5'. The server stores the UTC equivalent. "
       + "Before a relative time (« in N minutes »), read the clock with vm_terminal_exec "
-      + "as `TZ=<user timezone> date` — it asks for a terminal VM if needed. "
+      + "as `TZ=<user timezone> date` — it asks for the VM if needed. "
       + "Never pass -u / --utc: `date -u` is UTC and ignores TZ=. "
       + "Never invent the hour, do not add the UTC offset to the cron hour, "
       + "and do not use the VM clock's own zone. "
@@ -124,7 +124,9 @@ export default function (pi: ExtensionAPI) {
       + "recurring=false → delete after the fire, unless the next slot is within 15 minutes "
       + "(a short burst, e.g. every 5 min). For one hour of 5-min reminders, pin the day and hour "
       + "('25-55/5 11 1 11 *'), not hour '*'. "
-      + "instruction is injected as a user chat message when it fires.",
+      + "instruction is injected as a user chat message when it fires. "
+      + "If you need to relaunch yourself later, call this yourself — do not ask permission, "
+      + "and do not merely echo a reminder in the shell.",
     parameters: Type.Object({
       name: Type.String({ description: "Short label" }),
       cron: Type.String({

@@ -78,6 +78,7 @@ class BotSchema(Schema):
     internet = fields.Bool()
     auto_sleep = fields.Bool()
     memory_access = fields.Bool()
+    thinking = fields.Str()
     is_manager = fields.Bool()
     desk_last_active_at = fields.Str(allow_none=True)
     status = fields.Str(validate=validate.OneOf(BOT_STATUSES))
@@ -128,6 +129,16 @@ class BotCreateSchema(Schema):
         },
     )
     model = fields.Str(load_default=None)
+    thinking = fields.Raw(
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Optional Pi thinking level at create. When omitted, uses "
+                "settings bots.default_thinking (default medium)."
+            )
+        },
+    )
     avatar = fields.Str(
         load_default=None,
         allow_none=True,
@@ -152,6 +163,15 @@ class BotPatchSchema(Schema):
         metadata={
             "description": "Shared memory access (core prompt + browse tools). Default true."
         }
+    )
+    thinking = fields.Raw(
+        metadata={
+            "description": (
+                "Pi thinking level: off, minimal, low, medium, high, xhigh, max "
+                "(legacy bool still accepted). Default medium. Applies on the "
+                "next provider request — no session restart and no prefix-cache flush."
+            )
+        },
     )
     is_manager = fields.Bool(
         metadata={
@@ -206,7 +226,7 @@ class CapabilitySchema(Schema):
 
 
 class ChatFileAttachmentSchema(Schema):
-    """File dropped / picked in chat → stored under ~/shared/upload/<uuid>/."""
+    """File dropped / picked in chat → stored under ~/files/upload/<uuid>/."""
 
     type = fields.Str(required=True)
     name = fields.Str(required=True)
@@ -221,7 +241,7 @@ class MessageSchema(Schema):
     conversation_id = fields.Str()
     role = fields.Str(validate=validate.OneOf(MSG_ROLES))
     content = fields.Str(required=True)
-    # str = pasted image URL ; dict = chat file under ~/shared/upload/
+    # str = pasted image URL ; dict = chat file under ~/files/upload/
     attachments = fields.List(fields.Raw())
     meta = fields.Dict()
     created_at = fields.Str()
@@ -232,11 +252,40 @@ class ReactionCreateSchema(Schema):
     message_id = fields.Str(load_default=None)
 
 
+class LlmTurnCreateSchema(Schema):
+    """Opened by the Pi llm_trace extension before each provider call."""
+
+    request = fields.Str(load_default="")
+    # Relative path under bots/<bot>/pi/, e.g. llm_turns/req_….json
+    request_file = fields.Str(load_default=None, allow_none=True)
+    # "provider" = exact before_provider_request JSON on disk.
+    request_kind = fields.Str(load_default="provider")
+    model = fields.Str(load_default=None, allow_none=True)
+
+
+class LlmHeavyGateAcquireSchema(Schema):
+    """Pi llm_heavy_gate: reserve a large-request slot before the provider HTTP call."""
+
+    tokens = fields.Integer(required=True)
+    # Optional provider/id or bare id from the provider payload; else bot.model.
+    model = fields.Str(load_default=None, allow_none=True)
+    wait_sec = fields.Float(load_default=None, allow_none=True)
+
+
+class LlmHeavyGateReleaseSchema(Schema):
+    """Pi llm_heavy_gate: free a previously acquired large-request lease."""
+
+    lease_id = fields.Str(required=True, validate=validate.Length(min=1))
+
+
 class MessageCreateSchema(Schema):
     content = fields.Str(load_default="")
     attachments = fields.List(fields.Raw(), load_default=list)
     # Optional agent prompt override (stored bubble stays ``content``).
     prompt = fields.Str(load_default=None, allow_none=True)
+    # When the bot is busy, store the message for the next turn but hide the
+    # queue chrome until that turn actually starts.
+    hold = fields.Bool(load_default=False)
 
     @validates_schema
     def require_content_or_attachments(self, data, **kwargs):
@@ -319,6 +368,11 @@ class FileEntrySchema(Schema):
     modified_at = fields.Str(allow_none=True)
 
 
+class FileMoveSchema(Schema):
+    src = fields.Str(required=True, validate=validate.Length(min=1))
+    dest = fields.Str(load_default=".")
+
+
 class FileContentSchema(Schema):
     path = fields.Str(required=True)
     name = fields.Str()
@@ -346,7 +400,6 @@ class SettingsSchema(Schema):
     grounding_max_loops = fields.Integer(
         data_key="grounding.max_loops", allow_none=True
     )
-
     @pre_dump
     def _expose_dotted_keys(self, data, **kwargs):
         # Stored keys are dotted (`guard.review_every`). Field names are not,
@@ -382,6 +435,13 @@ class SettingsSchema(Schema):
         allow_none=True,
         metadata={"description": "Allow public companion pairing requests"},
     )
+    bots_default_model = fields.Str(
+        data_key="bots.default_model",
+        allow_none=True,
+        metadata={
+            "description": "Default Pi model ref (provider/id). New bots and Manager-created bots use only this."
+        },
+    )
 
 
 class NovncInfoSchema(Schema):
@@ -413,9 +473,64 @@ class OkSchema(Schema):
     message = fields.Str()
 
 
+class BotPackageUsageSchema(Schema):
+    """Disk footprint of one bot package (Details panel)."""
+
+    bot = fields.Str(required=True)
+    total_bytes = fields.Integer(required=True)
+    host_bytes = fields.Integer(required=True)
+    files_bytes = fields.Integer(required=True)
+    screenshots_bytes = fields.Integer(required=True)
+    browser_bytes = fields.Integer(required=True)
+    shared_bytes = fields.Integer(required=True)
+    chat_bytes = fields.Integer(required=True)
+    messages = fields.Integer(required=True)
+    agent_bytes = fields.Integer(required=True)
+    downloads_bytes = fields.Integer(required=True)
+    vm_bytes = fields.Integer(allow_none=True)
+    vm_state = fields.Str(required=True)
+
+
+class RetryUnprocessedSchema(Schema):
+    ok = fields.Bool(required=True)
+    action = fields.Str(
+        metadata={
+            "description": "drained | resumed | noop — what the retry did",
+        }
+    )
+    queued = fields.Int()
+    started = fields.Bool()
+
+
 class BotMailSendSchema(Schema):
     to = fields.Str(required=True, metadata={"description": "Target bot name or @name"})
-    content = fields.Str(required=True, validate=validate.Length(min=1))
+    content = fields.Str(
+        load_default="",
+        allow_none=True,
+        metadata={"description": "Peer-facing brief (optional if attachments are set)"},
+    )
+    attachments = fields.List(
+        fields.Str(),
+        load_default=None,
+        allow_none=True,
+        validate=validate.Length(max=10),
+        metadata={
+            "description": (
+                "Optional paths under the sender's private ~/files to copy into the "
+                "recipient's .autonomous/mail-inbox staging area"
+            )
+        },
+    )
+    expect_reply = fields.Str(
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Manager only: wrap content as an async delegation and ask the peer "
+                "to Tell @you back with this summary when done"
+            )
+        },
+    )
 
 
 class BotMailDelegateSchema(Schema):
@@ -436,6 +551,51 @@ class BotMailPeerSchema(Schema):
     status = fields.Str()
     capability = fields.Str()
     is_manager = fields.Bool()
+
+
+class HouseholdBotSpecSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=64))
+    label = fields.Str(load_default=None, allow_none=True)
+    slug = fields.Str(load_default=None, allow_none=True)
+    internet = fields.Bool(load_default=True)
+    memory_access = fields.Bool(load_default=True)
+    avatar = fields.Str(load_default=None, allow_none=True)
+    avatar_color = fields.Integer(load_default=None, allow_none=True)
+
+
+class HouseholdCreateSchema(Schema):
+    bots = fields.List(
+        fields.Nested(HouseholdBotSpecSchema),
+        required=True,
+        validate=validate.Length(min=1, max=20),
+    )
+
+
+class HouseholdDeleteCreateSchema(Schema):
+    bots = fields.List(
+        fields.Str(),
+        required=True,
+        validate=validate.Length(min=1, max=50),
+        metadata={"description": "Bot slugs to propose for deletion (checked by default)"},
+    )
+    prompt = fields.Str(load_default="", allow_none=True)
+    title = fields.Str(load_default="", allow_none=True)
+
+
+class HouseholdDeleteResolveSchema(Schema):
+    action = fields.Str(
+        required=True,
+        validate=validate.OneOf(["confirm", "deny", "approve", "cancel"]),
+    )
+    bots = fields.List(
+        fields.Str(),
+        load_default=None,
+        allow_none=True,
+        metadata={"description": "Checked bot slugs when action=confirm"},
+    )
 
 
 class BotMailAskSchema(Schema):
@@ -504,6 +664,7 @@ class DeskClickResultSchema(Schema):
     y = fields.Integer()
     button = fields.Str()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class DeskTypeSchema(Schema):
@@ -535,6 +696,7 @@ class DeskScrollResultSchema(Schema):
     x = fields.Integer()
     y = fields.Integer()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class DeskKeySchema(Schema):
@@ -548,6 +710,7 @@ class DeskKeyResultSchema(Schema):
     key = fields.Str()
     repeats = fields.Integer()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class DeskDragSchema(Schema):
@@ -565,6 +728,7 @@ class DeskDragResultSchema(Schema):
     x2 = fields.Integer()
     y2 = fields.Integer()
     detail = fields.Str()
+    page = fields.Str()
 
 
 class BrowserResultSchema(Schema):
@@ -690,8 +854,9 @@ class ScreenDescribeSchema(Schema):
 class ScreenDescribeResultSchema(Schema):
     ok = fields.Bool(required=True)
     text = fields.Str()
-    screenshot_id = fields.Str()
-    model = fields.Str()
+    screenshot_id = fields.Str(allow_none=True)
+    model = fields.Str(allow_none=True)
+    code = fields.Str(load_default=None, allow_none=True)
 
 
 class GroundLocateResultSchema(Schema):

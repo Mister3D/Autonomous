@@ -319,7 +319,16 @@ async fn call_mcp(processes: &mut [Running], payload: &[u8]) -> Vec<u8> {
         return json!({"ok": false, "error": "unknown mcp server"}).to_string().into_bytes();
     };
     match process.call(tool, &arguments).await {
-        Ok(text) => json!({"ok": true, "text": text}).to_string().into_bytes(),
+        Ok(reply) => {
+            let images: Vec<Value> = reply
+                .images
+                .iter()
+                .map(|image| json!({"mime": image.mime, "data": image.data}))
+                .collect();
+            json!({"ok": true, "text": reply.text, "images": images})
+                .to_string()
+                .into_bytes()
+        }
         Err(err) => json!({"ok": false, "error": err}).to_string().into_bytes(),
     }
 }

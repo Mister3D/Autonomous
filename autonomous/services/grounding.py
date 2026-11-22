@@ -540,6 +540,11 @@ def locate(
     chat = bool(show_in_chat)
 
     bots_svc.get_bot(bot, home=home)
+    from autonomous.services.observe_gate import shortcut_ground
+
+    early = shortcut_ground(bot, instruction, action_hint=action_hint)
+    if early is not None:
+        return early
     shot = shot_svc.capture(bot, show_in_chat=False, home=home)
     png_path = shot_svc.resolve_png(bot, shot["id"], home=home)
 
@@ -978,10 +983,23 @@ def describe_screen(
 ) -> dict[str, Any]:
     """Fresh screenshot → multimodal model → plain-text description (no gesture).
 
-    Gives a DOM-blind agent eyes (captcha iframes, canvas, block pages, overlays)
+    Gives the agent eyes (captcha iframes, canvas, block pages, overlays)
     without ever attaching the PNG to the agent LLM itself.
+
+    Skipped when a fresh snapshot already lists controls (that call is slow).
     """
     bots_svc.get_bot(bot, home=home)
+    from autonomous.services.observe_gate import note_vm_look, refuse_vm_look_message
+
+    refuse = refuse_vm_look_message(bot, home=home)
+    if refuse:
+        return {
+            "ok": False,
+            "text": refuse,
+            "code": "dom_observe_required",
+            "screenshot_id": None,
+            "model": None,
+        }
     shot = shot_svc.capture(bot, show_in_chat=show_in_chat, home=home)
     png_path = shot_svc.resolve_png(bot, shot["id"], home=home)
     w, h, rgb = read_png(png_path)
@@ -1008,6 +1026,7 @@ def describe_screen(
         base_url=cfg["base_url"], api_key=cfg["api_key"], body=body, timeout=120
     )
     text = _assistant_text(resp).strip()
+    note_vm_look(bot)
     return {
         "ok": bool(text),
         "text": text,

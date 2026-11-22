@@ -128,8 +128,9 @@ def builder_image(src: Path | None = None) -> str:
 def docker_run_argv(src: Path, wd: Path, triple: str, image: str) -> list[str]:
     """Throwaway container: sources read-only, caches under AUTONOMOUS_HOME, no privileges."""
     uid, gid = (os.getuid(), os.getgid()) if hasattr(os, "getuid") else (0, 0)
+    # stdbuf keeps cargo lines flowing into build.log for the UI tail.
     script = (
-        f"cargo build --release --locked --target {triple}; rc=$?; "
+        f"stdbuf -oL -eL cargo build --release --locked --target {triple}; rc=$?; "
         f"chown -R {uid}:{gid} /target /usr/local/cargo/registry 2>/dev/null; exit $rc"
     )
     return [
@@ -143,14 +144,77 @@ def docker_run_argv(src: Path, wd: Path, triple: str, image: str) -> list[str]:
     ]
 
 
-def crate_version(src: Path | None = None) -> str:
-    src = src or source_dir()
-    try:
-        text = (src / "Cargo.toml").read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-    return m.group(1) if m else ""
+def app_version() -> str:
+    """Autonomous release the download is named after (not the Cargo crate version)."""
+    from autonomous import __version__
+
+    return str(__version__ or "dev")
+
+
+def artifact_for_platform(platform: str, home: Path | None = None) -> Path | None:
+    """Built binary for windows, linux, or macos, if this server has one."""
+    want = (platform or "").strip().lower()
+    if want not in ("windows", "linux", "macos"):
+        return None
+    st = _read_status(home)
+    for a in st.get("artifacts") or []:
+        if a.get("platform") != want:
+            continue
+        path = work_dir(home) / "dist" / st.get("hash", "") / a["target"] / a["filename"]
+        if path.is_file():
+            return path
+    return None
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def update_offer(platform: str, home: Path | None = None) -> dict[str, Any] | None:
+    """What a paired companion compares against its own file.
+
+    ``state=building`` while a compile is running, or the sources are newer than
+    the binary on disk and a build is still expected. No sha in that case: the
+    previous file must not be installed as if it were the new one.
+    """
+    want = (platform or "").strip().lower()
+    if want not in ("windows", "linux", "macos"):
+        return None
+    st = status(home)
+    base = {"version": st.get("version") or app_version(), "platform": want}
+    if _update_pending(st):
+        return {**base, "state": "building"}
+    path = artifact_for_platform(want, home)
+    if path is None:
+        return None
+    if st.get("state") == "failed":
+        return {**base, "state": "failed"}
+    return {
+        **base,
+        "state": "ready",
+        "sha256": file_sha256(path),
+        "size": path.stat().st_size,
+    }
+
+
+def _update_pending(st: dict[str, Any]) -> bool:
+    if st.get("state") == "building":
+        return True
+    if not st.get("enabled") or not st.get("stale") or not st.get("toolchain"):
+        return False
+    # Sources are newer than the file on disk and a build can still catch up
+    # (serve starts one on startup). A failed compile is not worth waiting for.
+    return st.get("state") not in ("failed", "no_source", "no_toolchain")
+
+
+def download_filename(version: str, *, windows: bool) -> str:
+    """``autonomous-companion-<version>.exe`` — no Rust target triple."""
+    ver = re.sub(r"[^A-Za-z0-9._+-]", "", version or "").replace("..", "") or "dev"
+    return f"{BIN_NAME}-{ver}{'.exe' if windows else ''}"
 
 
 def source_hash(src: Path | None = None) -> str:
@@ -259,12 +323,25 @@ def artifact_path(triple: str, home: Path | None = None) -> Path | None:
     return None
 
 
+def read_log(home: Path | None = None, *, max_lines: int = 250) -> list[str]:
+    """Tail of ``build.log`` for the setup / settings CLI panel."""
+    path = work_dir(home) / "build.log"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = text.splitlines()
+    if len(lines) > max_lines:
+        lines = lines[-max_lines:]
+    return [ln[:500] for ln in lines]
+
+
 def status(home: Path | None = None) -> dict[str, Any]:
     src = source_dir()
     st = _read_status(home)
     out: dict[str, Any] = {
         "state": st.get("state") or "idle",
-        "version": crate_version(src),
+        "version": app_version(),
         "hash": st.get("hash", ""),
         "host": st.get("host", ""),
         "artifacts": [],
@@ -275,6 +352,7 @@ def status(home: Path | None = None) -> dict[str, Any]:
         "builder": builder(),
         "rustup_hint": RUSTUP_HINT,
         "enabled": os.environ.get("AUTONOMOUS_COMPANION_BUILD", "1") != "0",
+        "log": read_log(home),
     }
     if not (src / "Cargo.toml").is_file():
         out["state"] = "no_source"
@@ -342,13 +420,16 @@ def _build(home: Path, force: bool = False) -> None:
         env.setdefault("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", linker)
     artifacts: list[dict[str, Any]] = []
     errors: list[str] = []
-    with log_path.open("w", encoding="utf-8") as log:
+    with log_path.open("w", encoding="utf-8", buffering=1) as log:
         for triple in targets:
             log.write(f"=== cargo build --release --target {triple}\n")
             log.flush()
+            argv = [cargo, "build", "--release", "--locked", "--target", triple]
+            if shutil.which("stdbuf"):
+                argv = ["stdbuf", "-oL", "-eL", *argv]
             try:
                 proc = subprocess.run(
-                    [cargo, "build", "--release", "--locked", "--target", triple],
+                    argv,
                     cwd=src, env=env, stdout=log, stderr=subprocess.STDOUT,
                     timeout=3600,
                 )
@@ -406,11 +487,21 @@ def _build_docker(home: Path, src: Path, wd: Path, digest: str) -> None:
                          "notes": notes, "started_at": time.time(), "builder": "docker"})
     (wd / "docker-target").mkdir(exist_ok=True)
     (wd / "docker-cargo").mkdir(exist_ok=True)
+    dockerfile = dockerfile_dir(src) / "Dockerfile"
+    if not dockerfile.is_file():
+        _write_status(home, {
+            "state": "failed",
+            "hash": digest,
+            "error": f"missing {dockerfile}",
+            "finished_at": time.time(),
+            "builder": "docker",
+        })
+        return
     image = builder_image(src)
     artifacts: list[dict[str, Any]] = []
     errors: list[str] = []
     log_path = wd / "build.log"
-    with log_path.open("w", encoding="utf-8") as log:
+    with log_path.open("w", encoding="utf-8", buffering=1) as log:
         have = subprocess.run(["docker", "image", "inspect", image],
                               capture_output=True).returncode == 0
         if not have:
@@ -420,6 +511,7 @@ def _build_docker(home: Path, src: Path, wd: Path, digest: str) -> None:
                 targets = []
         for triple in targets:
             log.write(f"=== cargo build --release --target {triple} (docker)\n")
+            log.flush()
             rc = _logged(docker_run_argv(src, wd, triple, image), log)
             built = wd / "docker-target" / triple / "release" / _exe_name(triple)
             if rc == 0 and built.is_file():

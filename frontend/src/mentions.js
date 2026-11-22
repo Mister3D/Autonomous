@@ -3,9 +3,17 @@
 import { avatarColor } from "./avatarColor";
 
 const NAME_BODY = "[a-zA-Z0-9_-]+";
-/** Fresh /g each call — avoid lastIndex reuse bugs. */
+/**
+ * @bot only when @ starts a token.
+ * An address such as someone@gmail.com must not paint the domain as a mention,
+ * even when a bot is named gmail. A trailing period (« @gmail. ») still counts.
+ * Fresh /g each call — avoid lastIndex reuse bugs.
+ */
 function mentionRe() {
-  return new RegExp(`@(${NAME_BODY})`, "g");
+  return new RegExp(
+    `(?<![A-Za-z0-9._%+-])@(${NAME_BODY})(?!\\.[A-Za-z0-9])`,
+    "g"
+  );
 }
 /** @query juste avant le curseur (après début / espace / ponctuation légère). */
 const QUERY_AT_CARET_RE = new RegExp(

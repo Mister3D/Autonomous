@@ -1,23 +1,50 @@
 const BASE = "/api/v1";
 
 async function request(path, options = {}) {
+  const body = options.body;
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers = { ...(options.headers || {}) };
+  // Never force JSON Content-Type on FormData — that breaks multipart boundary
+  // and some browsers/proxies then surface a opaque "Failed to fetch".
+  if (isForm) {
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  } else if (
+    body != null &&
+    typeof body === "object" &&
+    !(body instanceof Blob) &&
+    !(body instanceof ArrayBuffer)
+  ) {
+    if (!headers["Content-Type"] && !headers["content-type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
   const opts = {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   };
-  if (opts.body instanceof FormData) {
-    // Let the browser set multipart boundary.
-    if (opts.headers && opts.headers["Content-Type"]) {
-      delete opts.headers["Content-Type"];
-    }
-  } else if (opts.body && typeof opts.body === "object") {
+  if (
+    !isForm &&
+    opts.body != null &&
+    typeof opts.body === "object" &&
+    !(opts.body instanceof Blob) &&
+    !(opts.body instanceof ArrayBuffer)
+  ) {
     opts.body = JSON.stringify(opts.body);
   }
-  const res = await fetch(`${BASE}${path}`, opts);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, opts);
+  } catch (e) {
+    const err = new Error(
+      e?.message === "Failed to fetch"
+        ? "Network error while contacting the server (upload interrupted)."
+        : e?.message || String(e)
+    );
+    err.cause = e;
+    throw err;
+  }
   const ct = res.headers.get("content-type") || "";
   const data = ct.includes("application/json") ? await res.json() : await res.text();
   if (!res.ok) {
@@ -51,24 +78,16 @@ function formatApiError(data, fallback) {
   return fallback || "Error";
 }
 
-/** Walk pages until the written user message is included.
- * Tool and grounding events can fill the API window (max 200) and hide the turn.
+/** One page of the thread, newest first in the window (chronological in the array).
+ * Older rows load later, when the reader scrolls up — not before the first paint.
  */
-async function loadThread(name) {
-  const pages = [];
-  let before = "";
-  for (let i = 0; i < 20; i++) {
-    const q = new URLSearchParams({ limit: "200" });
-    if (before) q.set("before", before);
-    const page = await request(`/bots/${name}/messages?${q}`);
-    if (!Array.isArray(page) || !page.length) break;
-    pages.unshift(page);
-    if (page.some((m) => m.role === "user")) break;
-    const oldest = page[0]?.created_at;
-    if (!oldest || oldest === before) break;
-    before = oldest;
-  }
-  return pages.flat();
+async function listMessagePage(name, { before = "", limit = 80 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (before) q.set("before", before);
+  const page = await request(
+    `/bots/${encodeURIComponent(name)}/messages?${q}`,
+  );
+  return Array.isArray(page) ? page : [];
 }
 
 export const api = {
@@ -82,13 +101,14 @@ export const api = {
     }),
   logout: () => request("/auth/logout", { method: "POST", body: {} }),
   listBots: () => request("/bots"),
+  tokenUsageHistory: () => request("/bots/token-usage"),
   createBot: (body) => request("/bots", { method: "POST", body }),
   getBot: (name) => request(`/bots/${name}`),
   patchBot: (name, body) => request(`/bots/${name}`, { method: "PATCH", body }),
   deleteBot: (name) => request(`/bots/${name}`, { method: "DELETE" }),
   setCapability: (name, level) =>
     request(`/bots/${name}/capability`, { method: "POST", body: { level } }),
-  listMessages: (name) => loadThread(name),
+  listMessagePage,
   sendMessage: (name, content, attachments = [], opts = {}) =>
     request(`/bots/${name}/messages`, {
       method: "POST",
@@ -96,19 +116,25 @@ export const api = {
         content,
         attachments,
         ...(opts.prompt ? { prompt: opts.prompt } : {}),
+        ...(opts.hold ? { hold: true } : {}),
       },
     }),
-  /** Chat drop/picker → ~/shared/upload/<uuid>/<filename> */
+  /** Chat drop/picker → ~/files/upload/<uuid>/<filename> */
   uploadChatFile: (name, file) => {
     const fd = new FormData();
-    fd.append("file", file, file.name);
-    return request(`/bots/${name}/chat/files`, {
+    const fname = String(file?.name || "upload.bin").trim() || "upload.bin";
+    fd.append("file", file, fname);
+    return request(`/bots/${encodeURIComponent(name)}/chat/files`, {
       method: "POST",
       body: fd,
-      headers: {},
     });
   },
   clearMessages: (name) => request(`/bots/${name}/messages`, { method: "DELETE" }),
+  /** Cancel a still-queued bubble so it never drains. */
+  deleteQueuedMessage: (name, messageId) =>
+    request(`/bots/${name}/messages/${encodeURIComponent(messageId)}`, {
+      method: "DELETE",
+    }),
   /** Download discussion PDF (tools named without args/results). */
   async exportDiscussionPdf(name) {
     const res = await fetch(`${BASE}/bots/${encodeURIComponent(name)}/messages/export.pdf`, {
@@ -129,6 +155,8 @@ export const api = {
       : `discussion-${name}.pdf`;
     return { blob, filename };
   },
+  /** Disk footprint: VM layer + ~/files + chat + Pi session. */
+  botPackage: (name) => request(`/bots/${name}/package`),
   deskStatus: (name) => request(`/bots/${name}/desk`),
   deskRequest: (name, body = { mode: "screen", reason: "" }) =>
     request(`/bots/${name}/desk/request`, { method: "POST", body }),
@@ -137,6 +165,9 @@ export const api = {
   deskCreate: (name, body = { mode: "screen", internet: true }) =>
     request(`/bots/${name}/desk/create`, { method: "POST", body }),
   deskWake: (name) => request(`/bots/${name}/desk/wake`, { method: "POST", body: {} }),
+  /** Reset auto-sleep while the user holds the desktop. Does not wake. */
+  deskActivity: (name) =>
+    request(`/bots/${name}/desk/activity`, { method: "POST", body: {} }),
   deskDestroy: (name) => request(`/bots/${name}/desk/destroy`, { method: "POST", body: {} }),
   deskRestart: (name) => request(`/bots/${name}/desk/restart`, { method: "POST", body: {} }),
   deskReset: (name) =>
@@ -157,21 +188,39 @@ export const api = {
       method: "POST",
       body: { path: path || ".", name: dirname },
     }),
+  moveFile: (name, src, dest = ".") =>
+    request(`/bots/${name}/files/move`, {
+      method: "POST",
+      body: { src, dest: dest || "." },
+    }),
   uploadFile: (name, path, file) => {
     const fd = new FormData();
-    fd.append("file", file, file.name);
-    return request(`/bots/${name}/files/upload?path=${encodeURIComponent(path || ".")}`, {
-      method: "POST",
-      body: fd,
-      headers: {},
-    });
+    const fname = String(file?.name || "upload.bin").trim() || "upload.bin";
+    fd.append("file", file, fname);
+    return request(
+      `/bots/${encodeURIComponent(name)}/files/upload?path=${encodeURIComponent(path || ".")}`,
+      {
+        method: "POST",
+        body: fd,
+      }
+    );
   },
   settings: () => request("/settings"),
   putSettings: (body) => request("/settings", { method: "PUT", body }),
   piStatus: () => request("/pi/status"),
   piModels: () => request("/pi/models"),
   stopBot: (name) => request(`/bots/${name}/stop`, { method: "POST", body: {} }),
+  cancelTool: (name) =>
+    request(`/bots/${encodeURIComponent(name)}/tools/cancel`, {
+      method: "POST",
+      body: {},
+    }),
+  llmTurnPayload: (name, messageId, side) =>
+    request(
+      `/bots/${encodeURIComponent(name)}/llm-turns/${encodeURIComponent(messageId)}/${encodeURIComponent(side)}`
+    ),
   resumeBot: (name) => request(`/bots/${name}/resume`, { method: "POST", body: {} }),
+  retryBot: (name) => request(`/bots/${name}/retry`, { method: "POST", body: {} }),
   vaultEntries: () => request("/vault/entries"),
   createVaultEntry: (body) => request("/vault/entries", { method: "POST", body }),
   deleteVaultEntry: (id) => request(`/vault/entries/${id}`, { method: "DELETE" }),
@@ -183,7 +232,13 @@ export const api = {
     request(`/vault/grants/${encodeURIComponent(bot)}/${entry_id}`, { method: "DELETE" }),
   resolveVaultRequest: (id, body) =>
     request(`/vault/requests/${id}/resolve`, { method: "POST", body }),
+  notebook: (name) => request(`/bots/${encodeURIComponent(name)}/notebook`),
+  deleteNotebookEntry: (name, id) =>
+    request(`/bots/${encodeURIComponent(name)}/notebook/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   memoryEntries: () => request("/memory/entries"),
+  memoryPendingCount: () => request("/memory/proposals/count"),
   createMemoryEntry: (body) => request("/memory/entries", { method: "POST", body }),
   deleteMemoryEntry: (key) =>
     request(`/memory/entries/${encodeURIComponent(key)}`, { method: "DELETE" }),
@@ -191,6 +246,11 @@ export const api = {
     request(`/memory/proposals/${id}/resolve`, { method: "POST", body }),
   resolveApproval: (id, body) =>
     request(`/approvals/requests/${id}/resolve`, { method: "POST", body }),
+  resolveBotDelete: (bot, id, body) =>
+    request(`/bots/${encodeURIComponent(bot)}/household/delete-requests/${id}`, {
+      method: "POST",
+      body,
+    }),
   resolveClarify: (id, body) =>
     request(`/clarifies/requests/${id}/resolve`, { method: "POST", body }),
   clock: () => request("/clock"),
@@ -254,6 +314,8 @@ export const api = {
   startSetupJob: (kind) => request(`/setup/jobs/${encodeURIComponent(kind)}`, { method: "POST", body: {} }),
   setupLlm: () => request("/setup/llm"),
   saveSetupLlm: (body) => request("/setup/llm", { method: "PUT", body }),
+  deleteSetupLlm: (provider) =>
+    request(`/setup/llm?provider=${encodeURIComponent(provider)}`, { method: "DELETE" }),
   testSetupLlm: (body) => request("/setup/llm/test", { method: "POST", body }),
   setupLlmModels: (body) => request("/setup/llm/models", { method: "POST", body }),
   setupGroundingModels: (body) => request("/setup/grounding/models", { method: "POST", body }),
@@ -264,5 +326,11 @@ export const api = {
     request(`/setup/update${force ? "?force=1" : ""}`),
   setUpdateChannel: (body) => request("/setup/update", { method: "PUT", body }),
   checkUpdate: () => request("/setup/update/check", { method: "POST", body: {} }),
-  applyUpdate: () => request("/setup/update/apply", { method: "POST", body: {} }),
+  applyUpdate: (force = false) =>
+    request("/setup/update/apply", { method: "POST", body: force ? { force: true } : {} }),
+  piPackages: (force = false) =>
+    request(`/setup/pi-packages${force ? "?force=1" : ""}`),
+  checkPiPackages: () => request("/setup/pi-packages?force=1"),
+  applyPiPackages: (items) =>
+    request("/setup/pi-packages/apply", { method: "POST", body: { items } }),
 };

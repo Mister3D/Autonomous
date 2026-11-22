@@ -16,9 +16,9 @@
       </div>
       <p v-if="error" style="color: var(--danger)">{{ error }}</p>
       <div class="login-actions">
-        <button class="btn primary" type="submit" :disabled="loading">
+        <UiButton variant="primary" type="submit" :disabled="loading">
           {{ t("login.submit") }}
-        </button>
+        </UiButton>
         <LocalePicker />
       </div>
     </form>
@@ -62,9 +62,9 @@
       </div>
       <p v-if="error" style="color: var(--danger)">{{ error }}</p>
       <div class="login-actions">
-        <button class="btn primary" type="submit" :disabled="loading">
+        <UiButton variant="primary" type="submit" :disabled="loading">
           {{ t("login.changeSubmit") }}
-        </button>
+        </UiButton>
         <LocalePicker />
       </div>
     </form>
@@ -79,6 +79,7 @@ import { api } from "../api";
 import { state } from "../store";
 import { connectEvents, refreshBots } from "../sync";
 import LocalePicker from "../components/LocalePicker.vue";
+import UiButton from "../components/ui/UiButton.vue";
 
 const { t } = useI18n();
 const router = useRouter();

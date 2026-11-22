@@ -4,7 +4,7 @@
       <CompanionAvatar
         :character="character"
         :color="color"
-        state="idle"
+        state="work"
         size="lg"
       />
     </div>
@@ -23,7 +23,12 @@
           :aria-selected="id === character"
           @click="setCharacter(id)"
         >
-          <CompanionAvatar :character="id" :color="color" state="idle" size="sm" />
+          <CompanionAvatar
+            :character="id"
+            :color="color"
+            :state="id === character ? 'notify' : 'idle'"
+            size="sm"
+          />
         </button>
       </div>
     </div>
@@ -124,6 +129,14 @@ function setColor(i) {
   background: transparent;
   cursor: pointer;
   overflow: visible;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+.av-picker-char :deep(.companion-avatar) {
+  width: 92%;
+  height: 92%;
 }
 .av-picker-char.on {
   border-color: #22252c;

@@ -1,33 +1,55 @@
 # LLM settings (Pi models.json)
 
 **Status**: in place  
-**Key files**: `autonomous/services/setup_config.py`, `autonomous/services/chat_attachments.py`, `frontend/src/components/LlmSettings.vue`  
-**Last updated**: 2026-11-06 (per-model limits in Pi JSON + Autonomous overlay)
+**Key files**: `autonomous/services/setup_config.py`, `autonomous/services/llm_heavy_gate.py`, `autonomous/pi_extensions/llm_heavy_gate.ts`, `autonomous/services/chat_attachments.py`, `frontend/src/components/LlmSettings.vue`  
+**Last updated**: 2026-11-19 (per-model default thinking on the model card)
 
 ## User behaviour
 
 - Settings → **LLM**: edit OpenAI-compatible providers written to `~/.pi/agent/models.json` (Pi schema).
-- Per model: API id, display **name**, vision flag, **max images / request**, **context window**, **max output tokens**.
-- **Save per model**: button disabled while unchanged; enabled on edit; disabled again after a successful save. Provider URL/key has its own save.
-- Fetch model ids from the endpoint (`GET /v1/models`), then refine limits in the list.
-- Links to Pi docs for `/login` and advanced cases: [models](https://pi.dev/docs/latest/models), [models configuration](https://pi.dev/docs/latest/models-configuration).
+- **Default model** (its own card): the only Pi ref a Manager-created bot receives, and the model preselected in the Create bot dialog (see [household.md](./household.md) and [bots-create.md](./bots-create.md)). Saved via `PUT /settings` (`bots.default_model`). The picker spans the card.
+- **Models** cards: each model has a **Default thinking** select (Pi `off`→`max`, default `medium`) stored as `autonomous.defaultThinking` on that entry. New bots (UI create or Manager) that use this model inherit that level; Details still overrides per bot.
+- Two clear blocks:
+  1. **Providers** — add / edit API endpoints (id, URL, key). Save without needing a model.
+  2. **Models** — same cards as providers: collapsed on arrival, trash on the row, **Add a model** opens one empty card. Fields start with the display name, then provider (placeholder until chosen; that pick fetches `/v1/models`), then the model id menu, vision, limits, and optional **large-request concurrency** (toggle + max concurrent + token threshold).
+- **Concurrency** is **per model** (`provider/id`), two optional caps on the model card:
+  1. **All parallel requests** — hard cap on in-flight LLM calls of any size (`autonomous.parallelGate`).
+  2. **Large requests** — extra cap when estimated tokens ≥ threshold (default 10 000) (`autonomous.heavyGate`).
+  Both off by default. Another model keeps its own pools.
+- A model you just add stays open. Reload collapses saved cards again. An unsaved new card is kept if another save refreshes the list.
+- Provider cards start **collapsed** (name only, at least one letter) on a short row. The caret opens the URL and key below the name. The name and the trash stay on the same pixels when the card opens. A provider you just add opens so it can be filled. Reload collapses them again.
+- Each provider card has a trash control on that same row, at the right. It deletes the provider when no model uses it. If a model still lists that provider, the trash stays grey. Hover uses the same immediate custom tooltip as the large avatar (no browser `title`): a model uses this provider, or delete the provider. `DELETE /setup/llm?provider=` still returns `provider_in_use` if a model remains.
+- **Other models** (its own card): one read-only table from `pi --list-models`, excluding providers edited in this page. A row appears only when Pi can already use that provider (`/login` or an API key). Rows are sorted alphabetically on `provider · model id`, then show context, max output, reasoning, and image flags from pi.dev. The list has no scrollbar of its own; it scrolls with the settings pane. The header sticks to the top of that pane on an opaque band, so a row cannot show through the titles. These models are picked on the bot’s details page, not edited here.
+- Links to Pi docs for `/login` and advanced cases: [models](https://pi.dev/docs/latest/models), [providers](https://pi.dev/docs/latest/providers), [models configuration](https://pi.dev/docs/latest/models-configuration) — one docs line in the Providers card.
+- Settings → LLM is four full-width cards (default model, providers, models, other models). Each card body uses a flex column gap (`0.75rem`). Nested fields in open provider/model rows use the same gap (no stacked `.settings-field` / `.setup-toolbar` margins). **Add a provider** and **Add a model** are centered.
 - No global “max vision images” control in the UI: set it **per model**. Code fallback is still `guard.max_images_per_prompt` default **2** when the model has no `inputLimits.images.maxPerRequest` (also updated when a provider returns “at most N”).
 
 ## Implementation
 
-- Source of truth for config: Pi `models.json` (`name`, `input`, `inputLimits.images.maxPerRequest`, `contextWindow`, `maxTokens`).
+- Source of truth for config: Pi `models.json` (`name`, `input`, `inputLimits.images.maxPerRequest`, `contextWindow`, `maxTokens`, plus Autonomous overlays `autonomous.parallelGate` / `autonomous.heavyGate` / `autonomous.defaultThinking`).
+- `PUT /setup/llm`:
+  - no `models` / `model` → update provider credentials only (keep existing models, or create empty);
+  - `models: [...]` → full list replace for that provider (may be `[]`);
+  - `model` → upsert one model on that provider.
 - Writes are **merge-safe**: unknown fields (`cost`, `reasoning`, `compat`, resize profiles…) are kept.
-- Autonomous **overlay**: `max_images_per_prompt(bot=…)` reads the bot’s model ref from Pi JSON and truncates vision prompts; if the provider returns “at most N images”, the limit is written back into that model entry (`remember_model_image_limit`) and the guard fallback is updated.
-- Planned upstream: PR to pi.dev so these fields are never wiped by auto catalog edits.
+- Autonomous **overlay**: `max_images_per_prompt(bot=…)` reads the bot’s model ref from Pi JSON and truncates vision prompts. The same number is passed to Pi as `AUTONOMOUS_MAX_IMAGES`. `vision_budget.ts` applies it to the whole transcript (not only the new message). If the provider returns “at most N images”, the limit is written back into that model entry (`remember_model_image_limit`), the guard fallback, and `bots/<name>/pi/vision_image_cap` so the running Pi uses N on the next call.
+- **Concurrency gates (per model)**: `autonomous.parallelGate` `{enabled, maxConcurrent}` and/or `autonomous.heavyGate` `{enabled, maxConcurrent, tokenThreshold}`. Runtime: process-wide semaphores in `llm_heavy_gate.py` keyed by `provider/id` (one lease per call; heavy calls also count toward the heavy cap). Pi extension `llm_heavy_gate.ts` (after `vision_budget`) estimates tokens (chars/4), `POST /bots/:name/llm-heavy-gate/acquire` with optional `model`, then `release` on `after_provider_response` / `session_shutdown`. Leases expire after 15 min. Old global settings keys `llm.heavy_*` are obsolete.
 
 ## Pitfalls / non-regressions
 
 - Do not store a second parallel LLM catalog in SQLite.
 - Do not drop unknown keys when saving a model.
+- Do not require a model when saving provider credentials alone.
 - Built-in providers via Pi `/login` stay outside this editor (custom OpenAI-compat only).
+- Set `contextWindow` on custom models to the real vLLM `--max-model-len` (Pi defaults to **128K** when omitted — wrong compaction / overflow). Compaction headroom: `~/.pi/agent/settings.json` → `compaction.reserveTokens` / `keepRecentTokens` (and optional `modelOverrides`). Our Qwen ref uses `contextWindow: 262144` with reserve **49152** / keepRecent **28000** so auto-compact leaves room before a fat tool batch.
+- **`cacheWarming: off` (forced / kept)** is **not** “disable the LLM KV / prefix cache”. It only turns off Pi’s periodic keep-alive pings. vLLM automatic prefix caching has **no TTL**, so warming is unnecessary and can add noise. Réflexion `cacheRead: 0` means the **provider usage** reported no cached prompt tokens (remote endpoint may omit `prompt_tokens_details`, or the growing transcript prefix misses the cache) — investigate the OpenAI-compatible server (`enable-prefix-caching` + usage fields), not Pi `cacheWarming`. Session-affinity headers only matter with several replicas behind a LB (single node: irrelevant).
+- **Pi HTTP idle + retry (forced by Autonomous)**: on every `serve` start and before each Pi spawn, `ensure_pi_runtime_settings()` merges into `~/.pi/agent/settings.json`: `httpIdleTimeoutMs: 600000` (10 min Undici idle for long LLM / compaction) and `retry.enabled: false` (no Pi auto-retry on stream/compaction failure — Relancer is manual). Other keys are preserved. Align the reverse proxy idle with ≥600 s. Autonomous does **not** mutex every LLM call — only the optional per-model heavy gate above; the LLM reverse proxy may still queue / cancel on disconnect.
+- Two models on the **same** GPU each have their own pool: set both cards (e.g. 1+1) yourself — Autonomous does not merge pools by `baseUrl`.
+- Parallel + heavy together: a call waits until **both** applicable caps have room (e.g. max parallel 3 and max heavy 1 → three small OK, a fourth large waits even if a parallel slot is free).
+- Future Autonomous code must not rewrite the Pi system prefix every message (no per-turn “now” / fresh memory in system) — see [pi-agent.md](./pi-agent.md) pitfalls.
 
 ## Quick check
 
 ```bash
-pytest tests/test_llm_models_limits.py tests/test_setup_models.py -q
+pytest tests/test_llm_heavy_gate.py tests/test_llm_models_limits.py tests/test_setup_models.py tests/test_pi_runtime_settings.py -q
 ```

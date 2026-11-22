@@ -18,6 +18,32 @@ def _clean_cache(home):
     updates_svc.invalidate_cache(home)
 
 
+def test_version_in_source():
+    assert updates_svc.version_in_source('__version__ = "0.1.0"\n') == "0.1.0"
+    assert updates_svc.version_in_source("no version here") == ""
+
+
+def test_setuptools_log_filter_drops_editable_warning():
+    sample = [
+        "$ pip install -q -e /root/autonomous",
+        "  /tmp/pip-build-env-x/overlay/.../editable_wheel.py:354: BuildBackendWarning: Editable installation.",
+        "  !!",
+        "          ********************************************************************************",
+        "          Please be careful with folders in your working directory with the same",
+        "          name as your package as they may take precedence during imports.",
+        "          ********************************************************************************",
+        "  !!",
+        "    with strategy, WheelFile(wheel_path, \"w\") as wheel_obj:",
+        "Restarting the service…",
+    ]
+    filt = updates_svc._SetuptoolsLogFilter()
+    kept = [line for line in sample if not filt.omit(line)]
+    assert kept == [
+        "$ pip install -q -e /root/autonomous",
+        "Restarting the service…",
+    ]
+
+
 def test_default_channel_is_main(home):
     assert updates_svc.channel(home) == "main"
     assert updates_svc.remote_url(home) == ""
@@ -118,6 +144,8 @@ def test_status_endpoint_cached(auth_client, home, monkeypatch):
     body = r.get_json()
     assert body["channel"] == "main"
     assert "channels" in body
+    assert body["version"]
+    assert body["latest_version"]
     assert calls["n"] == 1
 
 
@@ -142,6 +170,76 @@ def test_check_endpoint_forces(auth_client, monkeypatch):
     assert r.status_code == 200
     assert seen == [True]
     assert r.get_json()["available"] is True
+
+
+def test_match_remote_resets_without_deleting_untracked():
+    steps = dict(
+        updates_svc.sync_steps("origin", "dev", force=False, match_remote=True)
+    )
+    assert "clean" not in steps
+    assert "ff-only" not in steps
+    assert steps["reset"][-4:] == ["-f", "-B", "dev", "origin/dev"]
+
+
+def test_rewritten_remote_is_an_update(home, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "_dirty", lambda: False)
+    monkeypatch.setattr(updates_svc, "_fetch_remote_name", lambda home=None: "origin")
+    monkeypatch.setattr(updates_svc, "origin_url", lambda: None)
+    monkeypatch.setattr(updates_svc, "channel", lambda home=None: "dev")
+    monkeypatch.setattr(
+        updates_svc,
+        "_rev_parse",
+        lambda ref: {"HEAD": "local", "origin/dev": "remote"}.get(ref),
+    )
+    monkeypatch.setattr(updates_svc, "_behind_count", lambda local, remote: 4)
+    monkeypatch.setattr(updates_svc, "_is_ancestor", lambda ancestor, descendant: False)
+
+    class _Ok:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(updates_svc, "_git", lambda *args, **kwargs: _Ok())
+    updates_svc.invalidate_cache(home)
+    status = updates_svc.check(home=home, force=True)
+    assert status["code"] == "diverged"
+    assert status["available"] is True
+    assert status["behind"] == 4
+
+
+def test_force_sync_resets_to_remote_tip():
+    steps = dict(updates_svc.sync_steps("origin", "dev", force=True))
+    assert steps["fetch"][-3:] == ["fetch", "origin", "dev"]
+    assert steps["clean"][-2:] == ["clean", "-fd"]
+    assert "clean" in steps["clean"] and "-x" not in steps["clean"]
+    assert steps["reset"][-4:] == ["-f", "-B", "dev", "origin/dev"]
+    plain = dict(updates_svc.sync_steps("origin", "main", force=False))
+    assert "ff-only" in plain
+    assert plain["ff-only"][-2:] == ["--ff-only", "origin/main"]
+
+
+def test_apply_force_accepts_dirty(auth_client, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "_dirty", lambda: True)
+    monkeypatch.setattr(updates_svc, "_fetch_remote_name", lambda home=None: "origin")
+    started = {}
+
+    class _Thread:
+        def __init__(self, target=None, name=None, daemon=None):
+            started["target"] = target
+
+        def start(self):
+            started["started"] = True
+
+    monkeypatch.setattr(updates_svc.threading, "Thread", _Thread)
+    try:
+        r = auth_client.post("/api/v1/setup/update/apply", json={"force": True})
+        assert r.status_code == 202
+        assert started.get("started") is True
+        assert r.get_json()["kind"] == "setup.self_update"
+    finally:
+        updates_svc._apply_running = False
 
 
 def test_apply_refuses_dirty(auth_client, monkeypatch):
@@ -180,6 +278,50 @@ def test_migrations_ahead_blocks_main(home, monkeypatch, tmp_path):
     assert exc.value.code == "migrations_ahead"
 
 
+def test_squashed_migration_numbers_do_not_block_switch(home, monkeypatch):
+    monkeypatch.setattr(updates_svc, "git_available", lambda: True)
+    monkeypatch.setattr(updates_svc, "_rev_parse", lambda ref: "deadbeef" if ref else None)
+    monkeypatch.setattr(
+        updates_svc,
+        "_git",
+        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    settings_svc.set_value("update.channel", "main", home=home)
+    from autonomous.db import get_db
+
+    with get_db(home) as conn:
+        for version in (2, 22, 23):
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))",
+                (version,),
+            )
+    # A fresh database already has every file under autonomous/migrations
+    # (including ones added after this test). The target branch must list
+    # those; 2 and 22 stay covered only because 001 squashes through 22.
+    present = updates_svc._migration_versions_in_tree(None)
+    assert 1 in present
+    monkeypatch.setattr(
+        updates_svc,
+        "_migration_versions_in_tree",
+        lambda ref=None, present=present: set(present),
+    )
+    gate = updates_svc.can_switch_to("dev", home=home)
+    assert gate["ok"] is True
+
+    with get_db(home) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (25, datetime('now'))"
+        )
+    monkeypatch.setattr(
+        updates_svc,
+        "_migration_versions_in_tree",
+        lambda ref=None: {1, 23},
+    )
+    blocked = updates_svc.can_switch_to("old", home=home)
+    assert blocked["ok"] is False
+    assert blocked["code"] == "migrations_ahead"
+
+
 def test_cache_roundtrip(home, monkeypatch):
     payload = {
         "ok": True,
@@ -204,3 +346,4 @@ def test_cache_roundtrip(home, monkeypatch):
     out = updates_svc.check(home=home, force=False)
     assert out["cached"] is True
     assert out["local_sha"] == "aaa"
+

@@ -1,9 +1,23 @@
 <template>
-  <div class="tool-group" :class="[groupStatus, { live: !sealed }]">
+  <div class="tool-group" :class="[groupStatus, { live: !sealed || groupStatus === 'running' }]">
     <button class="tool-group-summary" type="button" @click="onToggleList">
       <span class="tool-group-ico" aria-hidden="true">⚙</span>
       <span class="tool-group-title">{{ title }}</span>
-      <span v-if="statusSummary" class="tool-group-badge">{{ statusSummary }}</span>
+      <span
+        v-if="groupDurationLabel"
+        class="tool-dur"
+        :class="{ timeout: groupTimedOut }"
+        :title="groupTimedOut ? t('chat.toolTimeout') : undefined"
+      >{{ groupDurationLabel }}</span>
+      <span
+        v-if="groundingCount"
+        class="tool-group-badge"
+      >{{ t("chat.groundingGroup") }} · {{ groundingCount }}</span>
+      <span
+        v-if="statusSummary"
+        class="tool-group-badge"
+        :class="{ timeout: groupTimedOut }"
+      >{{ statusSummary }}</span>
       <time
         v-if="groupTime"
         class="tool-group-time"
@@ -28,23 +42,46 @@
       </svg>
     </button>
 
-    <!-- Pendant le run : résultat du dernier appel d’outil (tous outils, pas seulement grounding). -->
-    <div v-if="livePreview" class="tool-group-live">
+    <!-- Folded list only. Once the list is open, the running row at the bottom is enough. -->
+    <div v-if="livePreview && !listOpen" class="tool-group-live tool-group-live-compact">
       <div class="tool-live-head">
         <span class="tool-live-name">{{ livePreview.name }}</span>
-        <span class="tool-live-status">{{ livePreview.status }}</span>
+        <span
+          v-if="livePreview.duration"
+          class="tool-dur"
+          :class="{ timeout: livePreview.timedOut, live: livePreview.running }"
+        >{{ livePreview.duration }}</span>
+        <span
+          class="tool-live-status"
+          :class="{ timeout: livePreview.timedOut }"
+        >{{ livePreview.status }}</span>
+        <button
+          v-if="livePreview.running"
+          type="button"
+          class="tool-stop-btn"
+          :disabled="stoppingTool"
+          :title="t('chat.stopToolHint')"
+          @click.stop="stopTool"
+        >
+          {{ t("chat.stopTool") }}
+        </button>
         <span v-if="livePreview.hint" class="tool-live-hint">{{ livePreview.hint }}</span>
       </div>
-      <div v-if="livePreview.args" class="tool-section">
-        <span class="tool-section-label">{{ t("chat.toolArgs") }}</span>
-        <pre>{{ livePreview.args }}</pre>
-      </div>
-      <div v-if="livePreview.result" class="tool-section">
-        <span class="tool-section-label">{{ t("chat.toolResult") }}</span>
-        <pre>{{ livePreview.result }}</pre>
-      </div>
-      <p v-else-if="!livePreview.args" class="tool-empty">{{ t("chat.toolNoDetail") }}</p>
     </div>
+
+    <!-- Desk captures stay out of assistant bubbles: show the latest user-facing
+         shot on the folded group so it is not buried under Expand → tool row. -->
+    <figure
+      v-if="foldedShotPreview && !listOpen"
+      class="shot-card tool-shot tool-group-shot-preview"
+    >
+      <img
+        :src="foldedShotPreview.meta?.url"
+        :alt="firstLine(foldedShotPreview) || t('chat.screenshot')"
+        loading="lazy"
+      />
+      <figcaption v-if="firstLine(foldedShotPreview)">{{ firstLine(foldedShotPreview) }}</figcaption>
+    </figure>
 
     <!-- Liste d’outils (repliée) : pas de blocs séparés cible / pointeur. -->
     <ul v-if="listOpen" class="tool-group-list">
@@ -55,8 +92,12 @@
         :class="rowClass(m)"
         :data-answer="m.meta?.answer || ''"
       >
+        <!-- Texte assistant au milieu du run (ordre chronologique). -->
+        <template v-if="isRunText(m)">
+          <p class="tool-run-text">{{ runTextBody(m) }}</p>
+        </template>
         <!-- Orphan capture (API manuelle, sans outil). -->
-        <template v-if="isShot(m)">
+        <template v-else-if="isShot(m)">
           <figure class="shot-card grounding tool-shot">
             <img
               :src="m.meta?.url"
@@ -70,11 +111,20 @@
           <p class="grounding-line">{{ firstLine(m) }}</p>
           <pre v-if="extraText(m)" class="grounding-extra">{{ extraText(m) }}</pre>
         </template>
-        <template v-else>
-          <button class="tool-row-head" type="button" @click="toggle(m.id)">
-            <span class="tool-row-name">{{ m.meta?.tool_name || t("chat.tool") }}</span>
-            <span class="tool-row-status">{{ statusLabel(m) }}</span>
-            <span v-if="pointerHint(m)" class="tool-row-pointer">{{ pointerHint(m) }}</span>
+        <template v-else-if="isLlmTurn(m)">
+          <button
+            class="tool-row-head llm-row-head"
+            type="button"
+            :title="t('chat.llmTurnHint')"
+            @click="toggleLlmRow(m)"
+          >
+            <span class="tool-row-name">{{ llmTurnLabel(m) }}</span>
+            <span v-if="llmTurnDurationLabel(m)" class="tool-dur">{{
+              llmTurnDurationLabel(m)
+            }}</span>
+            <span v-if="llmTurnTokensLabel(m)" class="tool-row-pointer">{{
+              llmTurnTokensLabel(m)
+            }}</span>
             <time
               v-if="rowTime(m)"
               class="tool-row-time"
@@ -99,6 +149,98 @@
             </svg>
           </button>
           <div v-if="expanded[m.id]" class="tool-row-body">
+            <p v-if="llmPayloadState(m.id)?.loading" class="tool-empty">
+              {{ t("chat.llmTurnLoading") }}
+            </p>
+            <p
+              v-else-if="llmPayloadState(m.id)?.error"
+              class="tool-empty"
+            >{{ t("chat.llmTurnLoadError") }}</p>
+            <template v-else>
+              <div
+                v-if="llmPayloadState(m.id)?.requestText"
+                class="tool-section"
+              >
+                <span class="tool-section-label">{{ t("chat.llmTurnRequestJson") }}</span>
+                <pre class="llm-json-pre">{{ llmPayloadState(m.id).requestText }}</pre>
+              </div>
+              <div
+                v-if="llmPayloadState(m.id)?.responseText"
+                class="tool-section"
+              >
+                <span class="tool-section-label">{{ t("chat.llmTurnResponseJson") }}</span>
+                <pre class="llm-json-pre">{{ llmPayloadState(m.id).responseText }}</pre>
+              </div>
+              <p
+                v-else-if="isLlmTurnRunning(m)"
+                class="tool-empty"
+              >{{ t("chat.llmTurnWaiting") }}</p>
+              <p
+                v-else-if="
+                  !llmPayloadState(m.id)?.requestText &&
+                  !llmPayloadState(m.id)?.responseText
+                "
+                class="tool-empty"
+              >{{ t("chat.llmTurnEmpty") }}</p>
+            </template>
+          </div>
+        </template>
+        <template v-else>
+          <!-- div (not button): a nested stop <button> inside <button> breaks the flex layout. -->
+          <div
+            class="tool-row-head"
+            role="button"
+            tabindex="0"
+            @click="toggle(m.id)"
+            @keydown.enter.prevent="toggle(m.id)"
+            @keydown.space.prevent="toggle(m.id)"
+          >
+            <span class="tool-row-name">{{ m.meta?.tool_name || t("chat.tool") }}</span>
+            <span
+              v-if="toolDurationLabel(m)"
+              class="tool-dur"
+              :class="{ timeout: isTimedOut(m), live: isRunning(m) }"
+              :title="isTimedOut(m) ? t('chat.toolTimeout') : undefined"
+            >{{ toolDurationLabel(m) }}</span>
+            <span
+              class="tool-row-status"
+              :class="{ timeout: isTimedOut(m) }"
+            >{{ statusLabel(m) }}</span>
+            <button
+              v-if="isRunning(m)"
+              type="button"
+              class="tool-stop-btn"
+              :disabled="stoppingTool"
+              :title="t('chat.stopToolHint')"
+              @click.stop="stopTool"
+            >
+              {{ t("chat.stopTool") }}
+            </button>
+            <span v-if="rowHint(m)" class="tool-row-pointer">{{ rowHint(m) }}</span>
+            <time
+              v-if="rowTime(m)"
+              class="tool-row-time"
+              :datetime="m.created_at"
+            >{{ rowTime(m) }}</time>
+            <svg
+              class="tool-row-caret"
+              :class="{ open: expanded[m.id] }"
+              viewBox="0 0 12 12"
+              width="11"
+              height="11"
+              aria-hidden="true"
+            >
+              <path
+                d="M2.5 4.2 6 7.8 9.5 4.2"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div v-if="expanded[m.id]" class="tool-row-body">
             <div v-if="argsText(m)" class="tool-section">
               <span class="tool-section-label">{{ t("chat.toolArgs") }}</span>
               <pre>{{ argsText(m) }}</pre>
@@ -107,17 +249,8 @@
               <span class="tool-section-label">{{ t("chat.toolResult") }}</span>
               <pre>{{ resultText(m) }}</pre>
             </div>
-            <div
-              v-if="groundingNotesFor(m).length"
-              class="tool-section tool-grounding-notes"
-            >
-              <p
-                v-for="n in groundingNotesFor(m)"
-                :key="n.id"
-                class="grounding-line"
-              >{{ firstLine(n) }}</p>
-            </div>
-            <!-- vm_ground : capture + croix sous l’outil déplié -->
+            <!-- vm_ground : capture + croix sous l’outil déplié.
+                 Les lignes « Grounding · boucle… » sont dans la liste, pas ici. -->
             <figure
               v-for="shot in targetShotFor(m) ? [targetShotFor(m)] : []"
               :key="`tgt-${m.id}`"
@@ -222,8 +355,10 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { api } from "../api";
+import { formatDurationMs } from "../runTimings";
 import { formatMsgTime } from "../timeFormat";
 
 const POINTER_TOOLS = new Set(["vm_click", "vm_drag", "vm_scroll"]);
@@ -232,9 +367,151 @@ const props = defineProps({
   entries: { type: Array, required: true },
   /** True once a later chat item (assistant, vault…) follows this group. */
   sealed: { type: Boolean, default: false },
+  bot: { type: String, default: "" },
 });
 
 const { t, locale } = useI18n();
+const stoppingTool = ref(false);
+
+function isRunning(m) {
+  return (m?.meta?.status || "running") === "running";
+}
+
+function isLlmTurn(m) {
+  return m?.role === "system" && m?.meta?.kind === "llm_turn";
+}
+
+function isLlmTurnRunning(m) {
+  return isLlmTurn(m) && (m?.meta?.status || "") === "running";
+}
+
+function isRunText(m) {
+  return m?.meta?.kind === "run_text";
+}
+
+function runTextBody(m) {
+  return String(m?.content || "").trim();
+}
+
+function llmTurnLabel(m) {
+  const status = String(m?.meta?.status || "done");
+  if (status === "running") return t("chat.llmTurnRunning");
+  if (status === "error") return t("chat.llmTurnError");
+  if (status === "aborted") return t("chat.llmTurnAborted");
+  return t("chat.llmTurnDone");
+}
+
+function llmTurnDurationMs(m) {
+  const meta = m?.meta || {};
+  if (Number.isFinite(Number(meta.duration_ms))) return Number(meta.duration_ms);
+  const started = Number(meta.started_ms);
+  if (Number.isFinite(started) && meta.status === "running") {
+    return Math.max(0, nowMs.value - started);
+  }
+  return null;
+}
+
+function llmTurnDurationLabel(m) {
+  const ms = llmTurnDurationMs(m);
+  return ms == null ? "" : formatDurationMs(ms);
+}
+
+function formatTok(n) {
+  const value = Number(n);
+  if (!Number.isFinite(value)) return "";
+  if (value >= 1000) return `${Math.round(value / 1000)}k`;
+  return String(value);
+}
+
+function llmTurnTokensLabel(m) {
+  const tin = Number(m?.meta?.tokens_in);
+  const tout = Number(m?.meta?.tokens_out);
+  if (!Number.isFinite(tin) && !Number.isFinite(tout)) return "";
+  return t("chat.llmTurnTokens", {
+    inn: formatTok(Number.isFinite(tin) ? tin : 0),
+    out: formatTok(Number.isFinite(tout) ? tout : 0),
+  });
+}
+
+const llmPayloadCache = reactive({});
+
+function llmPayloadState(id) {
+  return llmPayloadCache[id] || null;
+}
+
+function prettyJson(data) {
+  try {
+    if (data && data._legacy_text && data.text != null) {
+      return String(data.text);
+    }
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return String(data ?? "");
+  }
+}
+
+async function loadLlmPayloads(m) {
+  const id = m?.id;
+  if (!id || !props.bot) return;
+  const cur = llmPayloadCache[id];
+  if (cur?.loading || (cur && !cur.error && (cur.requestText || cur.responseText))) {
+    return;
+  }
+  llmPayloadCache[id] = { loading: true, error: false, requestText: "", responseText: "" };
+  const meta = m.meta || {};
+  let requestText = "";
+  let responseText = "";
+  let error = false;
+  try {
+    if (meta.request_file || meta.request) {
+      try {
+        const data = await api.llmTurnPayload(props.bot, id, "request");
+        requestText = prettyJson(data);
+      } catch {
+        if (meta.request) requestText = String(meta.request);
+      }
+    }
+    if (meta.response_file) {
+      try {
+        const data = await api.llmTurnPayload(props.bot, id, "response");
+        responseText = prettyJson(data);
+      } catch {
+        error = !requestText;
+      }
+    } else if (meta.response && meta.status !== "running") {
+      // Hint only until the full file arrives — still show something.
+      responseText = String(meta.response);
+    }
+  } catch {
+    error = true;
+  }
+  llmPayloadCache[id] = {
+    loading: false,
+    error: error && !requestText && !responseText,
+    requestText,
+    responseText,
+  };
+}
+
+function toggleLlmRow(m) {
+  const id = m?.id;
+  if (!id) return;
+  const next = !expanded[id];
+  expanded[id] = next;
+  if (next) loadLlmPayloads(m);
+}
+
+async function stopTool() {
+  if (!props.bot || stoppingTool.value) return;
+  stoppingTool.value = true;
+  try {
+    await api.cancelTool(props.bot);
+  } catch {
+    /* The command may already have finished. */
+  } finally {
+    stoppingTool.value = false;
+  }
+}
 const expanded = reactive({});
 /** Details open only when the user expands — never auto-open on seal. */
 const listOpen = ref(false);
@@ -244,12 +521,121 @@ function rowTime(m) {
   return formatMsgTime(m?.created_at, locale.value);
 }
 
+/** Tick while a tool is running so elapsed duration updates live. */
+const nowMs = ref(Date.now());
+let tickTimer = null;
+
+function entryTools() {
+  return (props.entries || []).filter((m) => m?.meta?.kind === "tool");
+}
+
+function anyToolRunning() {
+  return entryTools().some((m) => (m.meta?.status || "running") === "running");
+}
+
+function anyLlmTurnRunning() {
+  return (props.entries || []).some((m) => isLlmTurnRunning(m));
+}
+
+function syncTick() {
+  if (anyToolRunning() || anyLlmTurnRunning()) {
+    nowMs.value = Date.now();
+    if (!tickTimer) {
+      tickTimer = setInterval(() => {
+        nowMs.value = Date.now();
+      }, 1000);
+    }
+  } else if (tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
+
+onMounted(syncTick);
+onBeforeUnmount(() => {
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = null;
+});
+
+watch(
+  () => props.entries,
+  () => syncTick(),
+  { deep: true },
+);
+
+function isTimedOut(m) {
+  const meta = m?.meta || {};
+  if (meta.timed_out === true) return true;
+  const c = String(m?.content || "");
+  if (/\[timeout after\s+\d+s\]/i.test(c)) return true;
+  if (/timed out waiting/i.test(c) || /timed out after/i.test(c)) return true;
+  return false;
+}
+
+function toolDurationMs(m) {
+  const meta = m?.meta || {};
+  const stored = Number(meta.duration_ms);
+  if (Number.isFinite(stored) && stored >= 0) return stored;
+  if ((meta.status || "running") === "running" && m?.created_at) {
+    const start = Date.parse(m.created_at);
+    if (Number.isFinite(start)) return Math.max(0, nowMs.value - start);
+  }
+  return null;
+}
+
+/** Command deadline in seconds (vm_terminal_exec default 30 when omitted). */
+function toolTimeoutSec(m) {
+  const meta = m?.meta || {};
+  const args = meta.args && typeof meta.args === "object" ? meta.args : {};
+  const raw = Number(args.timeout);
+  if (Number.isFinite(raw) && raw > 0) return Math.max(1, Math.min(Math.round(raw), 600));
+  if (meta.tool_name === "vm_terminal_exec") return 30;
+  return null;
+}
+
+function toolDurationLabel(m) {
+  const ms = toolDurationMs(m);
+  if (ms == null) return "";
+  const elapsed = formatDurationMs(ms);
+  if (!isRunning(m)) return elapsed;
+  const timeoutSec = toolTimeoutSec(m);
+  if (timeoutSec == null) return elapsed;
+  return `${elapsed} / ${formatDurationMs(timeoutSec * 1000)}`;
+}
+
 const groupTimeIso = computed(() => {
   const first = props.entries.find((m) => m?.created_at);
   return first?.created_at || "";
 });
 
 const groupTime = computed(() => formatMsgTime(groupTimeIso.value, locale.value));
+
+const groupDurationMs = computed(() => {
+  void nowMs.value;
+  let total = 0;
+  let any = false;
+  for (const m of entryTools()) {
+    const ms = toolDurationMs(m);
+    if (ms == null) continue;
+    total += ms;
+    any = true;
+  }
+  for (const m of props.entries || []) {
+    if (!isLlmTurn(m)) continue;
+    const ms = llmTurnDurationMs(m);
+    if (ms == null) continue;
+    total += ms;
+    any = true;
+  }
+  return any ? total : null;
+});
+
+const groupDurationLabel = computed(() => {
+  const ms = groupDurationMs.value;
+  return ms == null ? "" : formatDurationMs(ms);
+});
+
+const groupTimedOut = computed(() => entryTools().some((m) => isTimedOut(m)));
 
 function isShot(m) {
   return m?.meta?.kind === "screenshot";
@@ -258,6 +644,24 @@ function isShot(m) {
 function isGrounding(m) {
   return m?.meta?.kind === "grounding";
 }
+
+/** Latest desk capture meant for the user (not grounding loop frames). */
+const foldedShotPreview = computed(() => {
+  const shots = (props.entries || []).filter(
+    (m) => isShot(m) && m?.meta?.url && !m?.meta?.grounding
+  );
+  if (!shots.length) return null;
+  // Prefer the shot linked to the last vm_screenshot tool in this group.
+  for (let i = (props.entries || []).length - 1; i >= 0; i--) {
+    const m = props.entries[i];
+    if (m?.meta?.kind === "tool" && m?.meta?.tool_name === "vm_screenshot") {
+      const linked = shotForTool(m);
+      if (linked?.meta?.url) return linked;
+      break;
+    }
+  }
+  return shots[shots.length - 1];
+});
 
 function isTargetShot(m) {
   if (!isShot(m) || !m?.meta?.grounding) return false;
@@ -286,8 +690,9 @@ const detailEntries = computed(() => {
       if (hasTools) return false;
       return !targetIdSet.has(m.id);
     }
-    // Notes de boucle grounding → sous vm_ground déplié, pas en lignes libres.
-    if (isGrounding(m) && hasTools) return false;
+    // Loop notes stay in the open list (« Grounding · boucle… »).
+    // Captures stay nested under the vm_ground row.
+    // LLM turns stay as normal rows in this list.
     return true;
   });
 });
@@ -448,20 +853,36 @@ const lastTool = computed(() => {
 const liveTick = computed(() => {
   const last = lastTool.value;
   if (!last) return "none";
-  return `${last.id}:${last.meta?.status || ""}:${String(last.content || "").length}`;
+  return `${last.id}:${last.meta?.status || ""}:${String(last.content || "").length}:${toolDurationMs(last) ?? ""}`;
 });
 
-/** Aperçu live : dernier outil, quel qu’il soit (vm_*, browser_*, …). */
+/** Compact live line: last tool name + status (details stay in the folded list). */
 const livePreview = computed(() => {
-  if (props.sealed) return null;
-  const m = lastTool.value;
-  if (!m) return null;
+  const running = [...entryTools()].reverse().find((m) => isRunning(m));
+  const m = running || lastTool.value;
+  if (!m) {
+    const llm = [...(props.entries || [])].reverse().find(isLlmTurnRunning);
+    if (!llm || props.sealed) return null;
+    void nowMs.value;
+    return {
+      name: llmTurnLabel(llm),
+      status: "",
+      hint: llmTurnTokensLabel(llm),
+      duration: llmTurnDurationLabel(llm),
+      timedOut: false,
+      running: true,
+    };
+  }
+  const active = isRunning(m);
+  if (props.sealed && !active) return null;
+  void nowMs.value;
   return {
     name: m.meta?.tool_name || t("chat.tool"),
     status: statusLabel(m),
-    hint: pointerHint(m),
-    args: argsText(m),
-    result: resultText(m),
+    hint: rowHint(m),
+    duration: toolDurationLabel(m),
+    timedOut: isTimedOut(m),
+    running: active,
   };
 });
 
@@ -638,21 +1059,38 @@ function pointerHint(m) {
   return a ? a.coordsText : "";
 }
 
+function rowHint(m) {
+  if (m?.meta?.tool_name === "vm_ground") {
+    const instr = String(m?.meta?.args?.instruction || "").trim();
+    if (instr) return instr.length > 72 ? `${instr.slice(0, 72)}…` : instr;
+  }
+  return pointerHint(m);
+}
+
+const groundingCount = computed(
+  () => tools.value.filter((m) => m?.meta?.tool_name === "vm_ground").length
+);
+
 const title = computed(() => {
   if (targetShots.value.length && !tools.value.length) {
     return t("chat.groundingGroup");
   }
-  const n = tools.value.length;
-  if (!n) {
-    const last = [...props.entries].reverse().find((m) => isGrounding(m) || isShot(m));
-    const line = last ? firstLine(last) : "";
-    if (!line) return t("chat.groundingGroup");
-    return line.length > 72 ? `${line.slice(0, 72)}…` : line;
-  }
-  return n <= 1 ? t("chat.toolOne") : t("chat.toolMany", { count: n });
+  const nTools = tools.value.length;
+  const nLlm = (props.entries || []).filter(isLlmTurn).length;
+  const bits = [];
+  if (nTools === 1) bits.push(t("chat.toolOne"));
+  else if (nTools > 1) bits.push(t("chat.toolMany", { count: nTools }));
+  if (nLlm === 1) bits.push(t("chat.llmTurnOne"));
+  else if (nLlm > 1) bits.push(t("chat.llmTurnMany", { count: nLlm }));
+  if (bits.length) return bits.join(", ");
+  const last = [...props.entries].reverse().find((m) => isGrounding(m) || isShot(m));
+  const line = last ? firstLine(last) : "";
+  if (!line) return t("chat.groundingGroup");
+  return line.length > 72 ? `${line.slice(0, 72)}…` : line;
 });
 
 const groupStatus = computed(() => {
+  if ((props.entries || []).some(isLlmTurnRunning)) return "running";
   const statuses = tools.value.map((m) => m.meta?.status || "running");
   if (statuses.some((s) => s === "running")) return "running";
   if (statuses.some((s) => s === "error")) return "error";
@@ -677,6 +1115,7 @@ const statusSummary = computed(() => {
 });
 
 function rowClass(m) {
+  if (isRunText(m)) return "run-text-row done";
   if (isShot(m)) return "tool-shot-row";
   if (isGrounding(m)) return "grounding-line-row";
   return m.meta?.status || "running";

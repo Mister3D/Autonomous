@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import threading
@@ -18,6 +19,67 @@ from autonomous.services.errors import AutonomousError, ValidationError
 from autonomous.services.events import BUS
 
 _LABEL = "autonomous.bot"
+log = logging.getLogger(__name__)
+
+# Tools that need the container. Status and the desk-request card do not:
+# a chat message must not wake anything, and those two already have their own UI.
+VM_TOOL_NAMES = frozenset(
+    {
+        "vm_screenshot",
+        "vm_look",
+        "vm_ground",
+        "vm_click",
+        "vm_type",
+        "vm_scroll",
+        "vm_key",
+        "vm_drag",
+        "vm_terminal_exec",
+        "vault_type",
+        "browser_tabs",
+        "browser_switch_tab",
+        "browser_close_tab",
+        "browser_navigate",
+        "browser_wait_load",
+        "browser_reset_session",
+        "browser_text",
+        "browser_links",
+        "browser_html",
+        "browser_scroll",
+        "browser_snapshot",
+        "browser_frames_snapshot",
+        "browser_click_selector",
+    }
+)
+_WAKE_LOCKS: dict[str, threading.Lock] = {}
+_WAKE_LOCKS_GUARD = threading.Lock()
+
+
+def mem_total_bytes() -> int:
+    """Host RAM from ``/proc/meminfo``, or 0 when it cannot be read."""
+    try:
+        text = Path("/proc/meminfo").read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    for line in text.splitlines():
+        if not line.startswith("MemTotal:"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            return int(parts[1]) * 1024
+    return 0
+
+
+def shm_size_bytes(mem_total: int | None = None) -> int:
+    """Ceiling for the desk ``/dev/shm``.
+
+    Linux sizes a tmpfs to half of RAM and does not reserve that space.
+    A fixed 256 MiB is what the VM used to hit. The floor stays 256 MiB
+    when the host is smaller than that.
+    """
+    total = mem_total_bytes() if mem_total is None else int(mem_total)
+    if total <= 0:
+        return _SHM_FLOOR
+    return max(_SHM_FLOOR, total // 2)
 
 
 def _refresh_companion_egress(home: Path | None) -> None:
@@ -28,9 +90,13 @@ def _refresh_companion_egress(home: Path | None) -> None:
         egress_svc.refresh(home)
     except Exception:
         pass
+
+
 _PORT_BASE = 15900
-# Idle desk → docker stop (bind-mounted ~/shared stays on host).
+# Idle desk → docker stop (bind-mounted ~/files stays on host).
 AUTO_SLEEP_SEC = 5 * 60
+# Smallest /dev/shm. Below this Chrome and package installs fail on a tiny host.
+_SHM_FLOOR = 256 * 1024 * 1024
 _REPO_DESKTOP = Path(__file__).resolve().parents[2] / "docker" / "desktop"
 _DESKTOP_SCRIPTS = (
     ("bot-chrome", "/usr/local/bin/bot-chrome", 0o755),
@@ -40,7 +106,11 @@ _DESKTOP_SCRIPTS = (
     ("webgl-spoof.js", "/usr/local/share/autonomous/webgl-spoof.js", 0o644),
     ("chrome-policy.json", "/etc/opt/chrome/policies/managed/autonomous.json", 0o644),
     ("autonomous-hook", "/usr/local/bin/autonomous-hook", 0o755),
+    # Lazy Chrome: xstartup must not autostart the browser (synced into live desks).
+    ("xstartup", "/home/autonomous/.vnc/xstartup", 0o755),
 )
+_chrome_ensure_locks: dict[str, threading.Lock] = {}
+_chrome_ensure_guard = threading.Lock()
 
 
 def _now() -> str:
@@ -145,15 +215,129 @@ def sync_desktop_scripts(bot: str, home: Path | None = None) -> list[str]:
             updated.append(src_name)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             continue
+    # Drop legacy XFCE Chrome autostart (old volumes / images).
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-u",
+                "autonomous",
+                name,
+                "rm",
+                "-f",
+                "/home/autonomous/.config/autostart/chrome.desktop",
+            ],
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    _stamp_chrome_eula(name)
     return updated
+
+
+def _stamp_chrome_eula(name: str) -> None:
+    """Drop the Chrome 151 sentinel so the terms dialog is not shown next launch.
+
+    The file lives in the user-data dir (host bind-mount). Writing it here covers
+    a desk that is still running the previous ``bot-chrome``.
+    """
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-u",
+                "autonomous",
+                "-e",
+                "HOME=/home/autonomous",
+                name,
+                "bash",
+                "-lc",
+                'd="${BOT_CHROME_USER_DATA_DIR:-$HOME/shared/.autonomous-chrome}"; '
+                'mkdir -p "$d" && : > "$d/EULA Accepted"',
+            ],
+            check=False,
+            capture_output=True,
+            timeout=15,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+
+def chrome_cdp_ready(bot: str, *, home: Path | None = None) -> bool:
+    """True when Chrome answers CDP on ``127.0.0.1:9222`` inside the desk."""
+    name = container_name(bot, home=home)
+    try:
+        probe = subprocess.run(
+            [
+                "docker",
+                "exec",
+                name,
+                "curl",
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://127.0.0.1:9222/json/version",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return (probe.stdout or "").strip() == "200"
+
+
+def _chrome_lock(bot: str) -> threading.Lock:
+    with _chrome_ensure_guard:
+        lock = _chrome_ensure_locks.get(bot)
+        if lock is None:
+            lock = threading.Lock()
+            _chrome_ensure_locks[bot] = lock
+        return lock
+
+
+def _kill_lazy_chrome(bot: str, home: Path | None = None) -> None:
+    """Stop Chrome started by a legacy image/session — keep CDP off until needed."""
+    name = container_name(bot, home=home)
+    script = r"""
+export HOME=/home/autonomous
+killall -u autonomous -q chrome chrome_crashpad_handler 2>/dev/null || true
+pkill -u autonomous -f 'bot-chrome' 2>/dev/null || true
+sleep 0.3
+killall -u autonomous -q -9 chrome 2>/dev/null || true
+"""
+    try:
+        subprocess.run(
+            ["docker", "exec", "-u", "autonomous", name, "bash", "-lc", script],
+            check=False,
+            capture_output=True,
+            timeout=15,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+
+def ensure_bot_chrome(bot: str, home: Path | None = None) -> bool:
+    """Start ``bot-chrome`` if CDP is down. Idempotent; used by browser tools.
+
+    Desks no longer autostart Chrome — shell-only tasks stay without a browser.
+    """
+    with _chrome_lock(bot):
+        if chrome_cdp_ready(bot, home=home):
+            return True
+        return restart_bot_chrome(bot, home=home)
 
 
 def restart_bot_chrome(bot: str, home: Path | None = None) -> bool:
     """Kill Chrome + WebGL spoof and relaunch ``bot-chrome`` (CDP profile).
 
-    Needed after ``sync_desktop_scripts`` on first boot: xstartup often starts the
-    *image* bot-chrome (default profile → CDP dead → spoof never attaches →
-    ``llvmpipe`` fingerprint → flagged by anti-bot services) before the host sync.
+    Used by ``ensure_bot_chrome`` when CDP is down, and by explicit desk restarts.
     """
     name = container_name(bot, home=home)
     # Kill → wait → relaunch → require CDP 200 AND autonomous-chrome profile.
@@ -238,8 +422,58 @@ def vm_api_base(home: Path | None = None) -> str | None:
     return f"http://host.docker.internal:{port}/api/v1"
 
 
+def _ensure_files_alias(bot: str, *, home: Path | None = None) -> None:
+    """Expose this bot's private files as ~/files inside an already running VM.
+
+    New desks bind-mount that path. Older containers only have ~/workspace
+    (and the legacy ~/shared mount Chrome still uses), so add a symlink once.
+    """
+    marker = bot_dir(bot, home) / "home" / ".autonomous" / "files-alias"
+    if marker.is_file():
+        return
+    name = container_name(bot, home=home)
+    script = (
+        "if [ ! -e /home/autonomous/files ]; then "
+        "ln -sfn workspace /home/autonomous/files; "
+        "fi"
+    )
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "-u", "root", name, "bash", "-lc", script],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("ok\n", encoding="utf-8")
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return
+
+
+def ensure_files_aliases(*, home: Path | None = None) -> None:
+    """Point ~/files at the private folder on every desk already running.
+
+    Called at serve start, before stale-run recovery opens Pi. Sleeping desks
+    get the same link in ``wake_desk`` / ``ensure_awake``. The new prompt then
+    tells the bot to use ~/files and to stop using ~/shared.
+    """
+    from autonomous.services import bots as bots_svc
+
+    for bot in bots_svc.list_bots(home=home):
+        name = str(bot.get("name") or "")
+        desk = bot.get("desk") or {}
+        if not name or desk.get("state") != "running":
+            continue
+        try:
+            _ensure_files_alias(name, home=home)
+        except Exception:
+            continue
+
+
 def sync_host_api_env(bot: str, *, home: Path | None = None) -> Path | None:
-    """Write host API URLs into the bind-mounted shared home for VM scripts."""
+    """Write host API URLs into the bind-mounted private files for VM scripts."""
     base = vm_api_base(home)
     if not base:
         return None
@@ -424,6 +658,7 @@ def wake_desk(bot: str, *, home: Path | None = None) -> dict[str, Any]:
         raise AutonomousError("No desk to wake", code="desk_absent")
     if desk.get("state") == "running":
         touch_activity(bot, home=home)
+        _ensure_files_alias(bot, home=home)
         return desk
     try:
         client = _docker()
@@ -445,33 +680,51 @@ def wake_desk(bot: str, *, home: Path | None = None) -> dict[str, Any]:
     desk = {**desk, "state": "running", "slept_at": None, "last_error": None}
     bots_svc.patch_bot(bot, {"desk": desk}, home=home)
     touch_activity(bot, home=home)
-    # Re-sync helpers + ensure CDP Chrome (same race as first create if image is stale).
-    try:
-        sync_desktop_scripts(bot, home=home)
-        # Only relaunch if CDP is down (xstartup may already have started Chrome).
-        probe = subprocess.run(
-            [
-                "docker",
-                "exec",
-                container_name(bot, home=home),
-                "curl",
-                "-s",
-                "-o",
-                "/dev/null",
-                "-w",
-                "%{http_code}",
-                "http://127.0.0.1:9222/json/version",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if (probe.stdout or "").strip() != "200":
-            restart_bot_chrome(bot, home=home)
-    except Exception:
-        pass
+    # The picture only needs websockify. Script sync and a Chrome CDP check
+    # used to block this return (often 10s+), so the Screen tab sat on
+    # "Waking…" with nothing to show.
+    _wait_vnc_port(desk.get("vnc_port"))
+    threading.Thread(
+        target=_finish_wake_background,
+        args=(bot, home),
+        name=f"desk-wake-{bot}",
+        daemon=True,
+    ).start()
     BUS.publish("desk.updated", {"desk": desk}, bot=bot)
     return desk
+
+
+def _wait_vnc_port(port: Any, *, timeout: float = 2.0) -> None:
+    """Return once noVNC accepts TCP, or when the short budget is spent."""
+    try:
+        port_n = int(port)
+    except (TypeError, ValueError):
+        return
+    if port_n <= 0:
+        return
+    import socket
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port_n), timeout=0.2):
+                return
+        except OSError:
+            time.sleep(0.1)
+
+
+def _finish_wake_background(bot: str, home: Path | None) -> None:
+    """Helpers and Chrome CDP after the desktop is already visible."""
+    try:
+        sync_desktop_scripts(bot, home=home)
+        _ensure_files_alias(bot, home=home)
+    except Exception:
+        pass
+    # Do not start Chrome on wake — browser tools call ensure_bot_chrome.
+    # Legacy images may have left Chrome running; stop it so GUI/shell work
+    # is not covered by about:blank. If CDP is already up from a deliberate
+    # browser session in this wake, leave dismiss to the next browser tool.
+    _kill_lazy_chrome(bot, home=home)
 
 
 def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:
@@ -488,12 +741,102 @@ def ensure_awake(bot: str, *, home: Path | None = None) -> dict[str, Any]:
         desk = wake_desk(bot, home=home)
     elif state == "running":
         touch_activity(bot, home=home)
+        _ensure_files_alias(bot, home=home)
     else:
         raise AutonomousError(
             "Desktop is not running — start the bot desk first.",
             code="desk_not_running",
         )
     sync_host_api_env(bot, home=home)
+    return desk
+
+
+def _wake_lock(bot: str) -> threading.Lock:
+    with _WAKE_LOCKS_GUARD:
+        lock = _WAKE_LOCKS.get(bot)
+        if lock is None:
+            lock = threading.Lock()
+            _WAKE_LOCKS[bot] = lock
+        return lock
+
+
+def ensure_awake_for_tool(bot: str, *, home: Path | None = None) -> dict[str, Any]:
+    """Wake a sleeping desk before a VM tool, and show that wait as a tool card.
+
+    A second caller while the wake is in progress waits on the same lock and
+    does not post another card. A desk that is already running is only touched.
+    The Screen button, the terminal tab and a chat message do not use this.
+    """
+    b = bots_svc.get_bot(bot, home=home)
+    if (b.get("desk") or {}).get("state") != "sleeping":
+        return ensure_awake(bot, home=home)
+    with _wake_lock(bot):
+        b = bots_svc.get_bot(bot, home=home)
+        if (b.get("desk") or {}).get("state") != "sleeping":
+            return ensure_awake(bot, home=home)
+        return _wake_with_tool_card(bot, home=home)
+
+
+def prepare_vm_tool(bot: str, tool_name: str, *, home: Path | None = None) -> None:
+    """Before the real tool card: if this tool needs the VM and it is asleep, wait.
+
+    The model does not call this. A failure still leaves the wake card in error
+    and does not stop the tool event — the tool itself reports the same failure.
+    """
+    if tool_name not in VM_TOOL_NAMES:
+        return
+    try:
+        b = bots_svc.get_bot(bot, home=home)
+    except Exception:
+        return
+    if (b.get("desk") or {}).get("state") != "sleeping":
+        return
+    try:
+        ensure_awake_for_tool(bot, home=home)
+    except Exception:
+        log.exception("VM wake before %s failed for %s", tool_name, bot)
+
+
+def _wake_with_tool_card(bot: str, *, home: Path | None) -> dict[str, Any]:
+    from autonomous.services import chat as chat_svc
+
+    started = time.monotonic()
+    meta: dict[str, Any] = {
+        "kind": "tool",
+        "status": "running",
+        "tool_name": "vm_wake",
+        "args": {},
+        "counts_as_action": False,
+    }
+    content = "🔧 vm_wake\nstatus: running"
+    msg = chat_svc.create_message(bot, content, role="event", meta=meta, home=home)
+    try:
+        desk = ensure_awake(bot, home=home)
+    except Exception as exc:
+        elapsed = int((time.monotonic() - started) * 1000)
+        failed = {
+            **meta,
+            "status": "error",
+            "is_error": True,
+            "duration_ms": elapsed,
+        }
+        chat_svc.update_message(
+            bot,
+            msg["id"],
+            f"🔧 vm_wake\nstatus: error\n---\n{exc}",
+            meta=failed,
+            home=home,
+        )
+        raise
+    elapsed = int((time.monotonic() - started) * 1000)
+    done = {**meta, "status": "done", "duration_ms": elapsed}
+    chat_svc.update_message(
+        bot,
+        msg["id"],
+        "🔧 vm_wake\nstatus: done\n---\nLa VM était en veille. Elle est démarrée.",
+        meta=done,
+        home=home,
+    )
     return desk
 
 
@@ -504,10 +847,13 @@ def tick_auto_sleep(*, home: Path | None = None) -> int:
     for bot in bots_svc.list_bots(home=home):
         if not bot.get("auto_sleep", True):
             continue
-        if bot.get("status") in ("busy", "waiting"):
-            continue
         desk = bot.get("desk") or {}
         if desk.get("state") != "running":
+            continue
+        # Agent run (or a card waiting on the user): keep the idle clock at zero
+        # so sleep starts only after the run ends.
+        if bot.get("status") in ("busy", "waiting"):
+            touch_activity(bot["name"], home=home)
             continue
         last = bot.get("desk_last_active_at") or desk.get("created_at")
         if not last:
@@ -780,7 +1126,8 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
     BUS.publish("notification", {"kind": "desk.creating", "bot": bot}, bot=bot)
 
     root = bot_dir(bot, home)
-    # Bind host folder as ~/shared (and workspace alias) — do not overlay $HOME.
+    # Bind this bot's private files as ~/files (and workspace). Keep ~/shared
+    # so the desktop image (Chrome downloads, autonomous-hook) still finds them.
     home_mount = root / "home"
     home_mount.mkdir(parents=True, exist_ok=True)
     try:
@@ -803,13 +1150,20 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
 
         shared_mounts = [
             Mount(
-                target="/home/autonomous/shared",
+                target="/home/autonomous/files",
                 source=str(home_mount),
                 type="bind",
                 read_only=False,
             ),
             Mount(
                 target="/home/autonomous/workspace",
+                source=str(home_mount),
+                type="bind",
+                read_only=False,
+            ),
+            # Legacy alias. Same private folder — not shared with other bots.
+            Mount(
+                target="/home/autonomous/shared",
                 source=str(home_mount),
                 type="bind",
                 read_only=False,
@@ -849,7 +1203,7 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
             "network_mode": network_mode,
             "labels": {_LABEL: bot, "autonomous.role": "desk"},
             "environment": env,
-            "shm_size": "256m",
+            "shm_size": shm_size_bytes(),
             "user": "1000:1000",
             # Let Chrome's real sandbox (zygote/userns) work. Without this, Chrome
             # needs --no-sandbox which anti-bots fingerprint hard.
@@ -889,17 +1243,16 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
             progress=90,
             home=home,
         )
-    # Image may still ship old bot-chrome; xstartup often already launched it.
-    # Relaunch so CDP + WebGL spoof (Intel UHD, not llvmpipe) are live.
-    if restart_bot_chrome(bot, home=home):
-        _job_log(job_id, "Chrome relancé (profil CDP + spoof WebGL)", progress=94, home=home)
-    else:
-        _job_log(
-            job_id,
-            "avertissement : relance Chrome / CDP non confirmée",
-            progress=94,
-            home=home,
-        )
+    # Chrome stays off until a browser_* / CDP tool calls ensure_bot_chrome.
+    # Old images may still launch Chrome from a legacy xstartup; kill it so
+    # shell/GUI tasks start on a clean desk.
+    _kill_lazy_chrome(bot, home=home)
+    _job_log(
+        job_id,
+        "Chrome en attente (démarrage à la demande au premier outil navigateur)",
+        progress=94,
+        home=home,
+    )
 
     desk.update(
         {
@@ -913,6 +1266,7 @@ def _create_sync(bot: str, job_id: str, *, home: Path | None) -> None:
     # below restores busy or resume_run sets it.
     bots_svc.patch_bot(bot, {"desk": desk}, home=home)
     touch_activity(bot, home=home)
+    _ensure_files_alias(bot, home=home)
     _refresh_companion_egress(home)
     _job_log(job_id, "terminé", progress=98, home=home)
     BUS.publish("desk.updated", {"desk": desk}, bot=bot)
@@ -998,6 +1352,16 @@ def request_authorization(
         row = bots_svc.get_bot(bot, home=home)
         if row.get("status") in ("busy", "waiting", "idle"):
             bots_svc.patch_bot(bot, {"status": "waiting"}, home=home)
+    except Exception:
+        pass
+    # End any still-running « Réflexion… » card so it does not sit above the
+    # Autorisation VM card while message_end is delayed.
+    try:
+        from autonomous.services import llm_turns as llm_turns_svc
+
+        llm_turns_svc.seal_turn_for_tools(
+            bot, tool_name="vm_request_desk", home=home
+        )
     except Exception:
         pass
     BUS.publish(
@@ -1185,12 +1549,9 @@ def reset(bot: str, *, confirm: bool, home: Path | None = None) -> dict[str, Any
 
 
 def novnc_info(bot: str, home: Path | None = None) -> dict[str, Any]:
+    """Connection info only. Viewing the stream must not wake or reset auto-sleep."""
     desk = status(bot, home=home) or {}
-    if desk.get("state") == "sleeping":
-        desk = ensure_awake(bot, home=home)
-    elif desk.get("state") == "running":
-        touch_activity(bot, home=home)
-    port = desk.get("vnc_port")
+    port = desk.get("vnc_port") if desk.get("state") == "running" else None
     if not port:
         return {
             "url": "",

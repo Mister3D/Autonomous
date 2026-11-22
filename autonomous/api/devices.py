@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import g, request
+from flask import g, request, send_file
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from marshmallow import Schema, fields
@@ -79,7 +79,7 @@ def _handle(exc: AutonomousError):
 def _pairing_allowed() -> bool:
     from autonomous.services import settings as settings_svc
 
-    return bool(settings_svc.get("companions.enabled", home=g.home, default=True))
+    return bool(settings_svc.get("companions.enabled", home=g.home, default=False))
 
 
 @blp.route("/pair")
@@ -235,7 +235,7 @@ class McpCall(MethodView):
         if not bot or not server or not tool:
             abort(400, message="bot, server and tool are required")
         try:
-            text = link_svc.hub_for(g.home).call_mcp(
+            result = link_svc.hub_for(g.home).call_mcp(
                 server,
                 tool,
                 body.get("arguments") or {},
@@ -247,7 +247,52 @@ class McpCall(MethodView):
             _handle(exc)
         except Exception as exc:
             abort(502, message=str(exc))
-        return {"ok": True, "text": text}
+        return {
+            "ok": True,
+            "text": result.get("text") or "",
+            "images": result.get("images") or [],
+        }
+
+
+@blp.route("/me/update")
+class DeviceUpdate(MethodView):
+    def get(self):
+        """Sha256 of the companion build for this device's platform."""
+        from autonomous.services import companion_build as build_svc
+
+        device = _device()
+        offer = build_svc.update_offer(str(device.get("platform") or ""), g.home)
+        if offer is None:
+            abort(404, message="No companion build for this platform")
+        return offer
+
+
+@blp.route("/me/update/binary")
+class DeviceUpdateBinary(MethodView):
+    def get(self):
+        """The companion binary for this device. Paired device token only."""
+        from autonomous.services import companion_build as build_svc
+
+        device = _device()
+        platform = str(device.get("platform") or "")
+        offer = build_svc.update_offer(platform, g.home)
+        if not offer or offer.get("state") != "ready":
+            if offer and offer.get("state") == "building":
+                abort(409, message="Companion build is still compiling")
+            abort(404, message="No companion build for this platform")
+        path = build_svc.artifact_for_platform(platform, g.home)
+        if path is None:
+            abort(404, message="No companion build for this platform")
+        name = build_svc.download_filename(
+            build_svc.app_version(),
+            windows=platform == "windows",
+        )
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=name,
+            mimetype="application/octet-stream",
+        )
 
 
 @blp.route("/me/focus")
