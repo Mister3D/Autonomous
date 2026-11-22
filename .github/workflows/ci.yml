@@ -7,6 +7,20 @@ on:
     branches: [main, dev]
 
 jobs:
+  # Required on `main` (GitHub ruleset): only accept PRs whose head is `dev`.
+  main-from-dev:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require head branch to be dev
+        run: |
+          head="${{ github.head_ref }}"
+          echo "PR base=main head=${head}"
+          if [ "$head" != "dev" ]; then
+            echo "::error::PRs into main must come from the dev branch (got '${head}'). Merge into dev first."
+            exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
     steps:
