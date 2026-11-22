@@ -3,9 +3,13 @@
     <div class="settings-layout">
       <aside class="settings-side">
         <header class="settings-side-head">
-          <button class="icon-btn" type="button" :aria-label="t('settings.back')" @click="leave">
-            <UiIcon name="chevron-left" />
-          </button>
+          <UiIconButton
+            icon="chevron-left"
+            size-variant="chrome"
+            :label="t('settings.back')"
+            :title="t('settings.back')"
+            @click="leave"
+          />
           <h1>{{ t("settings.title") }}</h1>
         </header>
         <nav class="settings-nav" :aria-label="t('settings.title')">

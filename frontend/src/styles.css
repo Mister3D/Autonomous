@@ -85,23 +85,6 @@ a:focus-visible {
   padding: 0 0.15rem;
 }
 
-.icon-btn {
-  width: 36px;
-  height: 36px;
-  border: 0;
-  background: transparent;
-  border-radius: 10px;
-  color: #3a3a3c;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.icon-btn:hover {
-  background: var(--bg-soft);
-}
-
 .rail-search {
   margin: 0.15rem 0.4rem 0.45rem;
   border: 1px solid var(--line);
@@ -6648,7 +6631,7 @@ a.bot-mention:hover,
   flex: none;
 }
 
-.composer .icon-btn,
+.composer .ui-icon-btn.composer-attach,
 .composer .send-btn {
   width: var(--composer-btn);
   height: var(--composer-btn);
@@ -6657,6 +6640,12 @@ a.bot-mention:hover,
   margin: 0;
   padding: 0;
   line-height: 0;
+}
+
+.composer .ui-icon-btn.composer-attach:hover:not(:disabled) {
+  background: var(--bg-soft);
+  color: #3a3a3c;
+  box-shadow: none;
 }
 
 /* Paper-plane path sits optically high in the circle — nudge down. */
