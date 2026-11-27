@@ -307,6 +307,16 @@ class DeviceFocus(MethodView):
             _handle(exc)
 
 
+@blp.route("/me/pending")
+class DevicePending(MethodView):
+    def get(self):
+        """Blocking chat cards waiting on the user (vault / approval / clarify / desk / delete)."""
+        _device()
+        from autonomous.services import agent as agent_svc
+
+        return {"items": agent_svc.list_pending_human_waits(home=g.home)}
+
+
 @blp.route("/notify")
 class DeviceNotify(MethodView):
     def post(self):

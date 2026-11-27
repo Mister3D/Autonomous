@@ -155,6 +155,43 @@ pub fn forget(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct PendingItem {
+    pub id: String,
+    pub bot: String,
+    #[serde(default)]
+    pub label: String,
+    pub kind: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PendingList {
+    #[serde(default)]
+    items: Vec<PendingItem>,
+}
+
+/// Blocking chat cards waiting on the user (device token).
+pub fn pending(config: &Config) -> Result<Vec<PendingItem>, String> {
+    let response = authed(config, reqwest::Method::GET, "/devices/me/pending")?
+        .send()
+        .map_err(|e| e.to_string())?;
+    let status = response.status();
+    let text = response.text().map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(text);
+    }
+    let list: PendingList = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    Ok(list.items)
+}
+
 fn authed(
     config: &Config,
     method: reqwest::Method,

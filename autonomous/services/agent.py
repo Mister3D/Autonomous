@@ -96,25 +96,72 @@ _RESTART_TOOL_ERROR = "Agent session interrupted (server restart)."
 
 def has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
     """True when a blocking chat card still needs the user."""
+    return bool(list_pending_human_waits_for_bot(bot, home=home))
+
+
+def list_pending_human_waits_for_bot(bot: str, *, home: Path | None = None) -> list[dict[str, Any]]:
+    """Blocking chat cards for one bot (vault / approval / clarify / desk / delete)."""
+    items: list[dict[str, Any]] = []
+    try:
+        row = bots_svc.get_bot(bot, home=home)
+    except Exception:
+        return items
+    label = str(row.get("label") or bot)
+    path = f"/b/{bot}/discussion"
+
     try:
         from autonomous.services import approvals as approval_svc
 
-        if approval_svc.list_pending_for_bot(bot, home=home):
-            return True
+        for req in approval_svc.list_pending_for_bot(bot, home=home):
+            items.append(
+                {
+                    "id": f"approval:{req.get('id')}",
+                    "bot": bot,
+                    "label": label,
+                    "kind": "approval_request",
+                    "title": str(req.get("title") or "Approval"),
+                    "body": str(req.get("prompt") or ""),
+                    "path": path,
+                    "created_at": req.get("created_at") or "",
+                }
+            )
     except Exception:
         pass
     try:
         from autonomous.services import clarifies as clarify_svc
 
-        if clarify_svc.list_pending_for_bot(bot, home=home):
-            return True
+        for req in clarify_svc.list_pending_for_bot(bot, home=home):
+            items.append(
+                {
+                    "id": f"clarify:{req.get('id')}",
+                    "bot": bot,
+                    "label": label,
+                    "kind": "clarify_request",
+                    "title": str(req.get("title") or "Question"),
+                    "body": str(req.get("prompt") or ""),
+                    "path": path,
+                    "created_at": req.get("created_at") or "",
+                }
+            )
     except Exception:
         pass
     try:
         from autonomous.services import vault as vault_svc
 
-        if vault_svc.list_pending_for_bot(bot, home=home):
-            return True
+        for req in vault_svc.list_pending_for_bot(bot, home=home):
+            head = str(req.get("label") or req.get("reason") or "Secret")
+            items.append(
+                {
+                    "id": f"vault:{req.get('id')}",
+                    "bot": bot,
+                    "label": label,
+                    "kind": "vault_request",
+                    "title": head,
+                    "body": str(req.get("reason") or req.get("origin") or ""),
+                    "path": path,
+                    "created_at": req.get("created_at") or "",
+                }
+            )
     except Exception:
         pass
     try:
@@ -122,17 +169,52 @@ def has_pending_human_wait(bot: str, *, home: Path | None = None) -> bool:
 
         flags = desk_svc._desk_request_flags(bot, home=home)
         if flags.get("pending_state") == "pending":
-            return True
+            mid = flags.get("pending_request_id") or "desk"
+            items.append(
+                {
+                    "id": f"desk:{mid}",
+                    "bot": bot,
+                    "label": label,
+                    "kind": "desk_request",
+                    "title": "Desktop",
+                    "body": f"{label} is requesting a desktop",
+                    "path": path,
+                    "created_at": "",
+                }
+            )
     except Exception:
         pass
     try:
         from autonomous.services import household as household_svc
 
-        if household_svc.list_pending_delete_for_bot(bot, home=home):
-            return True
+        for req in household_svc.list_pending_delete_for_bot(bot, home=home):
+            items.append(
+                {
+                    "id": f"bot_delete:{req.get('id')}",
+                    "bot": bot,
+                    "label": label,
+                    "kind": "bot_delete",
+                    "title": str(req.get("title") or "Delete bots"),
+                    "body": str(req.get("prompt") or ""),
+                    "path": path,
+                    "created_at": req.get("created_at") or "",
+                }
+            )
     except Exception:
         pass
-    return False
+    return items
+
+
+def list_pending_human_waits(*, home: Path | None = None) -> list[dict[str, Any]]:
+    """All bots' blocking cards — for the companion pending inbox."""
+    out: list[dict[str, Any]] = []
+    for bot in bots_svc.list_bots(home=home):
+        name = str(bot.get("name") or "").strip()
+        if not name:
+            continue
+        out.extend(list_pending_human_waits_for_bot(name, home=home))
+    out.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    return out
 
 
 def abort_streaming_assistants(bot: str, *, home: Path | None = None) -> int:

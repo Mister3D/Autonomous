@@ -1,4 +1,4 @@
-use crate::api::{self, PairStart};
+use crate::api::{self, PairStart, PendingItem};
 use crate::autostart;
 use crate::config::{self, Config, McpServer};
 use crate::update;
@@ -6,7 +6,7 @@ use crate::tunnel::{self, Command, Status};
 use eframe::egui;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 struct Texts {
     title: &'static str,
@@ -47,6 +47,15 @@ struct Texts {
     launch_at_login_help: &'static str,
     toast_open: &'static str,
     toast_dismiss: &'static str,
+    pending_title: &'static str,
+    pending_empty: &'static str,
+    pending_open: &'static str,
+    kind_approval: &'static str,
+    kind_clarify: &'static str,
+    kind_vault: &'static str,
+    kind_desk: &'static str,
+    kind_delete: &'static str,
+    kind_notify: &'static str,
 }
 
 fn texts() -> Texts {
@@ -91,6 +100,15 @@ fn texts() -> Texts {
             launch_at_login_help: "Démarre avec ta session Windows, Linux ou macOS. Le compagnon a besoin du bureau, donc pas avant la connexion.",
             toast_open: "Ouvrir",
             toast_dismiss: "Fermer",
+            pending_title: "En attente de toi",
+            pending_empty: "Rien en attente.",
+            pending_open: "Ouvrir la conversation",
+            kind_approval: "Confirmation",
+            kind_clarify: "Question",
+            kind_vault: "Mot de passe / secret",
+            kind_desk: "Bureau",
+            kind_delete: "Suppression",
+            kind_notify: "Notification",
         }
     } else {
         Texts {
@@ -132,8 +150,30 @@ fn texts() -> Texts {
             launch_at_login_help: "Starts with your Windows, Linux, or macOS session. The companion needs the desktop, so it does not run before you sign in.",
             toast_open: "Open",
             toast_dismiss: "Dismiss",
+            pending_title: "Waiting for you",
+            pending_empty: "Nothing pending.",
+            pending_open: "Open conversation",
+            kind_approval: "Approval",
+            kind_clarify: "Question",
+            kind_vault: "Password / secret",
+            kind_desk: "Desktop",
+            kind_delete: "Delete bots",
+            kind_notify: "Notification",
         }
     }
+}
+
+#[derive(Clone)]
+struct InboxItem {
+    id: String,
+    bot: String,
+    label: String,
+    kind: String,
+    title: String,
+    body: String,
+    url: String,
+    /// Local toast/notify (not a server wait card) — removed when opened.
+    local: bool,
 }
 
 fn sys_locale() -> String {
@@ -149,6 +189,7 @@ fn sys_locale() -> String {
         .to_lowercase()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Step {
     Url,
     Code,
@@ -184,6 +225,13 @@ pub struct CompanionApp {
     alert_url: String,
     click_tx: Sender<String>,
     click_rx: Receiver<String>,
+    /// Server-side human waits (vault / approval / …).
+    pending_waits: Vec<PendingItem>,
+    pending_rx: Option<Receiver<Vec<PendingItem>>>,
+    /// Local notify_user / test alerts until the user opens them.
+    local_inbox: Vec<InboxItem>,
+    blink_on: bool,
+    last_blink: Instant,
 }
 
 impl CompanionApp {
@@ -212,6 +260,11 @@ impl CompanionApp {
             alert_url: String::new(),
             click_tx,
             click_rx,
+            pending_waits: Vec::new(),
+            pending_rx: None,
+            local_inbox: Vec::new(),
+            blink_on: false,
+            last_blink: Instant::now(),
         };
         app.install_tray();
         if app.config.launch_at_login {
@@ -306,17 +359,31 @@ impl CompanionApp {
         if !open.is_empty() {
             self.alert_url = open.clone();
         }
+        let id = format!(
+            "notify:{}:{}",
+            bot,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
+        self.local_inbox.push(InboxItem {
+            id,
+            bot: bot.to_string(),
+            label: bot.to_string(),
+            kind: "notify".into(),
+            title: title.to_string(),
+            body: body.to_string(),
+            url: if open.is_empty() {
+                self.config.instance_url.trim().trim_end_matches('/').to_string()
+            } else {
+                open.clone()
+            },
+            local: true,
+        });
         if self.config.notify_badge {
             self.alert = true;
-            self.apply_tray_icon();
-            if let Some(tray) = &self.tray {
-                let tip = if body.is_empty() {
-                    title.to_string()
-                } else {
-                    format!("{title}\n{body}")
-                };
-                let _ = tray.set_tooltip(Some(tip));
-            }
+            self.refresh_tray_attention();
         }
         if self.config.notify_toast {
             let title = title.to_string();
@@ -340,23 +407,180 @@ impl CompanionApp {
     }
 
     fn clear_alert(&mut self) {
-        if !self.alert {
+        if !self.alert && self.local_inbox.is_empty() {
             return;
         }
         self.alert = false;
         self.alert_url.clear();
+        self.refresh_tray_attention();
+    }
+
+    fn has_attention(&self) -> bool {
+        self.config.notify_badge
+            && (!self.pending_waits.is_empty() || !self.local_inbox.is_empty() || self.alert)
+    }
+
+    fn inbox_items(&self) -> Vec<InboxItem> {
+        let mut items: Vec<InboxItem> = self
+            .pending_waits
+            .iter()
+            .map(|p| {
+                let base = self.config.instance_url.trim().trim_end_matches('/');
+                let url = if p.path.starts_with('/') && !base.is_empty() {
+                    format!("{base}{}", p.path)
+                } else if !p.bot.is_empty() {
+                    config::discussion_url(&self.config.instance_url, &p.bot)
+                } else {
+                    base.to_string()
+                };
+                InboxItem {
+                    id: p.id.clone(),
+                    bot: p.bot.clone(),
+                    label: if p.label.is_empty() {
+                        p.bot.clone()
+                    } else {
+                        p.label.clone()
+                    },
+                    kind: p.kind.clone(),
+                    title: p.title.clone(),
+                    body: p.body.clone(),
+                    url,
+                    local: false,
+                }
+            })
+            .collect();
+        for local in &self.local_inbox {
+            if items.iter().any(|i| i.bot == local.bot && !i.local) {
+                // Prefer the concrete wait card over a generic notify for the same bot.
+                continue;
+            }
+            items.push(local.clone());
+        }
+        items
+    }
+
+    fn kind_label(&self, kind: &str) -> &str {
+        match kind {
+            "approval_request" => self.texts.kind_approval,
+            "clarify_request" => self.texts.kind_clarify,
+            "vault_request" => self.texts.kind_vault,
+            "desk_request" => self.texts.kind_desk,
+            "bot_delete" => self.texts.kind_delete,
+            _ => self.texts.kind_notify,
+        }
+    }
+
+    fn refresh_tray_attention(&mut self) {
+        let attention = self.has_attention();
+        if !attention {
+            self.blink_on = false;
+            self.alert = false;
+        }
         self.apply_tray_icon();
         if let Some(tray) = &self.tray {
-            let _ = tray.set_tooltip(Some(self.texts.title));
+            if attention {
+                let n = self.inbox_items().len().max(1);
+                let tip = format!("{} ({n})", self.texts.pending_title);
+                let _ = tray.set_tooltip(Some(tip));
+            } else {
+                let _ = tray.set_tooltip(Some(self.texts.title));
+            }
         }
+    }
+
+    fn tick_blink(&mut self) {
+        if !self.has_attention() {
+            if self.blink_on {
+                self.blink_on = false;
+                self.apply_tray_icon();
+            }
+            return;
+        }
+        if self.last_blink.elapsed() < Duration::from_millis(500) {
+            return;
+        }
+        self.last_blink = Instant::now();
+        self.blink_on = !self.blink_on;
+        self.apply_tray_icon();
     }
 
     fn apply_tray_icon(&self) {
         let Some(tray) = &self.tray else { return };
-        let Ok(icon) = tray_icon::Icon::from_rgba(mark_pixels(TRAY_ICON, self.alert), TRAY_ICON, TRAY_ICON) else {
+        let lit = self.has_attention() && self.blink_on;
+        let Ok(icon) = tray_icon::Icon::from_rgba(mark_pixels(TRAY_ICON, lit), TRAY_ICON, TRAY_ICON)
+        else {
             return;
         };
         let _ = tray.set_icon(Some(icon));
+    }
+
+    fn spawn_pending_poll(&mut self) {
+        // Drop the previous receiver so the old poller exits on send failure.
+        self.pending_rx = None;
+        if self.config.device_token.is_empty() {
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        self.pending_rx = Some(rx);
+        let config = self.config.clone();
+        thread::spawn(move || loop {
+            let items = api::pending(&config).unwrap_or_default();
+            if tx.send(items).is_err() {
+                break;
+            }
+            thread::sleep(Duration::from_secs(4));
+        });
+    }
+
+    fn drain_pending(&mut self) {
+        let Some(rx) = self.pending_rx.as_ref() else {
+            return;
+        };
+        let mut latest = None;
+        while let Ok(items) = rx.try_recv() {
+            latest = Some(items);
+        }
+        let Some(items) = latest else {
+            return;
+        };
+        let changed = items.len() != self.pending_waits.len()
+            || items.iter().map(|i| i.id.as_str()).ne(self.pending_waits.iter().map(|i| i.id.as_str()));
+        self.pending_waits = items;
+        if changed {
+            if !self.pending_waits.is_empty() {
+                self.alert = true;
+            }
+            self.refresh_tray_attention();
+        }
+    }
+
+    fn open_inbox_item(&mut self, item: &InboxItem) {
+        if !item.url.is_empty() {
+            open_url(&self.config, &item.url);
+        } else {
+            self.open_browser();
+        }
+        if item.local {
+            self.local_inbox.retain(|i| i.id != item.id);
+        }
+        if self.alert_url == item.url {
+            self.alert_url.clear();
+        }
+        if self.local_inbox.is_empty() && self.pending_waits.is_empty() {
+            self.alert = false;
+        }
+        self.refresh_tray_attention();
+    }
+
+    fn show_inbox_window(&mut self, ctx: &egui::Context) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        if self.step == Step::Run || matches!(self.step, Step::Options) {
+            // Stay on run so the pending list is visible.
+            if !self.config.device_token.is_empty() {
+                self.step = Step::Run;
+            }
+        }
     }
 
     fn start_tunnel(&mut self) {
@@ -473,9 +697,21 @@ impl CompanionApp {
 
     fn drain_clicks(&mut self) {
         while let Ok(url) = self.click_rx.try_recv() {
-            open_url(&self.config, &url);
-            self.clear_alert();
-            self.alert_url.clear();
+            let item = self
+                .inbox_items()
+                .into_iter()
+                .find(|i| i.url == url)
+                .unwrap_or(InboxItem {
+                    id: format!("click:{url}"),
+                    bot: String::new(),
+                    label: String::new(),
+                    kind: "notify".into(),
+                    title: String::new(),
+                    body: String::new(),
+                    url: url.clone(),
+                    local: true,
+                });
+            self.open_inbox_item(&item);
         }
     }
 
@@ -498,10 +734,12 @@ impl CompanionApp {
                     if let Some(tx) = &self.update_tx {
                         let _ = tx.send(());
                     }
+                    self.spawn_pending_poll();
                 }
                 Status::Disconnected(message) => {
                     self.online = false;
                     self.note = format!("{} — {message}", self.texts.disconnected);
+                    self.pending_rx = None;
                 }
                 Status::Note(message) => self.error = message,
                 Status::Alert { title, body, bot } => self.present_alert(&title, &body, &bot),
@@ -532,12 +770,16 @@ impl CompanionApp {
             let _ = tx.send(Command::Shutdown);
         }
         self.status_rx = None;
+        self.pending_rx = None;
+        self.pending_waits.clear();
+        self.local_inbox.clear();
         self.config.device_token.clear();
         self.config.device_id.clear();
         self.config.egress = false;
         self.config.killswitch = false;
         let _ = config::save(&self.config);
         self.online = false;
+        self.clear_alert();
         self.step = Step::Url;
     }
 
@@ -551,14 +793,8 @@ impl CompanionApp {
                 ..
             } = event
             {
-                if self.alert_url.is_empty() {
-                    self.clear_alert();
-                    self.open_browser();
-                } else {
-                    let url = self.alert_url.clone();
-                    self.clear_alert();
-                    open_url(&self.config, &url);
-                }
+                // Show untreated waits / notifies in the companion window.
+                self.show_inbox_window(ctx);
             }
         }
         while let Ok(event) = MenuEvent::receiver().try_recv() {
@@ -566,8 +802,7 @@ impl CompanionApp {
                 self.quit = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             } else if Some(&event.id) == self.open_id.as_ref() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                self.show_inbox_window(ctx);
             }
         }
     }
@@ -955,7 +1190,9 @@ impl eframe::App for CompanionApp {
         ctx.request_repaint_after(Duration::from_millis(200));
         self.drain_pair();
         self.drain_status();
+        self.drain_pending();
         self.drain_clicks();
+        self.tick_blink();
         self.poll_tray(ctx);
         if ctx.input(|i| i.viewport().close_requested()) && !self.quit {
             if !self.config.device_token.is_empty() {
@@ -1123,7 +1360,60 @@ impl CompanionApp {
         }
     }
 
+    fn ui_pending_inbox(&mut self, ui: &mut egui::Ui) {
+        let items = self.inbox_items();
+        ui.label(
+            egui::RichText::new(self.texts.pending_title)
+                .strong()
+                .color(INK),
+        );
+        ui.add_space(6.0);
+        if items.is_empty() {
+            ui.label(egui::RichText::new(self.texts.pending_empty).color(MUTED).size(13.0));
+            return;
+        }
+        let mut open_id: Option<String> = None;
+        for item in &items {
+            let kind = self.kind_label(&item.kind).to_string();
+            let head = if item.label.is_empty() {
+                kind.clone()
+            } else {
+                format!("{} · {}", item.label, kind)
+            };
+            let body = if item.body.is_empty() {
+                item.title.clone()
+            } else if item.title.is_empty() {
+                item.body.clone()
+            } else {
+                format!("{} — {}", item.title, item.body)
+            };
+            ui.group(|ui| {
+                ui.set_width(ui.available_width());
+                ui.label(egui::RichText::new(head).strong().color(INK).size(14.0));
+                if !body.is_empty() {
+                    ui.label(egui::RichText::new(body).color(MUTED).size(13.0));
+                }
+                ui.add_space(4.0);
+                if web_button(ui, self.texts.pending_open, Btn::Primary, Some(ui.available_width()))
+                    .clicked()
+                {
+                    open_id = Some(item.id.clone());
+                }
+            });
+            ui.add_space(8.0);
+        }
+        if let Some(id) = open_id {
+            if let Some(item) = items.into_iter().find(|i| i.id == id) {
+                self.open_inbox_item(&item);
+            }
+        }
+    }
+
     fn ui_run(&mut self, ui: &mut egui::Ui) {
+        show_card(ui, |ui| {
+            self.ui_pending_inbox(ui);
+        });
+        ui.add_space(12.0);
         show_card(ui, |ui| {
             ui.horizontal(|ui| {
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());

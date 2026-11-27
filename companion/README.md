@@ -9,7 +9,7 @@ Program for the user's computer (Windows first; the same code targets Linux and 
    - **Bots' Internet via this PC**: TCP traffic from the Autonomous VMs, and their DNS, go out through this computer. Only one companion can carry this Internet at a time.
    - **Kill switch**: if the tunnel drops, the VMs lose network access (they keep access to the instance). Otherwise they fall back to the server.
    - **MCP**: name, command and arguments. The companion launches the process and the bots call `mcp_list` / `mcp_call`.
-   - **Notifications**: badge on the tray icon, on-screen message, sound, and **Keep notifications on screen** (off by default; also on the main companion screen). When on, Windows shows the toast as a *reminder* with **Open** / **Dismiss** buttons: it stays until you click it (opens the bot chat, or the URL it refers to), click **Open**, or close it with **Dismiss** / X. Linux: critical urgency with no timeout (the notification daemon decides). macOS: no effect.
+   - **Notifications**: blinking tray icon while something needs you, on-screen message, sound, and **Keep notifications on screen** (off by default; also on the main companion screen). Left-click the tray to open the companion **pending inbox** (vault / approval / clarify / desk / delete cards + local notifies). When persistent toasts are on, Windows shows a *reminder* with **Open** / **Dismiss**. Linux: critical urgency with no timeout. macOS: no effect.
 
 ## Build
 
