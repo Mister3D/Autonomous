@@ -30,6 +30,6 @@ The server download is named `autonomous-companion-<Autonomous version>.exe` (Li
 
 A paired companion checks for a new binary each time its tunnel connects (a server restart drops that connection). If a compile is still running, it waits until the build is finished and does not install the previous file. When the sha256 differs, it downloads that file with its device token, replaces itself in place, and restarts. A build launched from `target/debug` or `target/release` does not replace itself.
 
-**Start when you sign in** is a checkbox in the companion (off by default). It runs at login, not before the desktop session exists. Windows: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Autonomous Companion.cmd`. Linux: `~/.config/autostart/autonomous-companion.desktop`. macOS: `~/Library/LaunchAgents/app.autonomous.companion.plist`. Untick to remove it.
+**Start when you sign in** is a checkbox in the companion (off by default). It runs at login, not before the desktop session exists. Windows: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Autonomous Companion.vbs` (silent). Linux: `~/.config/autostart/autonomous-companion.desktop`. macOS: `~/Library/LaunchAgents/app.autonomous.companion.plist`. Untick to remove it. The Windows GUI binary uses the `windows` subsystem so it does not open a console.
 
 The config is in the application folder (`%APPDATA%\Autonomous\config\companion.json` on Windows, `~/.config/autonomous/companion.json` on Linux). Do not commit it: it contains the device token.

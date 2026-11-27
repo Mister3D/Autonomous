@@ -5,7 +5,10 @@ use std::path::{Path, PathBuf};
 
 const LINUX_NAME: &str = "autonomous-companion.desktop";
 const MACOS_LABEL: &str = "app.autonomous.companion";
-const WINDOWS_CMD: &str = "Autonomous Companion.cmd";
+/// VBScript in Startup: runs the exe with window style 0 (no flash console).
+const WINDOWS_VBS: &str = "Autonomous Companion.vbs";
+/// Previous Startup helper — removed when writing the VBS so upgrades stay silent.
+const WINDOWS_CMD_LEGACY: &str = "Autonomous Companion.cmd";
 
 pub fn linux_desktop(exe: &Path) -> String {
     format!(
@@ -41,10 +44,13 @@ pub fn macos_plist(exe: &Path) -> String {
     )
 }
 
-/// `start` command stored in the current user's Startup folder.
+/// Silent Startup entry (WScript.Run style 0 — no cmd window).
 pub fn windows_startup_script(exe: &Path) -> String {
-    let shown = exe.display().to_string().replace('%', "%%").replace('"', "");
-    format!("@echo off\r\nstart \"\" \"{shown}\"\r\n")
+    let shown = exe.display().to_string().replace('"', "\"\"");
+    format!(
+        "Set sh = CreateObject(\"WScript.Shell\")\r\n\
+         sh.Run \"\"\"{shown}\"\"\", 0, False\r\n"
+    )
 }
 
 fn desktop_exec(exe: &Path) -> String {
@@ -73,11 +79,14 @@ fn apply_exe(enabled: bool, exe: &Path) -> Result<(), String> {
     match std::env::consts::OS {
         "linux" => write_or_remove(enabled, &linux_autostart_path()?, &linux_desktop(exe)),
         "macos" => write_or_remove(enabled, &macos_plist_path()?, &macos_plist(exe)),
-        "windows" => write_or_remove(
-            enabled,
-            &windows_startup_path()?,
-            &windows_startup_script(exe),
-        ),
+        "windows" => {
+            // Drop the legacy .cmd so an upgrade does not keep a flashing console.
+            let legacy = windows_startup_dir()?.join(WINDOWS_CMD_LEGACY);
+            if legacy.is_file() {
+                let _ = std::fs::remove_file(&legacy);
+            }
+            write_or_remove(enabled, &windows_startup_path()?, &windows_startup_script(exe))
+        }
         other => Err(format!("sign-in start is not available on {other}")),
     }
 }
@@ -109,15 +118,18 @@ fn macos_plist_path() -> Result<PathBuf, String> {
         .join(format!("{MACOS_LABEL}.plist")))
 }
 
-fn windows_startup_path() -> Result<PathBuf, String> {
+fn windows_startup_dir() -> Result<PathBuf, String> {
     let appdata = std::env::var_os("APPDATA").ok_or_else(|| "APPDATA is not set".to_string())?;
     Ok(PathBuf::from(appdata)
         .join("Microsoft")
         .join("Windows")
         .join("Start Menu")
         .join("Programs")
-        .join("Startup")
-        .join(WINDOWS_CMD))
+        .join("Startup"))
+}
+
+fn windows_startup_path() -> Result<PathBuf, String> {
+    Ok(windows_startup_dir()?.join(WINDOWS_VBS))
 }
 
 #[cfg(test)]
@@ -132,13 +144,14 @@ mod tests {
     }
 
     #[test]
-    fn windows_script_quotes_the_exe_and_escapes_percent() {
+    fn windows_script_is_silent_vbs_and_quotes_the_exe() {
         let text = windows_startup_script(Path::new(
             r"C:\Users\me\autonomous-companion-0.1.20.exe",
         ));
-        assert!(text.contains("start \"\" \"C:\\Users\\me\\autonomous-companion-0.1.20.exe\""));
-        let odd = windows_startup_script(Path::new(r"C:\Temp\100%done\app.exe"));
-        assert!(odd.contains("100%%done"));
+        assert!(text.contains("WScript.Shell"));
+        assert!(text.contains("sh.Run \"\"\"C:\\Users\\me\\autonomous-companion-0.1.20.exe\"\"\", 0, False"));
+        let odd = windows_startup_script(Path::new(r#"C:\Temp\say "hi"\app.exe"#));
+        assert!(odd.contains(r#"say ""hi"""#));
     }
 
     #[test]
