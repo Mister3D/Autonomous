@@ -787,6 +787,20 @@ impl CompanionApp {
         self.step = Step::Url;
     }
 
+    fn request_quit(&mut self) {
+        // Tray apps often keep running after ViewportCommand::Close while the
+        // window was only hidden — tear down channels/tray then exit for real.
+        self.quit = true;
+        if let Some(tx) = self.cmd_tx.take() {
+            let _ = tx.send(Command::Shutdown);
+        }
+        self.pending_rx = None;
+        self.status_rx = None;
+        self.update_tx = None;
+        self.tray = None;
+        std::process::exit(0);
+    }
+
     fn poll_tray(&mut self, ctx: &egui::Context) {
         use tray_icon::menu::MenuEvent;
         use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
@@ -803,8 +817,7 @@ impl CompanionApp {
         }
         while let Ok(event) = MenuEvent::receiver().try_recv() {
             if Some(&event.id) == self.quit_id.as_ref() {
-                self.quit = true;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                self.request_quit();
             } else if Some(&event.id) == self.open_id.as_ref() {
                 self.show_inbox_window(ctx);
             }
@@ -1198,8 +1211,11 @@ impl eframe::App for CompanionApp {
         self.drain_clicks();
         self.tick_blink();
         self.poll_tray(ctx);
-        if ctx.input(|i| i.viewport().close_requested()) && !self.quit {
-            if !self.config.device_token.is_empty() {
+        if ctx.input(|i| i.viewport().close_requested()) {
+            if self.quit {
+                self.request_quit();
+            } else if !self.config.device_token.is_empty() {
+                // Paired: X hides to tray. Unpaired: allow a real close.
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             }
