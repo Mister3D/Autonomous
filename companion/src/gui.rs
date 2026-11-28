@@ -206,6 +206,11 @@ enum PairEvent {
     Status(String),
 }
 
+enum TrayCmd {
+    Open,
+    Quit,
+}
+
 pub struct CompanionApp {
     texts: Texts,
     config: Config,
@@ -218,8 +223,10 @@ pub struct CompanionApp {
     cmd_tx: Option<Sender<Command>>,
     status_rx: Option<Receiver<Status>>,
     tray: Option<tray_icon::TrayIcon>,
-    open_id: Option<tray_icon::menu::MenuId>,
-    quit_id: Option<tray_icon::menu::MenuId>,
+    /// Must stay alive — dropping muda items disables the tray menu on Windows.
+    _tray_open_item: Option<tray_icon::menu::MenuItem>,
+    _tray_quit_item: Option<tray_icon::menu::MenuItem>,
+    tray_rx: Option<Receiver<TrayCmd>>,
     quit: bool,
     update_started: bool,
     update_tx: Option<Sender<()>>,
@@ -237,7 +244,7 @@ pub struct CompanionApp {
 }
 
 impl CompanionApp {
-    fn new() -> Self {
+    fn new(ctx: egui::Context) -> Self {
         let config = config::load();
         let paired = !config.device_token.is_empty();
         let (click_tx, click_rx) = mpsc::channel();
@@ -253,8 +260,9 @@ impl CompanionApp {
             cmd_tx: None,
             status_rx: None,
             tray: None,
-            open_id: None,
-            quit_id: None,
+            _tray_open_item: None,
+            _tray_quit_item: None,
+            tray_rx: None,
             quit: false,
             update_started: false,
             update_tx: None,
@@ -268,7 +276,7 @@ impl CompanionApp {
             blink_on: false,
             last_blink: Instant::now(),
         };
-        app.install_tray();
+        app.install_tray(ctx);
         if app.config.launch_at_login {
             app.apply_launch(true);
         }
@@ -303,16 +311,19 @@ impl CompanionApp {
         );
     }
 
-    fn install_tray(&mut self) {
+    fn install_tray(&mut self, ctx: egui::Context) {
         use tray_icon::menu::{Menu, MenuItem};
         use tray_icon::TrayIconBuilder;
         let open = MenuItem::new(self.texts.open, true, None);
         let quit = MenuItem::new(self.texts.quit, true, None);
-        self.open_id = Some(open.id().clone());
-        self.quit_id = Some(quit.id().clone());
+        let open_id = open.id().clone();
+        let quit_id = quit.id().clone();
         let menu = Menu::new();
         let _ = menu.append(&open);
         let _ = menu.append(&quit);
+        // Keep items alive for the whole process — muda disables them on drop.
+        self._tray_open_item = Some(open);
+        self._tray_quit_item = Some(quit);
         let rgba = mark_pixels(TRAY_ICON, false);
         let Ok(icon) = tray_icon::Icon::from_rgba(rgba, TRAY_ICON, TRAY_ICON) else {
             return;
@@ -324,6 +335,45 @@ impl CompanionApp {
             .with_icon(icon)
             .build()
             .ok();
+
+        let (tray_tx, tray_rx) = mpsc::channel();
+        self.tray_rx = Some(tray_rx);
+        // While the window is hidden, eframe may stop calling update() — pump tray
+        // events on a side thread and wake egui so Open/Quit still work.
+        thread::spawn(move || {
+            use tray_icon::menu::MenuEvent;
+            use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
+            let mut last_wake = Instant::now();
+            loop {
+                while let Ok(event) = MenuEvent::receiver().try_recv() {
+                    if event.id == quit_id {
+                        // Don't wait for a hidden egui frame — exit immediately.
+                        let _ = tray_tx.send(TrayCmd::Quit);
+                        std::process::exit(0);
+                    }
+                    if event.id == open_id {
+                        let _ = tray_tx.send(TrayCmd::Open);
+                        ctx.request_repaint();
+                    }
+                }
+                while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let _ = tray_tx.send(TrayCmd::Open);
+                        ctx.request_repaint();
+                    }
+                }
+                if last_wake.elapsed() >= Duration::from_millis(250) {
+                    last_wake = Instant::now();
+                    ctx.request_repaint();
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
     }
 
     fn open_browser(&self) {
@@ -576,13 +626,32 @@ impl CompanionApp {
     }
 
     fn show_inbox_window(&mut self, ctx: &egui::Context) {
+        if !self.config.device_token.is_empty() {
+            self.step = Step::Run;
+        }
+        // Visible alone is not enough after a tray hide on Windows.
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-        if self.step == Step::Run || matches!(self.step, Step::Options) {
-            // Stay on run so the pending list is visible.
-            if !self.config.device_token.is_empty() {
-                self.step = Step::Run;
+        ctx.request_repaint();
+    }
+
+    fn drain_tray(&mut self, ctx: &egui::Context) {
+        let Some(rx) = self.tray_rx.as_ref() else {
+            return;
+        };
+        let mut open = false;
+        let mut quit = false;
+        while let Ok(cmd) = rx.try_recv() {
+            match cmd {
+                TrayCmd::Open => open = true,
+                TrayCmd::Quit => quit = true,
             }
+        }
+        if quit {
+            self.request_quit();
+        } else if open {
+            self.show_inbox_window(ctx);
         }
     }
 
@@ -801,28 +870,6 @@ impl CompanionApp {
         std::process::exit(0);
     }
 
-    fn poll_tray(&mut self, ctx: &egui::Context) {
-        use tray_icon::menu::MenuEvent;
-        use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
-        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                // Show untreated waits / notifies in the companion window.
-                self.show_inbox_window(ctx);
-            }
-        }
-        while let Ok(event) = MenuEvent::receiver().try_recv() {
-            if Some(&event.id) == self.quit_id.as_ref() {
-                self.request_quit();
-            } else if Some(&event.id) == self.open_id.as_ref() {
-                self.show_inbox_window(ctx);
-            }
-        }
-    }
 }
 
 const INK: egui::Color32 = egui::Color32::from_rgb(28, 28, 30);
@@ -1210,7 +1257,7 @@ impl eframe::App for CompanionApp {
         self.drain_pending();
         self.drain_clicks();
         self.tick_blink();
-        self.poll_tray(ctx);
+        self.drain_tray(ctx);
         if ctx.input(|i| i.viewport().close_requested()) {
             if self.quit {
                 self.request_quit();
@@ -1557,7 +1604,7 @@ pub fn run() {
         native,
         Box::new(|cc| {
             apply_theme(&cc.egui_ctx);
-            Ok(Box::new(CompanionApp::new()))
+            Ok(Box::new(CompanionApp::new(cc.egui_ctx.clone())))
         }),
     );
 }
