@@ -352,6 +352,9 @@ impl CompanionApp {
                         std::process::exit(0);
                     }
                     if event.id == open_id {
+                        // Restore OS window from this thread — egui Visible(true) alone
+                        // often no-ops after a tray hide on Windows.
+                        win_show_main_window();
                         let _ = tray_tx.send(TrayCmd::Open);
                         ctx.request_repaint();
                     }
@@ -363,6 +366,7 @@ impl CompanionApp {
                         ..
                     } = event
                     {
+                        win_show_main_window();
                         let _ = tray_tx.send(TrayCmd::Open);
                         ctx.request_repaint();
                     }
@@ -629,7 +633,7 @@ impl CompanionApp {
         if !self.config.device_token.is_empty() {
             self.step = Step::Run;
         }
-        // Visible alone is not enough after a tray hide on Windows.
+        win_show_main_window();
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -883,6 +887,64 @@ const DANGER: egui::Color32 = egui::Color32::from_rgb(197, 52, 52);
 
 const WINDOW_ICON: u32 = 256;
 const TRAY_ICON: u32 = 64;
+/// Must match `eframe::run_native` title — used by Win32 FindWindow to restore from tray.
+const WINDOW_TITLE: &str = "Autonomous";
+
+#[cfg(windows)]
+fn win_find_main_hwnd() -> *mut std::ffi::c_void {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "user32")]
+    extern "system" {
+        fn FindWindowW(lp_class: *const u16, lp_window: *const u16) -> *mut std::ffi::c_void;
+    }
+    let title: Vec<u16> = std::ffi::OsStr::new(WINDOW_TITLE)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) }
+}
+
+/// Hide without egui `Visible(false)` — that stops the event loop on Windows so tray Open never runs.
+#[cfg(windows)]
+fn win_hide_main_window() {
+    #[link(name = "user32")]
+    extern "system" {
+        fn ShowWindow(hwnd: *mut std::ffi::c_void, cmd: i32) -> i32;
+    }
+    const SW_HIDE: i32 = 0;
+    let hwnd = win_find_main_hwnd();
+    if !hwnd.is_null() {
+        unsafe {
+            ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn win_show_main_window() {
+    #[link(name = "user32")]
+    extern "system" {
+        fn ShowWindow(hwnd: *mut std::ffi::c_void, cmd: i32) -> i32;
+        fn SetForegroundWindow(hwnd: *mut std::ffi::c_void) -> i32;
+    }
+    const SW_RESTORE: i32 = 9;
+    const SW_SHOW: i32 = 5;
+    let hwnd = win_find_main_hwnd();
+    if hwnd.is_null() {
+        return;
+    }
+    unsafe {
+        ShowWindow(hwnd, SW_RESTORE);
+        ShowWindow(hwnd, SW_SHOW);
+        SetForegroundWindow(hwnd);
+    }
+}
+
+#[cfg(not(windows))]
+fn win_hide_main_window() {}
+
+#[cfg(not(windows))]
+fn win_show_main_window() {}
 
 fn mark_pixels(size: u32, alert: bool) -> Vec<u8> {
     let n = size as usize;
@@ -1262,9 +1324,17 @@ impl eframe::App for CompanionApp {
             if self.quit {
                 self.request_quit();
             } else if !self.config.device_token.is_empty() {
-                // Paired: X hides to tray. Unpaired: allow a real close.
+                // Paired: X hides to tray. Avoid egui Visible(false) on Windows —
+                // it freezes the event loop so tray Open never comes back.
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                #[cfg(windows)]
+                {
+                    win_hide_main_window();
+                }
+                #[cfg(not(windows))]
+                {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                }
             }
         }
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -1600,7 +1670,7 @@ pub fn run() {
         ..Default::default()
     };
     let _ = eframe::run_native(
-        "Autonomous",
+        WINDOW_TITLE,
         native,
         Box::new(|cc| {
             apply_theme(&cc.egui_ctx);

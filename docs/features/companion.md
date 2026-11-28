@@ -36,7 +36,7 @@
 
 - Windows companion: keep `#![cfg_attr(feature = "gui", windows_subsystem = "windows")]` — without it, every launch shows a black console. Startup must stay a silent `.vbs` (not `.cmd`).
 - Tray: blink while pending waits / local notifies remain; left-click opens the companion inbox, do not clear the badge until the list is empty (or the user opens a local notify).
-- Tray **Quit** / **Open**: keep `MenuItem` values alive on the app (muda disables them on drop). Pump `MenuEvent` / `TrayIconEvent` on a side thread with `Context::request_repaint` — eframe often stops `update()` while the window is `Visible(false)`, so polling only inside `update` never sees Quit/Open. Quit may `process::exit(0)` from that thread. Showing the window again needs `Visible(true)` + `Minimized(false)` + `Focus`.
+- Tray **Quit** / **Open**: keep `MenuItem` values alive on the app (muda disables them on drop). Pump `MenuEvent` / `TrayIconEvent` on a side thread with `Context::request_repaint`. Quit may `process::exit(0)` from that thread. On Windows, hide-to-tray must **not** use egui `Visible(false)` (it freezes the event loop): use Win32 `ShowWindow(SW_HIDE)` / `SW_RESTORE` via `FindWindowW` on title `Autonomous`, and call show from the tray thread on Open / left-click.
 - Don't give the device token to the model, nor commit it.
 - iptables must only match `autonomous.bot` IPs, never the whole Docker bridge.
 - Traffic to the Docker subnet (instance API) is neither redirected nor cut.
