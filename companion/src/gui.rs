@@ -172,6 +172,8 @@ struct InboxItem {
     title: String,
     body: String,
     url: String,
+    /// ISO timestamp from the server (or local clock) — newest first in the inbox.
+    created_at: String,
     /// Local toast/notify (not a server wait card) — removed when opened.
     local: bool,
 }
@@ -359,14 +361,11 @@ impl CompanionApp {
         if !open.is_empty() {
             self.alert_url = open.clone();
         }
-        let id = format!(
-            "notify:{}:{}",
-            bot,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or(0)
-        );
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let id = format!("notify:{bot}:{now_ms}");
         self.local_inbox.push(InboxItem {
             id,
             bot: bot.to_string(),
@@ -379,6 +378,8 @@ impl CompanionApp {
             } else {
                 open.clone()
             },
+            // Lexicographic ISO-ish stamp so local notifies sort with server cards.
+            created_at: format!("{now_ms:020}"),
             local: true,
         });
         if self.config.notify_badge {
@@ -445,6 +446,7 @@ impl CompanionApp {
                     title: p.title.clone(),
                     body: p.body.clone(),
                     url,
+                    created_at: p.created_at.clone(),
                     local: false,
                 }
             })
@@ -456,6 +458,7 @@ impl CompanionApp {
             }
             items.push(local.clone());
         }
+        items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         items
     }
 
@@ -709,6 +712,7 @@ impl CompanionApp {
                     title: String::new(),
                     body: String::new(),
                     url: url.clone(),
+                    created_at: String::new(),
                     local: true,
                 });
             self.open_inbox_item(&item);
